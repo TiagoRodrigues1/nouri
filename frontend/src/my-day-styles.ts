@@ -155,8 +155,6 @@ export const styles = stylex.create({
     fontVariantNumeric: "tabular-nums",
   },
   side: { display: "flex", flexDirection: "column", gap: 18, minWidth: 0 },
-  sideToolbar: { display: "flex", justifyContent: "flex-end", marginBottom: -8 },
-  customize: { color: colors.mutedForeground },
   noCards: { margin: 0, padding: "28px 20px", borderRadius: 22, borderWidth: 1, borderStyle: "dashed", borderColor: colors.border, color: colors.mutedForeground, fontSize: 13, textAlign: "center" },
   gauges: {
     display: "grid",

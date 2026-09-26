@@ -11,6 +11,7 @@ import {
   ChartColumn,
   Dumbbell,
   Moon,
+  SlidersHorizontal,
   UtensilsCrossed,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -67,6 +68,8 @@ type DashboardPageContext = {
   foodDelete: ReturnType<typeof useIdempotentDelete<FoodEntry>>;
   journal: ReturnType<typeof useJournal>;
   water: ReturnType<typeof useWater>;
+  customizingCards: boolean;
+  onCustomizingCardsChange: (open: boolean) => void;
 };
 
 const dashboardPageContext = createContext<DashboardPageContext | null>(null);
@@ -99,6 +102,7 @@ export function Dashboard() {
   const [logMenuOpen, setLogMenuOpen] = useState(false);
   const [recordDialog, setRecordDialog] = useState<"workout" | "sleep" | "measurement" | null>(null);
   const [connectionOpen, setConnectionOpen] = useState(false);
+  const [customizingCards, setCustomizingCards] = useState(false);
 
   const journal = useJournal(token);
   const water = useWater(token, date, () => setConnectionOpen(true));
@@ -186,7 +190,7 @@ export function Dashboard() {
         <ChevronLeft size={17} />
       </Button>
       <Input
-        sx={styles.dateInput}
+        {...stylex.props(styles.dateInput)}
         aria-label="Choose log date"
         type="date"
         value={date}
@@ -212,7 +216,7 @@ export function Dashboard() {
   }[view];
 
   return (
-    <dashboardPageContext.Provider value={{ token, date, isToday, onLogFood: () => setLogOpen(true), onLogWorkout: () => setRecordDialog("workout"), onLogSleep: () => setRecordDialog("sleep"), onLogMeasurement: () => setRecordDialog("measurement"), foodDelete, journal, water }}>
+    <dashboardPageContext.Provider value={{ token, date, isToday, onLogFood: () => setLogOpen(true), onLogWorkout: () => setRecordDialog("workout"), onLogSleep: () => setRecordDialog("sleep"), onLogMeasurement: () => setRecordDialog("measurement"), foodDelete, journal, water, customizingCards, onCustomizingCardsChange: setCustomizingCards }}>
     <div {...stylex.props(styles.appShell)}>
       <aside {...stylex.props(styles.sidebar)}>
         <Link to="/" {...stylex.props(styles.brand)}>
@@ -223,11 +227,11 @@ export function Dashboard() {
         </Link>
         <Popover open={logMenuOpen} onOpenChange={setLogMenuOpen}>
           <PopoverTrigger asChild>
-            <Button variant="ghost" sx={styles.logButton} aria-expanded={logMenuOpen}>
+            <Button variant="ghost" {...stylex.props(styles.logButton)} aria-expanded={logMenuOpen}>
               + Log
             </Button>
           </PopoverTrigger>
-          <PopoverContent sx={styles.logMenu} align="start" sideOffset={8}>
+          <PopoverContent {...stylex.props(styles.logMenu)} align="start" sideOffset={8}>
             <button type="button" {...stylex.props(styles.logMenuItem)} onClick={() => openLog("food")}><UtensilsCrossed size={17} /> Food</button>
             <button type="button" {...stylex.props(styles.logMenuItem)} onClick={() => openLog("sleep")}><Moon size={17} /> Sleep</button>
             <button type="button" {...stylex.props(styles.logMenuItem)} onClick={() => openLog("workout")}><Dumbbell size={17} /> Exercise</button>
@@ -283,6 +287,11 @@ export function Dashboard() {
                 <h1 {...stylex.props(styles.dayHeadline)}>{isToday ? "Today" : dateLabel(date)}</h1>
               </div>
               <div {...stylex.props(styles.dateActions)}>
+                {view === "today" && (
+                  <Button variant="outline" size="icon" aria-label="Customize cards" title="Customize cards" disabled={!token} onClick={() => setCustomizingCards(true)}>
+                    <SlidersHorizontal size={16} />
+                  </Button>
+                )}
                 {dateActions}
               </div>
             </header>
@@ -317,9 +326,9 @@ export function Dashboard() {
 }
 
 export function TodayRoute() {
-  const { token, date, isToday, foodDelete, water } = useDashboardPage();
+  const { token, date, isToday, foodDelete, water, customizingCards, onCustomizingCardsChange } = useDashboardPage();
 
-  return <TodayPage token={token} date={date} isToday={isToday} foodDelete={foodDelete} water={water} />;
+  return <TodayPage token={token} date={date} isToday={isToday} foodDelete={foodDelete} water={water} customizingCards={customizingCards} onCustomizingCardsChange={onCustomizingCardsChange} />;
 }
 
 export function FoodRoute() {

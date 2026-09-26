@@ -87,9 +87,9 @@ function MeasurementForm({ date, pending, onSave }: FormProps<MeasurementInput>)
     <form {...stylex.props(formStyles.formStack)} onSubmit={submit}>
       <div {...stylex.props(formStyles.manualGrid)}>
         <div>
-          <Label htmlFor="measurement-kind">Measurement</Label>
+          <Label htmlFor="measurement-kind" {...stylex.props(formStyles.formLabel)}>Measurement</Label>
           <Select value={kind} onValueChange={(next) => setKind(measurementKinds.find((option) => option === next) ?? "weight")}>
-            <SelectTrigger id="measurement-kind">
+            <SelectTrigger id="measurement-kind" {...stylex.props(formStyles.selectTrigger)}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -102,12 +102,12 @@ function MeasurementForm({ date, pending, onSave }: FormProps<MeasurementInput>)
           </Select>
         </div>
         <div>
-          <Label htmlFor="measurement-value">Value ({unit})</Label>
+          <Label htmlFor="measurement-value" {...stylex.props(formStyles.formLabel)}>Value ({unit})</Label>
           <Input id="measurement-value" type="number" inputMode="decimal" min={limits.min} max={limits.max} step={step} value={value} onChange={(event) => setValue(event.target.value)} required />
         </div>
       </div>
       <div {...stylex.props(formStyles.timeField)}>
-        <Label htmlFor="measurement-time" sx={formStyles.timeLabel}>Time</Label>
+        <Label htmlFor="measurement-time" {...stylex.props(formStyles.formLabel, formStyles.timeLabel)}>Time</Label>
         <TimePicker id="measurement-time" value={time} onChange={setTime} onNow={() => setTime(currentTime())} />
       </div>
       <div {...stylex.props(formStyles.dialogActions)}>
@@ -161,9 +161,9 @@ function WorkoutForm({ date, pending, onSave }: FormProps<WorkoutInput>) {
     <form {...stylex.props(formStyles.formStack)} onSubmit={submit}>
       <div {...stylex.props(formStyles.manualGrid)}>
         <div>
-          <Label htmlFor="workout-activity">Activity</Label>
+          <Label htmlFor="workout-activity" {...stylex.props(formStyles.formLabel)}>Activity</Label>
           <Select value={activity} onValueChange={(next) => setActivity(activities.find((option) => option === next) ?? "other")}>
-            <SelectTrigger id="workout-activity">
+            <SelectTrigger id="workout-activity" {...stylex.props(formStyles.selectTrigger)}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -176,17 +176,17 @@ function WorkoutForm({ date, pending, onSave }: FormProps<WorkoutInput>) {
           </Select>
         </div>
         <div>
-          <Label htmlFor="workout-duration">Duration (min)</Label>
+          <Label htmlFor="workout-duration" {...stylex.props(formStyles.formLabel)}>Duration (min)</Label>
           <Input id="workout-duration" name="duration" type="number" inputMode="numeric" min={1} max={1440} step={1} required />
         </div>
         {activity !== "strength" && (
           <div>
-            <Label htmlFor="workout-distance">Distance (km, optional)</Label>
+            <Label htmlFor="workout-distance" {...stylex.props(formStyles.formLabel)}>Distance (km, optional)</Label>
             <Input id="workout-distance" name="distance" type="number" inputMode="decimal" min={0.01} max={1000} step={0.01} />
           </div>
         )}
         <div>
-          <Label htmlFor="workout-energy">Energy (kcal, optional)</Label>
+          <Label htmlFor="workout-energy" {...stylex.props(formStyles.formLabel)}>Energy (kcal, optional)</Label>
           <Input id="workout-energy" name="energy" type="number" inputMode="numeric" min={0} max={10000} step={1} />
         </div>
       </div>
@@ -200,20 +200,20 @@ function WorkoutForm({ date, pending, onSave }: FormProps<WorkoutInput>) {
                 <Button type="button" variant="ghost" size="sm" onClick={() => setExercises((current) => current.filter((item) => item.id !== exercise.id))}>Remove</Button>
               </div>
               <div>
-                <Label htmlFor={`exercise-name-${exercise.id}`}>Exercise name</Label>
+                <Label htmlFor={`exercise-name-${exercise.id}`} {...stylex.props(formStyles.formLabel)}>Exercise name</Label>
                 <Input id={`exercise-name-${exercise.id}`} placeholder="e.g. Squat" maxLength={80} value={exercise.name} onChange={(event) => updateExercise(exercise.id, "name", event.target.value)} required />
               </div>
               <div {...stylex.props(styles.exerciseFields)}>
                 <div>
-                  <Label htmlFor={`exercise-sets-${exercise.id}`}>Sets</Label>
+                  <Label htmlFor={`exercise-sets-${exercise.id}`} {...stylex.props(formStyles.formLabel)}>Sets</Label>
                   <Input id={`exercise-sets-${exercise.id}`} type="number" inputMode="numeric" min={1} max={100} step={1} value={exercise.sets} onChange={(event) => updateExercise(exercise.id, "sets", event.target.value)} required />
                 </div>
                 <div>
-                  <Label htmlFor={`exercise-reps-${exercise.id}`}>Reps per set</Label>
+                  <Label htmlFor={`exercise-reps-${exercise.id}`} {...stylex.props(formStyles.formLabel)}>Reps per set</Label>
                   <Input id={`exercise-reps-${exercise.id}`} type="number" inputMode="numeric" min={1} max={1000} step={1} value={exercise.reps} onChange={(event) => updateExercise(exercise.id, "reps", event.target.value)} required />
                 </div>
                 <div>
-                  <Label htmlFor={`exercise-weight-${exercise.id}`}>Weight (kg, optional)</Label>
+                  <Label htmlFor={`exercise-weight-${exercise.id}`} {...stylex.props(formStyles.formLabel)}>Weight (kg, optional)</Label>
                   <Input id={`exercise-weight-${exercise.id}`} type="number" inputMode="decimal" min={0} max={1000} step={0.1} value={exercise.weight} onChange={(event) => updateExercise(exercise.id, "weight", event.target.value)} />
                 </div>
               </div>
@@ -223,7 +223,7 @@ function WorkoutForm({ date, pending, onSave }: FormProps<WorkoutInput>) {
         </div>
       )}
       <div {...stylex.props(formStyles.timeField)}>
-        <Label htmlFor="workout-time" sx={formStyles.timeLabel}>Started at</Label>
+        <Label htmlFor="workout-time" {...stylex.props(formStyles.formLabel, formStyles.timeLabel)}>Started at</Label>
         <TimePicker id="workout-time" value={time} onChange={setTime} onNow={() => setTime(currentTime())} />
       </div>
       <div {...stylex.props(formStyles.dialogActions)}>
@@ -273,11 +273,11 @@ function SleepForm({ date, pending, onSave }: FormProps<SleepInput>) {
     <form {...stylex.props(formStyles.formStack)} onSubmit={submit}>
       <div {...stylex.props(styles.times)}>
         <div {...stylex.props(formStyles.timeField, styles.timeField)}>
-          <Label htmlFor="sleep-bed" sx={formStyles.timeLabel}>Fell asleep</Label>
+          <Label htmlFor="sleep-bed" {...stylex.props(formStyles.formLabel, formStyles.timeLabel)}>Fell asleep</Label>
           <TimePicker id="sleep-bed" value={bed} onChange={setBed} onNow={() => setBed(currentTime())} />
         </div>
         <div {...stylex.props(formStyles.timeField, styles.timeField)}>
-          <Label htmlFor="sleep-wake" sx={formStyles.timeLabel}>Woke up</Label>
+          <Label htmlFor="sleep-wake" {...stylex.props(formStyles.formLabel, formStyles.timeLabel)}>Woke up</Label>
           <TimePicker id="sleep-wake" value={wake} onChange={setWake} onNow={() => setWake(currentTime())} />
         </div>
         <span {...stylex.props(styles.length)}>{Math.floor(length / 60)} h {length % 60} min</span>
@@ -286,7 +286,7 @@ function SleepForm({ date, pending, onSave }: FormProps<SleepInput>) {
       <div {...stylex.props(styles.stages)}>
         {stageFields.map((field) => (
           <div key={field.key}>
-            <Label htmlFor={`sleep-${field.key}`}>{field.label}</Label>
+            <Label htmlFor={`sleep-${field.key}`} {...stylex.props(formStyles.formLabel)}>{field.label}</Label>
             <Input
               id={`sleep-${field.key}`}
               type="number"

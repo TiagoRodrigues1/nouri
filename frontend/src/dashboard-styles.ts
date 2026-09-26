@@ -93,7 +93,10 @@ export const styles = stylex.create({
     outlineOffset: 2,
   },
   logMenu: {
+    width: "auto",
     minWidth: 200,
+    gap: 0,
+    padding: 4,
   },
   logMenuItem: {
     display: "flex",

@@ -62,11 +62,11 @@ export function LogFoodDialog({ open, onOpenChange, token, date, isToday, pendin
             <TimePicker id="food-time" value={time} onChange={setTime} onNow={() => setTime(currentTime())} />
           </div>
           <Tabs defaultValue="search">
-            <TabsList sx={styles.widthFull}>
-              <TabsTrigger value="search" sx={styles.flexOne}>
+            <TabsList {...stylex.props(styles.widthFull)}>
+              <TabsTrigger value="search" {...stylex.props(styles.flexOne)}>
                 Search foods
               </TabsTrigger>
-              <TabsTrigger value="manual" sx={styles.flexOne}>
+              <TabsTrigger value="manual" {...stylex.props(styles.flexOne)}>
                 Add manually
               </TabsTrigger>
             </TabsList>
@@ -161,7 +161,7 @@ export function LogFoodDialog({ open, onOpenChange, token, date, isToday, pendin
                     onChange={(event) => setGrams(event.target.value)}
                     required
                   />
-                  <Button type="submit" disabled={pending} sx={styles.selectedButton}>
+                  <Button type="submit" disabled={pending} {...stylex.props(styles.selectedButton)}>
                     Add to log
                   </Button>
                 </form>
@@ -260,7 +260,7 @@ function ManualForm({
           </div>
         ))}
       </div>
-      <Button sx={[styles.widthFull, styles.manualSubmit]} type="submit" disabled={disabled}>
+      <Button {...stylex.props(styles.widthFull, styles.manualSubmit)} type="submit" disabled={disabled}>
         Add to log
       </Button>
       {!disabled ? null : (

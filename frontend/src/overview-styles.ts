@@ -54,7 +54,7 @@ export const styles = stylex.create({
     paddingBottom: 10,
     paddingLeft: 18,
   },
-  tileTitle: { display: "flex", alignItems: "center", gap: 7, fontSize: 14, color: colors.foreground },
+  tileTitle: { display: "flex", alignItems: "center", gap: 7, fontSize: 14, whiteSpace: "nowrap", color: colors.foreground },
   tileContent: { flex: 1, display: "flex", flexDirection: "column", gap: 12, paddingRight: 18, paddingBottom: 18, paddingLeft: 18 },
   aside: { color: colors.mutedForeground, fontSize: 12, whiteSpace: "nowrap" },
   value: { fontSize: 30, fontWeight: 700, letterSpacing: "-0.03em", lineHeight: 1, fontVariantNumeric: "tabular-nums" },

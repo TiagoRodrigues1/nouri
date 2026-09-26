@@ -27,14 +27,14 @@ export function Section({ title, description, icon, color, action, children }: {
 
 export function Tile({ title, icon, aside, wide = false, children }: { title: string; icon: ReactNode; aside?: ReactNode; wide?: boolean; children: ReactNode }) {
   return (
-    <Card sx={[styles.tile, wide && styles.wide]}>
-      <CardHeader sx={styles.tileHeader}>
-        <CardTitle sx={styles.tileTitle}>
+    <Card {...stylex.props(styles.tile, wide && styles.wide)}>
+      <CardHeader {...stylex.props(styles.tileHeader)}>
+        <CardTitle {...stylex.props(styles.tileTitle)}>
           {icon} {title}
         </CardTitle>
         {aside && <span {...stylex.props(styles.aside)}>{aside}</span>}
       </CardHeader>
-      <CardContent sx={styles.tileContent}>{children}</CardContent>
+      <CardContent {...stylex.props(styles.tileContent)}>{children}</CardContent>
     </Card>
   );
 }
@@ -74,7 +74,7 @@ export function Stat({ label, value, icon }: { label: string; value: string; ico
 
 export function DeleteButton({ label, disabled, onClick }: { label: string; disabled: boolean; onClick: () => void }) {
   return (
-    <Button variant="ghost" size="icon" sx={styles.delete} aria-label={label} disabled={disabled} onClick={onClick}>
+    <Button variant="ghost" size="icon" {...stylex.props(styles.delete)} aria-label={label} disabled={disabled} onClick={onClick}>
       <Trash2 size={14} />
     </Button>
   );

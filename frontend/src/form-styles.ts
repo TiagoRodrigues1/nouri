@@ -83,6 +83,9 @@ export const styles = stylex.create({
     display: "grid",
     gap: "12px",
   },
+  selectTrigger: {
+    width: "100%",
+  },
   formLabel: {
     display: "block",
     fontSize: "12px",

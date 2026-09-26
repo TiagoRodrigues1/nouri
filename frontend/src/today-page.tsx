@@ -6,7 +6,7 @@ import { useIdempotentDelete } from "./lib/use-idempotent";
 import { useWater } from "./lib/use-water";
 import { MyDay } from "./my-day";
 
-export function TodayPage({ token, date, isToday, foodDelete, water }: { token: string; date: string; isToday: boolean; foodDelete: ReturnType<typeof useIdempotentDelete<FoodEntry>>; water: ReturnType<typeof useWater> }) {
+export function TodayPage({ token, date, isToday, foodDelete, water, customizingCards, onCustomizingCardsChange }: { token: string; date: string; isToday: boolean; foodDelete: ReturnType<typeof useIdempotentDelete<FoodEntry>>; water: ReturnType<typeof useWater>; customizingCards: boolean; onCustomizingCardsChange: (open: boolean) => void }) {
   const dayQuery = useQuery({ queryKey: ["day", token, date], queryFn: () => getDay(token, date), enabled: Boolean(token) });
   const entries = dayQuery.data?.food.entries ?? [];
 
@@ -23,5 +23,5 @@ export function TodayPage({ token, date, isToday, foodDelete, water }: { token: 
     <strong {...stylex.props(styles.emptyTitle)}>No foods logged yet</strong>
   ) : null;
 
-  return <MyDay token={token} day={dayQuery.data} date={date} isToday={isToday} status={status} deletePending={foodDelete.isPending} onDelete={(entry) => foodDelete.mutate(entry)} water={water} />;
+  return <MyDay token={token} day={dayQuery.data} date={date} isToday={isToday} status={status} deletePending={foodDelete.isPending} onDelete={(entry) => foodDelete.mutate(entry)} water={water} customizingCards={customizingCards} onCustomizingCardsChange={onCustomizingCardsChange} />;
 }

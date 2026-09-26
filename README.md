@@ -25,7 +25,7 @@ Open `http://127.0.0.1:5173/` while developing the frontend. `pnpm dev` starts t
 
 The built page is also available at `http://localhost:3000/`. Run `pnpm build:web` before starting the API alone with `pnpm dev:api` or running the integration test.
 
-Theme colors are in `frontend/src/theme.stylex.ts`. Change `primary`, `accent`, `sidebarActive`, and `feature` there to retheme the app without editing components. Component styles use StyleX; `frontend/src/reset.css` contains only global browser resets.
+Theme colors are in `frontend/src/theme.stylex.ts` for StyleX page styles and in the `:root` variables of `frontend/src/index.css` for the shadcn/ui components in `frontend/src/components/ui`; keep the two in sync. Add components with `pnpm dlx shadcn@latest add <name>` from `frontend/`. Page styles use StyleX and override component classes through `{...stylex.props(...)}`.
 
 Food search uses the pinned [Ciqual 2025 dataset](https://doi.org/10.57745/RDMHWY), published by Anses under Etalab Open Licence 2.0. Search names are French or English; Portuguese names are not available in this catalog. The response includes source attribution. To regenerate the checked-in catalog from the official dataset, run `python3 scripts/import-ciqual.py`.
 

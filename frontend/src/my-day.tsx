@@ -1,6 +1,6 @@
 import * as stylex from "@stylexjs/stylex";
 import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { Activity, Beef, Clock3, Flame, PieChart, SlidersHorizontal, Timer, Trash2, Trophy, Utensils, Wheat, Droplet, GlassWater, Milk } from "lucide-react";
+import { Activity, Beef, Clock3, Flame, PieChart, Timer, Trash2, Trophy, Utensils, Wheat, Droplet, GlassWater, Milk } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { colors } from "./theme.stylex";
@@ -27,9 +27,11 @@ type MyDayProps = {
   deletePending: boolean;
   onDelete: (entry: FoodEntry) => void;
   water: ReturnType<typeof useWater>;
+  customizingCards: boolean;
+  onCustomizingCardsChange: (open: boolean) => void;
 };
 
-export function MyDay({ token, day, date, isToday, status, deletePending, onDelete, water }: MyDayProps) {
+export function MyDay({ token, day, date, isToday, status, deletePending, onDelete, water, customizingCards, onCustomizingCardsChange }: MyDayProps) {
   const now = useNow();
   const entries = day?.food.entries ?? [];
   const totals = day?.food.totals;
@@ -38,7 +40,6 @@ export function MyDay({ token, day, date, isToday, status, deletePending, onDele
   const last = eaten.at(-1);
   const connected = Boolean(token);
   const layout = useDashboardCards(token);
-  const [customizing, setCustomizing] = useState(false);
 
   const cards: Record<CardId, ReactNode> = {
     totals: (
@@ -85,13 +86,8 @@ export function MyDay({ token, day, date, isToday, status, deletePending, onDele
         onDelete={onDelete}
       />
       <div {...stylex.props(styles.side)}>
-        <div {...stylex.props(styles.sideToolbar)}>
-          <Button variant="ghost" size="sm" sx={styles.customize} disabled={!connected || !layout.cards} onClick={() => setCustomizing(true)}>
-            <SlidersHorizontal size={15} /> Customize cards
-          </Button>
-        </div>
         {layout.cards?.length === 0 ? (
-          <p {...stylex.props(styles.noCards)}>All cards are hidden. Use Customize cards to bring some back.</p>
+          <p {...stylex.props(styles.noCards)}>All cards are hidden. Use the customize button at the top to bring some back.</p>
         ) : (
           <div {...stylex.props(styles.cards)}>
             {layout.cards?.map((id) => <Fragment key={id}>{cards[id]}</Fragment>)}
@@ -99,15 +95,15 @@ export function MyDay({ token, day, date, isToday, status, deletePending, onDele
         )}
       </div>
       <DashboardCardsDialog
-        open={customizing}
+        open={customizingCards && Boolean(layout.cards)}
         onOpenChange={(open) => {
-          setCustomizing(open);
+          onCustomizingCardsChange(open);
           layout.mutation.reset();
         }}
         cards={layout.cards ?? []}
         pending={layout.mutation.isPending}
         error={layout.mutation.error?.message ?? ""}
-        onSave={(next) => layout.mutation.mutate(next, { onSuccess: () => setCustomizing(false) })}
+        onSave={(next) => layout.mutation.mutate(next, { onSuccess: () => onCustomizingCardsChange(false) })}
       />
     </div>
   );
@@ -223,7 +219,7 @@ function Timeline({ entries, now, summary, status, deletePending, onDelete }: Ti
                   <Button
                     variant="ghost"
                     size="icon"
-                    sx={styles.entryDelete}
+                    {...stylex.props(styles.entryDelete)}
                     aria-label={`Delete ${entry.food.name}`}
                     disabled={deletePending}
                     onClick={() => onDelete(entry)}
@@ -565,7 +561,7 @@ function WaterCard({ connected, entries, totalMl, pending, onAdd, onDelete }: Wa
                 key={preset.volumeMl}
                 type="button"
                 variant="outline"
-                sx={styles.waterPreset}
+                {...stylex.props(styles.waterPreset)}
                 aria-label={`Add ${preset.label.toLowerCase()} of water, ${preset.volumeMl} ml`}
                 disabled={!connected || pending}
                 onClick={() => onAdd(preset.volumeMl)}
@@ -590,7 +586,7 @@ function WaterCard({ connected, entries, totalMl, pending, onAdd, onDelete }: Wa
               aria-label="Water amount in millilitres"
               value={custom}
               onChange={(event) => setCustom(event.target.value)}
-              sx={styles.waterInput}
+              {...stylex.props(styles.waterInput)}
               required
             />
             <Button type="submit" size="sm" disabled={!connected || pending}>
@@ -607,7 +603,7 @@ function WaterCard({ connected, entries, totalMl, pending, onAdd, onDelete }: Wa
                 <Button
                   variant="ghost"
                   size="icon"
-                  sx={styles.entryDelete}
+                  {...stylex.props(styles.entryDelete)}
                   aria-label={`Delete ${entry.volumeMl} ml of water at ${clock.format(new Date(entry.occurredAt))}`}
                   disabled={pending}
                   onClick={() => onDelete(entry)}

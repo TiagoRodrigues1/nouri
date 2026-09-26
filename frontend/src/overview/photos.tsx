@@ -52,7 +52,7 @@ export function PhotosTile({ token, photos, busy, onUpload, onDelete }: { token:
         type="file"
         accept="image/jpeg,image/png,image/webp"
         aria-label="Choose a progress photo"
-        sx={styles.fileInput}
+        {...stylex.props(styles.fileInput)}
         onChange={(event) => {
           const file = event.target.files?.[0];
 

@@ -107,15 +107,23 @@ export function createApp(db: AppDatabase, auth: { token: string; userId: string
     headers: { ...pageHeaders, "Content-Type": "image/svg+xml" },
   }));
 
+  const assetTypes = new Map([
+    ["js", "text/javascript; charset=utf-8"],
+    ["css", "text/css; charset=utf-8"],
+    ["woff2", "font/woff2"],
+  ]);
+
   app.get("/assets/:file", async (context) => {
     const file = context.req.param("file");
+    const type = /^[a-zA-Z0-9_-]+\.([a-z0-9]+)$/.exec(file)?.[1];
+    const contentType = type && assetTypes.get(type);
 
-    if (!/^[a-zA-Z0-9_-]+\.(js|css)$/.test(file)) return error(404, "Asset not found");
+    if (!contentType) return error(404, "Asset not found");
     const body = await readFile(new URL(`../web/dist/assets/${file}`, import.meta.url)).catch(() => null);
 
     if (!body) return error(404, "Asset not found");
 
-    return new Response(body, { headers: { ...pageHeaders, "Content-Type": file.endsWith(".css") ? "text/css; charset=utf-8" : "text/javascript; charset=utf-8" } });
+    return new Response(body, { headers: { ...pageHeaders, "Content-Type": contentType } });
   });
 
   const errorSchema = z.object({ error: z.string() });

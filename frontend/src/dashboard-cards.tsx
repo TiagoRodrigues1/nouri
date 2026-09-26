@@ -135,16 +135,16 @@ function CardsForm({ cards, pending, error, onSave }: Omit<DashboardCardsDialogP
                 type="button"
                 checked={item.shown}
                 onCheckedChange={(checked) => setDraft(draft.map((other) => (other.id === item.id ? { ...other, shown: checked === true } : other)))}
-                sx={styles.checkbox}
+                {...stylex.props(styles.checkbox)}
               />
               <Label htmlFor={`card-${item.id}`} {...stylex.props(styles.label)}>
                 <span {...stylex.props(styles.name, !item.shown && styles.hidden)}>{name}</span>
                 <span {...stylex.props(styles.description)}>{description}</span>
               </Label>
-              <Button type="button" variant="ghost" size="icon" sx={styles.move} aria-label={`Move ${name} up`} disabled={index === 0} onClick={() => move(index, -1)}>
+              <Button type="button" variant="ghost" size="icon" {...stylex.props(styles.move)} aria-label={`Move ${name} up`} disabled={index === 0} onClick={() => move(index, -1)}>
                 <ArrowUp size={15} />
               </Button>
-              <Button type="button" variant="ghost" size="icon" sx={styles.move} aria-label={`Move ${name} down`} disabled={index === draft.length - 1} onClick={() => move(index, 1)}>
+              <Button type="button" variant="ghost" size="icon" {...stylex.props(styles.move)} aria-label={`Move ${name} down`} disabled={index === draft.length - 1} onClick={() => move(index, 1)}>
                 <ArrowDown size={15} />
               </Button>
             </li>
@@ -180,7 +180,7 @@ const styles = stylex.create({
     borderTopColor: colors.border,
   },
   checkbox: { width: 16, height: 16, margin: 0, accentColor: colors.primary, cursor: "pointer" },
-  label: { flex: 1, display: "flex", flexDirection: "column", gap: 2, minWidth: 0, cursor: "pointer" },
+  label: { flex: 1, display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 2, minWidth: 0, cursor: "pointer" },
   name: { fontSize: 14, fontWeight: 600 },
   hidden: { color: colors.mutedForeground },
   description: { color: colors.mutedForeground, fontSize: 12 },

@@ -18,8 +18,8 @@ export function FoodPage({ token, date, isToday, onLogFood, foodDelete }: { toke
     <div {...stylex.props(styles.dashboardGrid)}>
       <div {...stylex.props(styles.column)}>
         <Card>
-          <CardHeader sx={styles.cardHeader}>
-            <CardTitle sx={styles.cardTitle}>
+          <CardHeader {...stylex.props(styles.cardHeader)}>
+            <CardTitle {...stylex.props(styles.cardTitle)}>
               {isToday ? "Today so far" : "Daily summary"}
             </CardTitle>
             <span {...stylex.props(styles.cardOverline)}>
@@ -27,7 +27,7 @@ export function FoodPage({ token, date, isToday, onLogFood, foodDelete }: { toke
               {day?.food.entryCount === 1 ? "food" : "foods"} logged
             </span>
           </CardHeader>
-          <CardContent sx={styles.overviewContent}>
+          <CardContent {...stylex.props(styles.overviewContent)}>
             <div {...stylex.props(styles.metricGrid)}>
               <Metric
                 value={token ? String(day?.food.entryCount ?? 0) : "—"}
@@ -49,21 +49,21 @@ export function FoodPage({ token, date, isToday, onLogFood, foodDelete }: { toke
           </CardContent>
         </Card>
         <Card>
-          <CardHeader sx={styles.cardHeader}>
+          <CardHeader {...stylex.props(styles.cardHeader)}>
             <div>
-              <CardTitle sx={styles.cardTitle}>Food</CardTitle>
+              <CardTitle {...stylex.props(styles.cardTitle)}>Food</CardTitle>
               <p {...stylex.props(styles.foodCardDate)}>{isToday ? "Today's entries" : dateLabel(date)}</p>
             </div>
             <Button
               variant="ghost"
               size="sm"
-              sx={styles.foodCardButton}
+              {...stylex.props(styles.foodCardButton)}
               onClick={onLogFood}
             >
               <Plus size={15} /> Add food
             </Button>
           </CardHeader>
-          <CardContent sx={styles.foodCardContent}>
+          <CardContent {...stylex.props(styles.foodCardContent)}>
             <div {...stylex.props(styles.energyRow)}>
               <div>
                 <span {...stylex.props(styles.energyValue)}>
@@ -96,7 +96,7 @@ export function FoodPage({ token, date, isToday, onLogFood, foodDelete }: { toke
                 <Button
                   variant="outline"
                   size="sm"
-                  sx={styles.emptyButton}
+                  {...stylex.props(styles.emptyButton)}
                   onClick={onLogFood}
                 >
                   Log a food
@@ -127,7 +127,7 @@ export function FoodPage({ token, date, isToday, onLogFood, foodDelete }: { toke
                     <Button
                       variant="ghost"
                       size="icon"
-                      sx={styles.entryDeleteButton}
+                      {...stylex.props(styles.entryDeleteButton)}
                       aria-label={`Delete ${entry.food.name}`}
                       disabled={foodDelete.isPending}
                       onClick={() => foodDelete.mutate(entry)}
@@ -145,8 +145,8 @@ export function FoodPage({ token, date, isToday, onLogFood, foodDelete }: { toke
         </Card>
       </div>
       <div {...stylex.props(styles.column)}>
-        <Card sx={styles.tipCard}>
-          <CardContent sx={styles.tipContent}>
+        <Card {...stylex.props(styles.tipCard)}>
+          <CardContent {...stylex.props(styles.tipContent)}>
             <div {...stylex.props(styles.tipIcon)}>
               <Search size={22} />
             </div>
@@ -156,16 +156,16 @@ export function FoodPage({ token, date, isToday, onLogFood, foodDelete }: { toke
               Find a food in the Ciqual catalog or enter your own
               nutrition details.
             </p>
-            <Button variant="outline" sx={styles.tipButton} onClick={onLogFood}>
+            <Button variant="outline" {...stylex.props(styles.tipButton)} onClick={onLogFood}>
               Add your first food <ChevronRight size={17} />
             </Button>
           </CardContent>
         </Card>
         <Card>
-          <CardHeader sx={styles.cardHeader}>
-            <CardTitle sx={styles.cardTitle}>Daily nutrition</CardTitle>
+          <CardHeader {...stylex.props(styles.cardHeader)}>
+            <CardTitle {...stylex.props(styles.cardTitle)}>Daily nutrition</CardTitle>
           </CardHeader>
-          <CardContent sx={styles.detailContent}>
+          <CardContent {...stylex.props(styles.detailContent)}>
             <NutritionLine
               label="Protein"
               value={token ? format(totals?.proteinG, 1) : "—"}

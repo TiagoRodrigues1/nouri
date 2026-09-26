@@ -1,11 +1,13 @@
 import { fileURLToPath, URL } from "node:url";
 import react from "@vitejs/plugin-react";
 import stylex from "@stylexjs/unplugin";
+import tailwindcss from "@tailwindcss/vite";
 import { defineConfig, loadEnv } from "vite";
 
 export default defineConfig(({ mode }) => ({
   plugins: [
     stylex.vite({ useCSSLayers: true, dev: process.env.NODE_ENV === "development", runtimeInjection: false }),
+    tailwindcss(),
     react(),
     // Only the dev server gets the token; the API adds it to the built page at request time.
     {

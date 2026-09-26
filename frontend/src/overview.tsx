@@ -99,7 +99,7 @@ export function Overview({ token, date, onLogFood, onLogWorkout, onLogSleep, onL
   return (
     <>
       <Tabs value={tab} onValueChange={(next) => setTab(next === "all" ? "all" : (categories.find((category) => category.id === next)?.id ?? "all"))}>
-        <TabsList sx={styles.tabs} aria-label="Overview categories">
+        <TabsList {...stylex.props(styles.tabs)} aria-label="Overview categories">
           <TabsTrigger value="all">All</TabsTrigger>
           {categories.map((category) => (
             <TabsTrigger key={category.id} value={category.id}>{category.name}</TabsTrigger>
@@ -109,11 +109,11 @@ export function Overview({ token, date, onLogFood, onLogWorkout, onLogSleep, onL
           <p {...stylex.props(styles.status)}>{status}</p>
         ) : (
           <>
-            <TabsContent value="all" sx={styles.sections}>
+            <TabsContent value="all" {...stylex.props(styles.sections)}>
               {categories.map((category) => <Fragment key={category.id}>{sections[category.id]}</Fragment>)}
             </TabsContent>
             {categories.map((category) => (
-              <TabsContent key={category.id} value={category.id} sx={styles.sections}>{sections[category.id]}</TabsContent>
+              <TabsContent key={category.id} value={category.id} {...stylex.props(styles.sections)}>{sections[category.id]}</TabsContent>
             ))}
           </>
         )}
