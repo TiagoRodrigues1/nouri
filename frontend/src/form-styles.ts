@@ -1,0 +1,127 @@
+import * as stylex from "@stylexjs/stylex";
+import { colors } from "./theme.stylex";
+
+export const styles = stylex.create({
+  dialogDescription: {
+    color: colors.mutedForeground,
+    fontSize: "13px",
+    lineHeight: "1.5",
+    margin: "9px 0 22px",
+  },
+  dialogActions: {
+    display: "flex",
+    justifyContent: "flex-end",
+    gap: "7px",
+    marginTop: "9px",
+  },
+  connectionError: {
+    margin: "0",
+    color: colors.destructive,
+    fontSize: "12px",
+  },
+  fieldHint: {
+    color: colors.mutedForeground,
+    fontSize: "11px",
+    margin: "9px 0 13px",
+  },
+  searchMessage: {
+    minHeight: "85px",
+    display: "grid",
+    placeItems: "center",
+    textAlign: "center",
+    color: colors.mutedForeground,
+    fontSize: "12px",
+  },
+  resultsList: {
+    listStyle: "none",
+    padding: "0",
+    margin: "8px 0",
+    maxHeight: "240px",
+    overflowY: "auto",
+    borderWidth: 1, borderStyle: "solid", borderColor: colors.border,
+    borderRadius: "8px",
+  },
+  selectedForm: {
+    display: "grid",
+    gap: "8px",
+    margin: "14px 0",
+    padding: "14px",
+    borderRadius: "8px",
+    backgroundColor: colors.muted,
+  },
+  sourceLink: {
+    color: colors.primary,
+    fontSize: "11px",
+    textDecoration: "underline",
+  },
+  formSubhead: {
+    color: colors.mutedForeground,
+    fontSize: "10px",
+    fontWeight: "800",
+    letterSpacing: ".13em",
+    margin: "8px 0 0",
+  },
+  manualGrid: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: "12px",
+  },
+  dialogTitle: {
+    fontFamily: 'Georgia, "Times New Roman", serif', fontSize: 28, fontWeight: 400,
+    paddingRight: "28px",
+  },
+  formStack: {
+    display: "grid",
+    gap: "12px",
+  },
+  formLabel: {
+    display: "block",
+    fontSize: "12px",
+    fontWeight: "700",
+    marginBottom: "7px",
+  },
+  searchFormRow: {
+    display: "flex",
+    gap: "8px",
+  },
+  resultsItemBorder: {
+    borderTopWidth: 1, borderTopStyle: "solid", borderTopColor: colors.border,
+  },
+  resultsButton: {
+    width: "100%",
+    padding: "11px 13px",
+    backgroundColor: { default: "transparent", ":hover": colors.accent },
+    borderWidth: 0,
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "8px",
+    textAlign: "left",
+  },
+  resultsText: {
+    display: "block",
+  },
+  resultsName: {
+    fontSize: "12px",
+  },
+  resultsMeta: {
+    marginTop: "4px",
+    color: colors.mutedForeground,
+    fontSize: "11px",
+  },
+  selectedName: {
+    fontSize: "13px",
+  },
+  selectedLabel: {
+    margin: "0",
+  },
+  selectedButton: {
+    justifySelf: "end",
+  },
+  manualSubmit: {
+    marginTop: "8px",
+  },
+  widthFull: { width: "100%" },
+  flexOne: { flex: 1 },
+  resultsButtonSelected: { backgroundColor: colors.accent },
+});

@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
+action=${1:-}
+run_id=${2:-}
+
+if [[ ! $run_id =~ ^[a-zA-Z0-9_-]{1,48}$ ]]; then
+  echo 'Run ID must contain only letters, digits, underscores, or hyphens (1-48 characters).' >&2
+  exit 2
+fi
+
+runtime="/tmp/nouri-verify-${run_id}"
+container="nouri-verify-${run_id}"
+
+case $action in
+  browser)
+    [[ -d $runtime ]] || { echo 'Run metadata missing.' >&2; exit 1; }
+    shift 2
+    (cd "$runtime" && exec playwright cli -s="nouri-$run_id" "$@")
+    ;;
+  launch)
+    if [[ -e $runtime ]]; then
+      echo "Run already exists: $runtime" >&2
+      exit 1
+    fi
+    mkdir -m 700 "$runtime"
+    trap '"$0" cleanup "$run_id" >/dev/null || true' ERR
+    docker run -d --rm --name "$container" \
+      -e POSTGRES_USER=nouri -e POSTGRES_PASSWORD=nouri -e POSTGRES_DB=nouri \
+      -p 127.0.0.1::5432 postgres:16-alpine > "$runtime/container-id"
+    db_port=$(docker port "$container" 5432/tcp | sed -E 's/.*:([0-9]+)$/\1/')
+    for _ in {1..60}; do
+      if pg_isready -h 127.0.0.1 -p "$db_port" -U nouri >/dev/null 2>&1; then break; fi
+      sleep 1
+    done
+    pg_isready -h 127.0.0.1 -p "$db_port" -U nouri >/dev/null
+    db_url="postgresql://nouri:nouri@127.0.0.1:${db_port}/nouri"
+    (cd "$root" && DATABASE_URL="$db_url" pnpm db:migrate) > "$runtime/migrate.log" 2>&1
+    app_port=$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')
+    token=$(openssl rand -hex 32)
+    user_id=$(python3 -c 'import uuid; print(uuid.uuid4())')
+    umask 077
+    cat > "$runtime/env" <<EOF
+export DATABASE_URL='$db_url'
+export API_TOKEN='$token'
+export API_USER_ID='$user_id'
+export PORT='$app_port'
+export NOURI_RUN_ID='$run_id'
+export NOURI_BASE_URL='http://127.0.0.1:$app_port'
+EOF
+    (cd "$root"; setsid env DATABASE_URL="$db_url" API_TOKEN="$token" API_USER_ID="$user_id" PORT="$app_port" node --import tsx src/server.ts > "$runtime/server.log" 2>&1 & echo $! > "$runtime/app-pid")
+    for _ in {1..60}; do
+      if curl -fsS "http://127.0.0.1:$app_port/openapi.json" >/dev/null 2>&1; then break; fi
+      sleep 1
+    done
+    "$0" doctor "$run_id"
+    trap - ERR
+    ;;
+  doctor)
+    [[ -f $runtime/env && -f $runtime/app-pid && -f $runtime/container-id ]] || { echo 'Run metadata missing.' >&2; exit 1; }
+    # shellcheck disable=SC1090
+    source "$runtime/env"
+    app_pid=$(cat "$runtime/app-pid")
+    [[ -r /proc/$app_pid/cmdline ]] || { echo 'App process is gone.' >&2; exit 1; }
+    tr '\0' ' ' < "/proc/$app_pid/cmdline" | grep -F 'src/server.ts' >/dev/null || { echo 'App PID belongs to another process.' >&2; exit 1; }
+    [[ $(docker inspect -f '{{.Id}}' "$container") == "$(cat "$runtime/container-id")" ]] || { echo 'Database container changed.' >&2; exit 1; }
+    db_port=$(docker port "$container" 5432/tcp | sed -E 's/.*:([0-9]+)$/\1/')
+    pg_isready -h 127.0.0.1 -p "$db_port" -U nouri >/dev/null
+    curl -fsS "$NOURI_BASE_URL/" | grep -F 'Nouri · Food journal' >/dev/null
+    curl -fsS "$NOURI_BASE_URL/openapi.json" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["info"]["title"] == "Nouri API" and d["info"]["version"] == "1.0.0"'
+    curl -fsS -H "Authorization: Bearer $API_TOKEN" "$NOURI_BASE_URL/v1/days/2026-09-25" | python3 -c 'import json,sys; assert json.load(sys.stdin)["date"] == "2026-09-25"'
+    echo "Healthy Nouri run $run_id at $NOURI_BASE_URL (app PID $app_pid, database $container)."
+    ;;
+  cleanup)
+    if [[ -d $runtime ]]; then
+      (cd "$runtime" && playwright cli -s="nouri-$run_id" close >/dev/null 2>&1) || true
+    fi
+    if [[ -f $runtime/app-pid ]]; then
+      app_pid=$(cat "$runtime/app-pid")
+      if [[ -r /proc/$app_pid/cmdline ]] && tr '\0' ' ' < "/proc/$app_pid/cmdline" | grep -F 'src/server.ts' >/dev/null; then
+        kill -- "-$app_pid" 2>/dev/null || kill "$app_pid" 2>/dev/null || true
+      fi
+    fi
+    if [[ -f $runtime/container-id ]] && [[ $(docker inspect -f '{{.Id}}' "$container" 2>/dev/null || true) == "$(cat "$runtime/container-id")" ]]; then
+      docker rm -f "$container" >/dev/null
+    fi
+    rm -rf -- "$runtime"
+    echo "Cleaned up run $run_id. Evidence is untouched."
+    ;;
+  *)
+    echo "Usage: $0 {launch|doctor|cleanup} RUN_ID | $0 browser RUN_ID PLAYWRIGHT_COMMAND [ARGS...]" >&2
+    exit 2
+    ;;
+esac
