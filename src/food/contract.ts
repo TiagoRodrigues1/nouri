@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { recordBaseSchema } from "../journal/contract.js";
+import { occurredAtSchema, timeZoneSchema } from "../time.js";
 
 const amount = z.number().nonnegative().max(1_000_000)
   .refine((value) => Math.abs(value * 1000 - Math.round(value * 1000)) < 1e-7);
@@ -29,18 +31,6 @@ const recordedRefSchema = z.object({
   version: z.string().optional(),
 }).strict();
 
-const occurredAtSchema = z.iso.datetime({ offset: true });
-
-const timeZoneSchema = z.string().min(1).refine((zone) => {
-  try {
-    new Intl.DateTimeFormat("en", { timeZone: zone });
-
-    return true;
-  } catch {
-    return false;
-  }
-});
-
 export const manualInputSchema = z.object({
   occurredAt: occurredAtSchema,
   timeZone: timeZoneSchema,
@@ -65,12 +55,7 @@ export const catalogInputSchema = z.object({
 export const submissionSchema = z.union([manualInputSchema, catalogInputSchema]).refine((input) =>
   !("catalogRef" in input.food && input.food.catalogRef?.provider === "ciqual"));
 
-export const entrySchema = z.object({
-  id: z.uuid(),
-  revision: z.number().int().positive(),
-  occurredAt: z.iso.datetime(),
-  timeZone: z.string(),
-  localDate: z.iso.date(),
+export const entrySchema = recordBaseSchema.extend({
   food: manualInputSchema.shape.food.extend({ catalogRef: recordedRefSchema.nullable() }),
 });
 

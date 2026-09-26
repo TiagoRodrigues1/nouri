@@ -1,0 +1,32 @@
+import { z } from "zod";
+
+export const occurredAtSchema = z.iso.datetime({ offset: true });
+
+export const timeZoneSchema = z.string().min(1).refine((zone) => {
+  try {
+    new Intl.DateTimeFormat("en", { timeZone: zone });
+
+    return true;
+  } catch {
+    return false;
+  }
+});
+
+export function localDate(instant: string, zone: string): string {
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date(instant));
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+
+  if (!year || !month || !day) throw new Error("Could not calculate local date");
+
+  return `${year}-${month}-${day}`;
+}
+
+export function shiftDate(date: string, days: number): string {
+  const shifted = new Date(`${date}T00:00:00Z`);
+
+  shifted.setUTCDate(shifted.getUTCDate() + days);
+
+  return shifted.toISOString().slice(0, 10);
+}

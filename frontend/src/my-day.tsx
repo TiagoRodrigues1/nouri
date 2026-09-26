@@ -1,15 +1,15 @@
 import * as stylex from "@stylexjs/stylex";
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { Beef, Clock3, Flame, PieChart, Plus, Search, Timer, Trash2, Trophy, Utensils, Wheat, Droplet } from "lucide-react";
+import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { Activity, Beef, Clock3, Flame, PieChart, Timer, Trash2, Trophy, Utensils, Wheat, Droplet, GlassWater, Milk } from "lucide-react";
 import { Button } from "./components/ui/button";
+import { Input } from "./components/ui/input";
 import { colors } from "./theme.stylex";
 import { styles } from "./my-day-styles";
-import { format, type Day, type FoodEntry } from "./lib/api";
-
-// FDA reference daily values for a 2,000 kcal diet.
-const reference = { kcal: 2000, proteinG: 50, carbsG: 275, fatG: 78 };
-
-const fastingGoalHours = 16;
+import { DashboardCardsDialog, useDashboardCards } from "./dashboard-cards";
+import { reference, fastingGoalHours, waterGoalMl, waterPresets } from "./lib/goals";
+import { useWater } from "./lib/use-water";
+import { useQuery } from "@tanstack/react-query";
+import { getWorkoutSummary, format, type CardId, type Day, type FoodEntry, type WaterEntry } from "./lib/api";
 
 const clock = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit" });
 
@@ -21,14 +21,17 @@ type Row =
 type MyDayProps = {
   token: string;
   day: Day | undefined;
+  date: string;
   isToday: boolean;
   status: ReactNode;
   deletePending: boolean;
-  onLog: () => void;
   onDelete: (entry: FoodEntry) => void;
+  water: ReturnType<typeof useWater>;
+  customizingCards: boolean;
+  onCustomizingCardsChange: (open: boolean) => void;
 };
 
-export function MyDay({ token, day, isToday, status, deletePending, onLog, onDelete }: MyDayProps) {
+export function MyDay({ token, day, date, isToday, status, deletePending, onDelete, water, customizingCards, onCustomizingCardsChange }: MyDayProps) {
   const now = useNow();
   const entries = day?.food.entries ?? [];
   const totals = day?.food.totals;
@@ -36,6 +39,41 @@ export function MyDay({ token, day, isToday, status, deletePending, onLog, onDel
   const eaten = isToday ? times.filter((time) => time <= now) : times;
   const last = eaten.at(-1);
   const connected = Boolean(token);
+  const layout = useDashboardCards(token);
+
+  const cards: Record<CardId, ReactNode> = {
+    totals: (
+      <section {...stylex.props(styles.card, styles.full)}>
+        <div {...stylex.props(styles.cardHead)}>
+          <h2 {...stylex.props(styles.cardTitle, styles.energy)}>
+            <Flame size={17} /> Daily totals
+          </h2>
+          <span {...stylex.props(styles.cardAside)}>vs. reference values for 2,000 kcal</span>
+        </div>
+        <div {...stylex.props(styles.gauges)}>
+          <Gauge icon={<Flame size={14} />} label="Energy" unit="kcal" value={totals?.kcal} target={reference.kcal} color={colors.food} connected={connected} />
+          <Gauge icon={<Beef size={14} />} label="Protein" unit="g" value={totals?.proteinG} target={reference.proteinG} color={colors.protein} connected={connected} />
+          <Gauge icon={<Wheat size={14} />} label="Carbs" unit="g" value={totals?.carbsG} target={reference.carbsG} color={colors.carbs} connected={connected} />
+          <Gauge icon={<Droplet size={14} />} label="Fat" unit="g" value={totals?.fatG} target={reference.fatG} color={colors.fat} connected={connected} />
+        </div>
+      </section>
+    ),
+    water: (
+      <WaterCard
+        connected={connected}
+        entries={day?.water.entries ?? []}
+        totalMl={day?.water.totalMl}
+        pending={water.pending}
+        onAdd={water.add}
+        onDelete={water.remove}
+      />
+    ),
+    mix: <MixCard proteinG={totals?.proteinG} carbsG={totals?.carbsG} fatG={totals?.fatG} />,
+    activity: <ActivityCard token={token} date={date} />,
+    fasting: isToday && last ? <FastingCard since={now.getTime() - last.getTime()} last={last} /> : <WindowCard first={times[0]} last={times.at(-1)} />,
+    largest: <LargestCard entries={entries} totalKcal={totals?.kcal} />,
+    meals: <MealsCard times={times} entries={entries} />,
+  };
 
   return (
     <div {...stylex.props(styles.layout)}>
@@ -48,41 +86,25 @@ export function MyDay({ token, day, isToday, status, deletePending, onLog, onDel
         onDelete={onDelete}
       />
       <div {...stylex.props(styles.side)}>
-        <section {...stylex.props(styles.card, styles.gaugesCard)}>
-          <div {...stylex.props(styles.cardHead)}>
-            <h2 {...stylex.props(styles.cardTitle, styles.energy)}>
-              <Flame size={17} /> Daily totals
-            </h2>
-            <span {...stylex.props(styles.cardAside)}>vs. reference values for 2,000 kcal</span>
+        {layout.cards?.length === 0 ? (
+          <p {...stylex.props(styles.noCards)}>All cards are hidden. Use the customize button at the top to bring some back.</p>
+        ) : (
+          <div {...stylex.props(styles.cards)}>
+            {layout.cards?.map((id) => <Fragment key={id}>{cards[id]}</Fragment>)}
           </div>
-          <div {...stylex.props(styles.gauges)}>
-            <Gauge icon={<Flame size={14} />} label="Energy" unit="kcal" value={totals?.kcal} target={reference.kcal} color={colors.food} connected={connected} />
-            <Gauge icon={<Beef size={14} />} label="Protein" unit="g" value={totals?.proteinG} target={reference.proteinG} color={colors.protein} connected={connected} />
-            <Gauge icon={<Wheat size={14} />} label="Carbs" unit="g" value={totals?.carbsG} target={reference.carbsG} color={colors.carbs} connected={connected} />
-            <Gauge icon={<Droplet size={14} />} label="Fat" unit="g" value={totals?.fatG} target={reference.fatG} color={colors.fat} connected={connected} />
-          </div>
-        </section>
-        <div {...stylex.props(styles.cards)}>
-          {isToday && last ? (
-            <FastingCard since={now.getTime() - last.getTime()} last={last} />
-          ) : (
-            <WindowCard first={times[0]} last={times.at(-1)} />
-          )}
-          <MixCard proteinG={totals?.proteinG} carbsG={totals?.carbsG} fatG={totals?.fatG} />
-          <LargestCard entries={entries} totalKcal={totals?.kcal} />
-          <MealsCard times={times} entries={entries} />
-          <section {...stylex.props(styles.card, styles.feature)}>
-            <h2 {...stylex.props(styles.featureTitle)}>
-              <Search size={16} /> Quick log
-            </h2>
-            <p {...stylex.props(styles.featureHeading)}>What's on your plate?</p>
-            <p {...stylex.props(styles.featureText)}>Find a food in the Ciqual catalog or enter your own nutrition details.</p>
-            <Button sx={styles.featureButton} onClick={onLog}>
-              <Plus size={16} /> Log a food
-            </Button>
-          </section>
-        </div>
+        )}
       </div>
+      <DashboardCardsDialog
+        open={customizingCards && Boolean(layout.cards)}
+        onOpenChange={(open) => {
+          onCustomizingCardsChange(open);
+          layout.mutation.reset();
+        }}
+        cards={layout.cards ?? []}
+        pending={layout.mutation.isPending}
+        error={layout.mutation.error?.message ?? ""}
+        onSave={(next) => layout.mutation.mutate(next, { onSuccess: () => onCustomizingCardsChange(false) })}
+      />
     </div>
   );
 }
@@ -197,7 +219,7 @@ function Timeline({ entries, now, summary, status, deletePending, onDelete }: Ti
                   <Button
                     variant="ghost"
                     size="icon"
-                    sx={styles.entryDelete}
+                    {...stylex.props(styles.entryDelete)}
                     aria-label={`Delete ${entry.food.name}`}
                     disabled={deletePending}
                     onClick={() => onDelete(entry)}
@@ -363,6 +385,24 @@ function MixCard({ proteinG, carbsG, fatG }: MixProps) {
   );
 }
 
+function ActivityCard({ token, date }: { token: string; date: string | undefined }) {
+  const query = useQuery({ queryKey: ["workout-summary", token, date], queryFn: () => getWorkoutSummary(token, date!), enabled: Boolean(token && date) });
+  const sports = query.data;
+
+  return (
+    <section {...stylex.props(styles.card)} aria-label="Activity">
+      <div {...stylex.props(styles.cardHead)}>
+        <h2 {...stylex.props(styles.cardTitle, styles.activity)}><Activity size={17} /> Activity</h2>
+        <span {...stylex.props(styles.cardAside)}>{sports?.entryCount ?? 0} workouts</span>
+      </div>
+      <div {...stylex.props(styles.cardBody, styles.centered)}>
+        <span {...stylex.props(styles.bigValue)}>{format(sports?.totalMinutes ?? 0)}</span>
+        <p {...stylex.props(styles.caption)}>minutes of recorded activity</p>
+      </div>
+    </section>
+  );
+}
+
 function MealsCard({ times, entries }: { times: Date[]; entries: FoodEntry[] }) {
   const hours = Array.from({ length: 18 }, (_, index) => index + 6);
   const byHour = new Map<number, number>();
@@ -430,6 +470,150 @@ function LargestCard({ entries, totalKcal }: { entries: FoodEntry[]; totalKcal: 
         <p {...stylex.props(styles.caption)}>
           {kcal != null && totalKcal ? `${Math.round((kcal / totalKcal) * 100)}% of the day's energy` : " "}
         </p>
+      </div>
+    </section>
+  );
+}
+
+function waterProgress(connected: boolean, totalMl: number): string {
+  if (!connected) return "Connect to track your water";
+
+  if (totalMl >= waterGoalMl) return "Goal reached. Nice work!";
+
+  return `${Math.round((totalMl / waterGoalMl) * 100)}% of your goal · ${format(waterGoalMl - totalMl)} ml to go`;
+}
+
+// Fillable height inside the bottle outline, from the base (y 146) to the shoulder (y 40).
+const bottleBase = 146;
+
+const bottleDepth = 106;
+
+const wave = `M-40 4${" q10 -5 20 0 t20 0".repeat(5)} V${bottleBase + 10} H-40 Z`;
+
+function Bottle({ share }: { share: number }) {
+  const clip = useId();
+  const level = bottleBase - bottleDepth * Math.min(Math.max(share, 0), 1);
+  const outline = "M30 16 H50 V26 C50 32 68 36 68 50 V136 Q68 146 58 146 H22 Q12 146 12 136 V50 C12 36 30 32 30 26 Z";
+
+  return (
+    <svg width={80} height={150} viewBox="0 0 80 150" aria-hidden {...stylex.props(styles.bottle)}>
+      <defs>
+        <clipPath id={clip}>
+          <path d={outline} />
+        </clipPath>
+      </defs>
+      <rect x={27} y={3} width={26} height={13} rx={3} {...stylex.props(styles.bottleCap)} />
+      <path d={outline} {...stylex.props(styles.bottleGlass)} />
+      <g clipPath={`url(#${clip})`}>
+        <g {...stylex.props(styles.waterLevel(level))}>
+          <path d={wave} {...stylex.props(styles.waveBack)} />
+          <path d={wave} {...stylex.props(styles.waveFront)} />
+        </g>
+      </g>
+      {[0.25, 0.5, 0.75].map((mark) => (
+        <line key={mark} x1={56} x2={64} y1={bottleBase - bottleDepth * mark} y2={bottleBase - bottleDepth * mark} {...stylex.props(styles.bottleTick)} />
+      ))}
+      <path d={outline} {...stylex.props(styles.bottleOutline)} />
+    </svg>
+  );
+}
+
+type WaterCardProps = {
+  connected: boolean;
+  entries: WaterEntry[];
+  totalMl: number | null | undefined;
+  pending: boolean;
+  onAdd: (volumeMl: number) => void;
+  onDelete: (entry: WaterEntry) => void;
+};
+
+function WaterCard({ connected, entries, totalMl, pending, onAdd, onDelete }: WaterCardProps) {
+  const [custom, setCustom] = useState("");
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const volumeMl = Number(custom);
+
+    if (!Number.isInteger(volumeMl) || volumeMl < 1 || volumeMl > 5000) return;
+    onAdd(volumeMl);
+    setCustom("");
+  }
+
+  return (
+    <section {...stylex.props(styles.card, styles.wide)} aria-label="Water">
+      <div {...stylex.props(styles.cardHead)}>
+        <h2 {...stylex.props(styles.cardTitle, styles.water)}>
+          <Droplet size={17} /> Water
+        </h2>
+        <span {...stylex.props(styles.cardAside)}>{format(waterGoalMl)} ml goal</span>
+      </div>
+      <div {...stylex.props(styles.waterBody)}>
+        <Bottle share={(totalMl ?? 0) / waterGoalMl} />
+        <div {...stylex.props(styles.waterControls)}>
+          <div>
+            <span {...stylex.props(styles.bigValue)}>{connected ? format(totalMl ?? 0) : "—"}</span>
+            <span {...stylex.props(styles.bigUnit)}>ml</span>
+            <p {...stylex.props(styles.caption, styles.waterCaption)}>{waterProgress(connected, totalMl ?? 0)}</p>
+          </div>
+          <div {...stylex.props(styles.waterPresets)}>
+            {waterPresets.map((preset) => (
+              <Button
+                key={preset.volumeMl}
+                type="button"
+                variant="outline"
+                {...stylex.props(styles.waterPreset)}
+                aria-label={`Add ${preset.label.toLowerCase()} of water, ${preset.volumeMl} ml`}
+                disabled={!connected || pending}
+                onClick={() => onAdd(preset.volumeMl)}
+              >
+                <span {...stylex.props(styles.waterPresetIcon)}>{preset.volumeMl === 250 ? <GlassWater size={18} /> : <Milk size={18} />}</span>
+                <span {...stylex.props(styles.waterPresetText)}>
+                  <strong {...stylex.props(styles.waterPresetAmount)}>+{preset.volumeMl} ml</strong>
+                  <small {...stylex.props(styles.waterPresetLabel)}>{preset.label}</small>
+                </span>
+              </Button>
+            ))}
+          </div>
+          <form {...stylex.props(styles.waterForm)} onSubmit={submit}>
+            <Input
+              id="water-ml"
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={5000}
+              step={1}
+              placeholder="Other amount, ml"
+              aria-label="Water amount in millilitres"
+              value={custom}
+              onChange={(event) => setCustom(event.target.value)}
+              {...stylex.props(styles.waterInput)}
+              required
+            />
+            <Button type="submit" size="sm" disabled={!connected || pending}>
+              Add
+            </Button>
+          </form>
+          {/* The list keeps a fixed height and scrolls, so logging drinks never resizes the card. */}
+          <ul {...stylex.props(styles.waterList)} aria-label="Logged water">
+            {entries.length === 0 && <li {...stylex.props(styles.waterEmpty)}>No drinks logged yet</li>}
+            {entries.toReversed().map((entry) => (
+              <li key={entry.id} {...stylex.props(styles.waterRow)}>
+                <time dateTime={entry.occurredAt} {...stylex.props(styles.entryTime)}>{clock.format(new Date(entry.occurredAt))}</time>
+                <span {...stylex.props(styles.waterAmount)}>{format(entry.volumeMl)} ml</span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  {...stylex.props(styles.entryDelete)}
+                  aria-label={`Delete ${entry.volumeMl} ml of water at ${clock.format(new Date(entry.occurredAt))}`}
+                  disabled={pending}
+                  onClick={() => onDelete(entry)}
+                >
+                  <Trash2 size={14} />
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </div>
       </div>
     </section>
   );

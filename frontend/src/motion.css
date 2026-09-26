@@ -1,0 +1,78 @@
+:root {
+  --ease-ui-out: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+[data-slot="dialog-content"][data-state="open"] {
+  animation: dialog-enter 220ms var(--ease-ui-out) both;
+}
+
+[data-slot="dialog-content"][data-state="closed"] {
+  animation: dialog-exit 160ms var(--ease-ui-out) both;
+}
+
+[data-slot="dialog-overlay"][data-state="open"] {
+  animation: fade-in 180ms var(--ease-ui-out) both;
+}
+
+[data-slot="dialog-overlay"][data-state="closed"] {
+  animation: fade-out 160ms var(--ease-ui-out) both;
+}
+
+[data-slot="time-popover"] {
+  transform-origin: var(--radix-popover-content-transform-origin);
+}
+
+[data-slot="time-popover"][data-state="open"] {
+  animation: popover-enter 150ms var(--ease-ui-out) both;
+}
+
+[data-slot="time-popover"][data-state="closed"] {
+  animation: popover-exit 120ms var(--ease-ui-out) both;
+}
+
+@keyframes dialog-enter {
+  from { opacity: 0; scale: 0.97; }
+  to { opacity: 1; scale: 1; }
+}
+
+@keyframes dialog-exit {
+  from { opacity: 1; scale: 1; }
+  to { opacity: 0; scale: 0.97; }
+}
+
+@keyframes popover-enter {
+  from { opacity: 0; transform: scale(0.97); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes popover-exit {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(0.97); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-slot="dialog-content"][data-state="open"],
+  [data-slot="time-popover"][data-state="open"] {
+    animation: fade-in 100ms var(--ease-ui-out) both;
+  }
+
+  [data-slot="dialog-content"][data-state="closed"],
+  [data-slot="time-popover"][data-state="closed"] {
+    animation: fade-out 100ms var(--ease-ui-out) both;
+  }
+
+  [data-slot="dialog-overlay"][data-state="open"],
+  [data-slot="dialog-overlay"][data-state="closed"] {
+    animation-duration: 100ms;
+  }
+}

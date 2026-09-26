@@ -89,7 +89,7 @@ function getFoodDay(db: FoodDatabase, userId: string, date: string): Promise<Foo
 | --- | --- |
 | `src/app.ts` | HTTP routes, bearer authentication, Zod parsing, and OpenAPI |
 | `src/food/food.ts` | Food commands, retry receipts, revisions, local dates, and totals |
-| `src/db/schema.ts` and `db/migrations` | PostgreSQL tables and reviewed migration SQL |
+| `src/db/schema.ts` and `db/schema.sql` | PostgreSQL tables and the reviewed schema SQL |
 | `src/server.ts` | Process setup and database connection |
 
 ## Synthesis decision

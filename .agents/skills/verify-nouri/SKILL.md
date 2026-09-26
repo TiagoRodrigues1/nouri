@@ -1,6 +1,6 @@
 ---
 name: verify-nouri
-description: Verify Nouri's food journal web page and API through an isolated local PostgreSQL instance and a real browser. Use after changes to connection, food search, logging, daily totals, date navigation, or deletion.
+description: Verify Nouri's food journal web page and API through an isolated local PostgreSQL instance and a real browser. Use after changes to food search, food or water logging, daily totals, date navigation, deletion, My Day cards, or the Overview page (measurements, workouts, sleep, progress photos).
 ---
 
 # Verify Nouri
@@ -9,7 +9,7 @@ Read [features/README.md](features/README.md) and the relevant feature file befo
 
 ## Launch
 
-Run from the repository root. Docker, `pnpm`, `pg_isready`, `curl`, Python 3, OpenSSL, and `playwright cli` must be on `PATH`. Dependencies are already described in `package.json`; run `pnpm install` if `node_modules` is absent. The helper starts a disposable `postgres:16-alpine` container on a random localhost port, applies the checked-in migration, and starts `src/server.ts` on another free localhost port. Each run gets its own token and user UUID.
+Run from the repository root. Docker, `pnpm`, `pg_isready`, `curl`, Python 3, OpenSSL, and `playwright cli` must be on `PATH`. Dependencies are described in the root and `frontend/package.json` files; run `pnpm install` if `node_modules` is absent. The helper starts a disposable `postgres:16-alpine` container on a random localhost port, applies `db/schema.sql`, and starts `src/server.ts` on another free localhost port. Each run gets its own token and user UUID.
 
 ```sh
 RUN_ID="nouri-$(date +%s)-$$"
@@ -32,13 +32,10 @@ Run this read-only check first whenever the instance looks wrong. It requires th
 
 ## Drive
 
-Use the helper's `browser` action, which runs `playwright cli` in this run's scratch directory with session `nouri-$RUN_ID`. Playwright's automatic snapshots stay there and disappear during cleanup. Use the selectors and accessible names in the feature map. Open the page and connect with this run's token.
+Use the helper's `browser` action, which runs `playwright cli` in this run's scratch directory with session `nouri-$RUN_ID`. Playwright's automatic snapshots stay there and disappear during cleanup. Use the selectors and accessible names in the feature map. Open the page to load the journal.
 
 ```sh
 "$CONTROL" browser "$RUN_ID" open "$NOURI_BASE_URL/"
-"$CONTROL" browser "$RUN_ID" click 'aside button:has-text("Connect your log")'
-"$CONTROL" browser "$RUN_ID" fill '#api-token' "$API_TOKEN" >/dev/null
-"$CONTROL" browser "$RUN_ID" click '[role="dialog"] button:has-text("Connect")'
 "$CONTROL" browser "$RUN_ID" snapshot | sed "s/$API_TOKEN/[REDACTED]/g"
 ```
 
@@ -48,7 +45,7 @@ The token is a secret. Do not put `env`, browser storage, request headers, or un
 
 Save proof under `$EVIDENCE`; cleanup never removes it. For each feature, record the feature ID and entry point, a screenshot or redacted page snapshot before the user action, the browser action, and the resulting screen. `"$CONTROL" browser "$RUN_ID" screenshot --filename "$EVIDENCE/before.png"` and the same command with `after.png` save screenshots directly. For text proof, pipe `snapshot` through `sed "s/$API_TOKEN/[REDACTED]/g"` before writing it to `$EVIDENCE`.
 
-For a mutation, also save an authenticated `GET /v1/days/<date>` response and assert its entry count, name, and totals. This is a second user-facing read of persisted state, not a substitute for the browser action. Search proof should show query, results or empty state, and source attribution. Follow real page controls. Do not use internal setters or test-only endpoints. Mock only a production boundary that already exists; the default Nouri run uses the real local database. Nouri has no dry-run mode. If a future recipe uses one, inspect actual files, network activity, and database state to establish what it skips.
+For a mutation, save an authenticated readback from the endpoint that owns the result: `GET /v1/days/<date>` for food and water, `GET /v1/overview/<date>` for Overview records, or `GET /v1/dashboard` for card layout. Assert the relevant entries and totals. This is a second read of persisted state, not a substitute for the browser action. Search proof should show query, results or empty state, and source attribution. Follow real page controls. Do not use internal setters or test-only endpoints. Mock only a production boundary that already exists; the default Nouri run uses the real local database. Nouri has no dry-run mode. If a future recipe uses one, inspect actual files, network activity, and database state to establish what it skips.
 
 Example readback, after choosing a date in the page:
 

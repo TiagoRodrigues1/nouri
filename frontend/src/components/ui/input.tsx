@@ -1,28 +1,18 @@
-import * as React from "react";
-import * as stylex from "@stylexjs/stylex";
-import type { StyleXStyles } from "@stylexjs/stylex";
-import { colors } from "../../theme.stylex";
+import * as React from "react"
+import { cn } from "@/lib/utils"
 
-const styles = stylex.create({
-  input: {
-    display: "flex",
-    width: "100%",
-    height: 40,
-    borderRadius: 6,
-    borderWidth: 1, borderStyle: "solid", borderColor: colors.input,
-    backgroundColor: colors.background,
-    paddingBlock: 8,
-    paddingInline: 12,
-    fontSize: 14,
-    color: colors.foreground,
-    boxShadow: "0 1px 2px #25343d08",
-    outline: { default: "none", ":focus-visible": `2px solid ${colors.ring}` },
-    opacity: { default: 1, ":disabled": 0.5 },
-    cursor: { default: "auto", ":disabled": "not-allowed" },
-    "::placeholder": { color: colors.mutedForeground },
-  },
-});
-
-export function Input({ type = "text", sx, ...props }: Omit<React.ComponentProps<"input">, "className" | "style"> & { sx?: StyleXStyles }) {
-  return <input data-slot="input" type={type} {...props} {...stylex.props(styles.input, sx)} />;
+function Input({ className, type, ...props }: React.ComponentProps<"input">) {
+  return (
+    <input
+      type={type}
+      data-slot="input"
+      className={cn(
+        "h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-2.5 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 md:text-sm dark:bg-input/30 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40",
+        className
+      )}
+      {...props}
+    />
+  )
 }
+
+export { Input }
