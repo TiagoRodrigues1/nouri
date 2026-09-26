@@ -20,8 +20,14 @@ const foodRoute = createRoute({
   component: () => <Dashboard view="food" />,
 });
 
+const overviewRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/overview",
+  component: () => <Dashboard view="overview" />,
+});
+
 export const router = createRouter({
-  routeTree: rootRoute.addChildren([todayRoute, foodRoute]),
+  routeTree: rootRoute.addChildren([todayRoute, overviewRoute, foodRoute]),
 });
 
 declare module "@tanstack/react-router" {

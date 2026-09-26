@@ -1,13 +1,15 @@
 import * as stylex from "@stylexjs/stylex";
 import { styles } from "./form-styles";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronRight, Search } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "./components/ui/dialog";
+import { Label } from "./components/ui/label";
 import { Input } from "./components/ui/input";
+import { TimePicker } from "./components/ui/time-picker";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs";
-import { dateLabel, format, searchFoods, type Candidate } from "./lib/api";
+import { currentTime, dateLabel, format, searchFoods, type Candidate } from "./lib/api";
 import type { FoodSubmission } from "../../src/food/contract";
 
 type FoodInput = FoodSubmission["food"];
@@ -19,7 +21,7 @@ type LogFoodDialogProps = {
   date: string;
   isToday: boolean;
   pending: boolean;
-  onSave: (event: FormEvent<HTMLFormElement>, food: FoodInput) => void;
+  onSave: (event: FormEvent<HTMLFormElement>, food: FoodInput, time: string) => void;
   onConnect: () => void;
 };
 
@@ -28,6 +30,12 @@ export function LogFoodDialog({ open, onOpenChange, token, date, isToday, pendin
   const [searchTerm, setSearchTerm] = useState("");
   const [selected, setSelected] = useState<Candidate | null>(null);
   const [grams, setGrams] = useState("100");
+  const [time, setTime] = useState(currentTime);
+
+  // Each time the dialog opens, default the entry time to now.
+  useEffect(() => {
+    if (open) setTime(currentTime());
+  }, [open]);
 
   const searchQuery = useQuery({
     queryKey: ["foods", token, searchTerm],
@@ -49,6 +57,10 @@ export function LogFoodDialog({ open, onOpenChange, token, date, isToday, pendin
             Choose a food from the catalog or enter one manually. It will be
             added to {isToday ? "today" : dateLabel(date)}.
           </DialogDescription>
+          <div {...stylex.props(styles.timeField)}>
+            <Label {...stylex.props(styles.formLabel, styles.timeLabel)} htmlFor="food-time">Time eaten</Label>
+            <TimePicker id="food-time" value={time} onChange={setTime} onNow={() => setTime(currentTime())} />
+          </div>
           <Tabs defaultValue="search">
             <TabsList sx={styles.widthFull}>
               <TabsTrigger value="search" sx={styles.flexOne}>
@@ -60,7 +72,7 @@ export function LogFoodDialog({ open, onOpenChange, token, date, isToday, pendin
             </TabsList>
             <TabsContent value="search">
               <form onSubmit={search}>
-                <label {...stylex.props(styles.formLabel)} htmlFor="search-query">Find a food</label>
+                <Label {...stylex.props(styles.formLabel)} htmlFor="search-query">Find a food</Label>
                 <div {...stylex.props(styles.searchFormRow)}>
                   <Input
                     id="search-query"
@@ -134,11 +146,11 @@ export function LogFoodDialog({ open, onOpenChange, token, date, isToday, pendin
                       kind: "catalog",
                       ref: selected.ref,
                       quantity: { amount: Number(grams), unit: "g" },
-                    })
+                    }, time)
                   }
                 >
                   <strong {...stylex.props(styles.selectedName)}>{selected.name}</strong>
-                  <label {...stylex.props(styles.formLabel, styles.selectedLabel)} htmlFor="catalog-grams">Amount in grams</label>
+                  <Label {...stylex.props(styles.formLabel, styles.selectedLabel)} htmlFor="catalog-grams">Amount in grams</Label>
                   <Input
                     id="catalog-grams"
                     type="number"
@@ -169,7 +181,7 @@ export function LogFoodDialog({ open, onOpenChange, token, date, isToday, pendin
             <TabsContent value="manual">
               <ManualForm
                 disabled={!token || pending}
-                onSubmit={onSave}
+                onSubmit={(event, food) => onSave(event, food, time)}
               />
             </TabsContent>
           </Tabs>
@@ -205,7 +217,7 @@ function ManualForm({
   return (
     <form {...stylex.props(styles.formStack)} onSubmit={submit}>
       <div>
-        <label {...stylex.props(styles.formLabel)} htmlFor="food-name">Food name</label>
+        <Label {...stylex.props(styles.formLabel)} htmlFor="food-name">Food name</Label>
         <Input
           id="food-name"
           name="name"
@@ -215,7 +227,7 @@ function ManualForm({
         />
       </div>
       <div>
-        <label {...stylex.props(styles.formLabel)} htmlFor="manual-grams">Amount in grams</label>
+        <Label {...stylex.props(styles.formLabel)} htmlFor="manual-grams">Amount in grams</Label>
         <Input
           id="manual-grams"
           name="grams"
@@ -235,7 +247,7 @@ function ManualForm({
           ["fat", "Fat (g)"],
         ].map(([name, label]) => (
           <div key={name}>
-            <label {...stylex.props(styles.formLabel)} htmlFor={`manual-${name}`}>{label}</label>
+            <Label {...stylex.props(styles.formLabel)} htmlFor={`manual-${name}`}>{label}</Label>
             <Input
               id={`manual-${name}`}
               name={name}

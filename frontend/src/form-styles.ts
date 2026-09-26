@@ -70,6 +70,15 @@ export const styles = stylex.create({
     fontFamily: 'Georgia, "Times New Roman", serif', fontSize: 28, fontWeight: 400,
     paddingRight: "28px",
   },
+  timeField: {
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+    marginBottom: "16px",
+  },
+  timeLabel: {
+    marginBottom: "0",
+  },
   formStack: {
     display: "grid",
     gap: "12px",

@@ -1,8 +1,12 @@
 import { createHash, randomUUID } from "node:crypto";
 import { and, eq, isNull, sql } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
-import { foodEntries, mutationReceipts } from "../db/schema.js";
+import type { AppDatabase, Transaction } from "../db/database.js";
+import { softDelete } from "../journal/records.js";
+import { withReceipt } from "../journal/receipt.js";
+import { foodEntries } from "../db/schema.js";
+import { localDate } from "../time.js";
 import { resolveFood } from "./catalog.js";
+import { entrySchema } from "./contract.js";
 import type { CatalogFoodInput, FoodEntry, FoodInput, FoodSubmission } from "./contract.js";
 
 export type { FoodEntry, FoodInput } from "./contract.js";
@@ -17,20 +21,7 @@ export type FoodMutationResult =
   | { outcome: "deleted" | "missing" | "stale" | "key-reuse" }
   | { outcome: "catalog-missing" };
 
-export type FoodDatabase = PostgresJsDatabase<Record<string, never>>;
-
 type FoodRow = typeof foodEntries.$inferSelect;
-
-function localDate(instant: string, zone: string): string {
-  const parts = new Intl.DateTimeFormat("en-US", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date(instant));
-  const year = parts.find((part) => part.type === "year")?.value;
-  const month = parts.find((part) => part.type === "month")?.value;
-  const day = parts.find((part) => part.type === "day")?.value;
-
-  if (!year || !month || !day) throw new Error("Could not calculate local date");
-
-  return `${year}-${month}-${day}`;
-}
 
 function milli(value: number | null): number | null {
   return value === null ? null : Math.round(value * 1000);
@@ -99,49 +90,33 @@ function resolveInput(input: FoodSubmission): FoodInput | null {
     : input;
 }
 
-async function missingOrStale(tx: Parameters<Parameters<FoodDatabase["transaction"]>[0]>[0], userId: string, id: string): Promise<{ outcome: "missing" | "stale" }> {
+async function missingOrStale(tx: Transaction, userId: string, id: string): Promise<{ outcome: "missing" | "stale" }> {
   const [row] = await tx.select({ id: foodEntries.id }).from(foodEntries)
     .where(and(eq(foodEntries.userId, userId), eq(foodEntries.id, id), isNull(foodEntries.deletedAt)));
 
   return { outcome: row ? "stale" : "missing" };
 }
 
-export async function mutateFood(db: FoodDatabase, userId: string, key: string, command: FoodCommand): Promise<FoodMutationResult> {
+export async function mutateFood(db: AppDatabase, userId: string, key: string, command: FoodCommand): Promise<FoodMutationResult> {
   const requestHash = hash(command);
 
-  return db.transaction(async (tx) => {
-    await tx.insert(mutationReceipts).values({ userId, key, requestHash }).onConflictDoNothing();
+  return withReceipt(db, userId, key, requestHash, (receipt): FoodMutationResult => {
+    const { outcome, body } = receipt;
 
-    const [receipt] = await tx.select().from(mutationReceipts)
-      .where(and(eq(mutationReceipts.userId, userId), eq(mutationReceipts.key, key))).for("update");
+    if (outcome === null) throw new Error("Incomplete receipt cannot be replayed");
 
-    if (!receipt) throw new Error("Receipt missing after insert");
+    if (outcome === "created" || outcome === "updated") return { outcome, entry: entrySchema.parse(body) };
 
-    if (receipt.requestHash !== requestHash) return { outcome: "key-reuse" };
-
-    if (receipt.outcome === "created" || receipt.outcome === "updated") {
-      if (receipt.body === null) throw new Error("Completed receipt has no entry");
-
-      return { outcome: receipt.outcome, entry: receipt.body };
-    }
-
-    if (receipt.outcome !== null) return { outcome: receipt.outcome };
-
+    return { outcome };
+  }, async (tx): Promise<FoodMutationResult> => {
     let result: Exclude<FoodMutationResult, { outcome: "catalog-missing" }>;
 
     if (command.kind === "delete") {
-      const [row] = await tx.update(foodEntries)
-        .set({ revision: sql`${foodEntries.revision} + 1`, deletedAt: new Date(), updatedAt: new Date() })
-        .where(and(eq(foodEntries.userId, userId), eq(foodEntries.id, command.id), eq(foodEntries.revision, command.revision), isNull(foodEntries.deletedAt)))
-        .returning({ id: foodEntries.id });
-
-      result = row ? { outcome: "deleted" } : await missingOrStale(tx, userId, command.id);
+      result = await softDelete(tx, foodEntries, userId, command.id, command.revision, undefined);
     } else {
       const input = resolveInput(command.input);
 
       if (!input) {
-        await tx.delete(mutationReceipts).where(and(eq(mutationReceipts.userId, userId), eq(mutationReceipts.key, key)));
-
         return { outcome: "catalog-missing" };
       }
 
@@ -160,15 +135,11 @@ export async function mutateFood(db: FoodDatabase, userId: string, key: string, 
       }
     }
 
-    const body = result.outcome === "created" || result.outcome === "updated" ? result.entry : null;
-    await tx.update(mutationReceipts).set({ outcome: result.outcome, body })
-      .where(and(eq(mutationReceipts.userId, userId), eq(mutationReceipts.key, key)));
-
     return result;
-  });
+  }, "catalog-missing");
 }
 
-export async function getFoodDay(db: FoodDatabase, userId: string, date: string) {
+export async function getFoodDay(db: AppDatabase, userId: string, date: string) {
   const rows = await db.select().from(foodEntries).where(and(
     eq(foodEntries.userId, userId), eq(foodEntries.localDate, date), isNull(foodEntries.deletedAt),
   )).orderBy(foodEntries.occurredAt, foodEntries.id);

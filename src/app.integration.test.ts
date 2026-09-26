@@ -1,30 +1,10 @@
+import { createHarness } from "./test/harness.js";
 import assert from "node:assert/strict";
-import { createHash, randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { test } from "node:test";
-import { fileURLToPath } from "node:url";
-import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
-import { createApp } from "./app.js";
-import type { FoodInput } from "./food/food.js";
+import type { FoodInput } from "./food/contract.js";
 
-const url = process.env.DATABASE_URL;
-
-if (!url) throw new Error("DATABASE_URL is required for integration tests");
-
-const schema = `nouri_test_${randomUUID().replaceAll("-", "")}`;
-
-const admin = postgres(url, { max: 1 });
-
-const client = postgres(url, { max: 10, connection: { search_path: schema } });
-
-const userId = "11111111-1111-4111-8111-111111111111";
-
-const token = "test-token-with-at-least-thirty-two-characters";
-
-const app = createApp(drizzle(client), { token, userId });
-
-const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+const { app, otherApp, client, token, userId, headers, setup, cleanup } = createHarness();
 
 const first: FoodInput = {
   occurredAt: "2026-09-24T23:30:00Z",
@@ -50,9 +30,7 @@ function call(method: string, path: string, body?: FoodInput, key?: string, revi
 }
 
 void test("food CRUD, stable retries, day totals, and concurrent writes", async () => {
-  const path = fileURLToPath(new URL("../db/migrations/0001_food_entries.sql", import.meta.url));
-  await admin.unsafe(`CREATE SCHEMA "${schema}"`);
-  await client.unsafe(await readFile(path, "utf8"));
+  await setup();
 
   try {
     const page = await app.request("/");
@@ -161,7 +139,6 @@ void test("food CRUD, stable retries, day totals, and concurrent writes", async 
     assert.equal(tinyEntry.food.nutrients.kcal, 1.001);
     assert.equal((await call("DELETE", `/v1/food-entries/${tinyEntry.id}`, undefined, "delete-thousandth", 1)).status, 204);
 
-    const otherApp = createApp(drizzle(client), { token, userId: "22222222-2222-4222-8222-222222222222" });
     const foreignDay = await otherApp.request("/v1/days/2026-09-25", { headers });
     assert.equal((await foreignDay.json()).food.entryCount, 0);
 
@@ -235,9 +212,6 @@ void test("food CRUD, stable retries, day totals, and concurrent writes", async 
     assert.ok(document.paths["/v1/food-entries"]);
     assert.ok(document.paths["/v1/food-entries"].post.responses["201"].content["application/json"].schema.properties.food.properties.catalogRef.type.includes("null"));
   } finally {
-    await client.unsafe("DROP TABLE IF EXISTS mutation_receipts, food_entries");
-    await client.end();
-    await admin.unsafe(`DROP SCHEMA "${schema}"`);
-    await admin.end();
+    await cleanup();
   }
 });

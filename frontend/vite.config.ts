@@ -4,7 +4,6 @@ import stylex from "@stylexjs/unplugin";
 import { defineConfig, loadEnv } from "vite";
 
 export default defineConfig(({ mode }) => ({
-  root: "frontend",
   plugins: [
     stylex.vite({ useCSSLayers: true, dev: process.env.NODE_ENV === "development", runtimeInjection: false }),
     react(),
@@ -12,11 +11,11 @@ export default defineConfig(({ mode }) => ({
     {
       name: "nouri-api-token",
       apply: "serve",
-      transformIndexHtml: () => [{ tag: "meta", attrs: { name: "nouri-api-token", content: loadEnv(mode, process.cwd(), "").API_TOKEN ?? "" }, injectTo: "head" }],
+      transformIndexHtml: () => [{ tag: "meta", attrs: { name: "nouri-api-token", content: loadEnv(mode, fileURLToPath(new URL("../", import.meta.url)), "").API_TOKEN ?? "" }, injectTo: "head" }],
     },
   ],
   resolve: {
-    alias: { "@": fileURLToPath(new URL("./frontend/src", import.meta.url)) },
+    alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
   },
   server: {
     proxy: {

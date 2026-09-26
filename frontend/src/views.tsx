@@ -1,19 +1,22 @@
 import * as stylex from "@stylexjs/stylex";
 import { styles } from "./dashboard-styles";
-import { useRef, useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
-  CircleHelp,
   LayoutDashboard,
+  ChartColumn,
+  Dumbbell,
+  Moon,
   Plus,
   Search,
   Trash2,
   UtensilsCrossed,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "./components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
 import { Input } from "./components/ui/input";
@@ -26,12 +29,22 @@ import {
   localDate,
   occurredAt,
   shiftDate,
+  timeZone as zone,
   type FoodEntry,
 } from "./lib/api";
-import type { FoodSubmission } from "../../src/food/contract";
+import { useIdempotentCreate, useIdempotentDelete } from "./lib/use-idempotent";
+import { submissionSchema, type FoodSubmission } from "../../src/food/contract";
 import { LogFoodDialog } from "./log-food-dialog";
 import { ConnectionDialog } from "./connection-dialog";
 import { MyDay } from "./my-day";
+import { Overview } from "./overview";
+import { MeasurementDialog, SleepDialog, WorkoutDialog } from "./overview-dialogs";
+import { useJournal } from "./overview/use-journal";
+import { Popover, PopoverContent, PopoverTrigger } from "./components/ui/popover";
+import type { MeasurementInput } from "../../src/measurements/contract";
+import type { WorkoutInput } from "../../src/workouts/contract";
+import type { SleepInput } from "../../src/sleep/contract";
+import type { RecordPath } from "./lib/api";
 
 const tokenKey = "nouri.apiToken";
 
@@ -41,15 +54,15 @@ const dateKey = "nouri.selectedDate";
 
 const configuredToken = document.querySelector<HTMLMetaElement>('meta[name="nouri-api-token"]')?.content ?? "";
 
-const zone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-
 const now = () => localDate(new Date());
 
 type FoodInput = FoodSubmission["food"];
 
-type PendingCreate = { signature: string; key: string; body: string };
+type View = "today" | "overview" | "food";
 
-export function Dashboard({ view }: { view: "today" | "food" }) {
+type PendingFood = { input: FoodSubmission; signature: string };
+
+export function Dashboard({ view }: { view: View }) {
   const queryClient = useQueryClient();
 
   const [token, setToken] = useState(
@@ -64,10 +77,10 @@ export function Dashboard({ view }: { view: "today" | "food" }) {
   );
 
   const [logOpen, setLogOpen] = useState(false);
+  const [logMenuOpen, setLogMenuOpen] = useState(false);
+  const [recordDialog, setRecordDialog] = useState<"workout" | "sleep" | "measurement" | null>(null);
   const [connectionOpen, setConnectionOpen] = useState(false);
-  const [notice, setNotice] = useState("");
-  const pendingCreate = useRef<PendingCreate | null>(null);
-  const pendingDeletes = useRef(new Map<string, string>());
+  const journal = useJournal(token);
 
   const dayQuery = useQuery({
     queryKey: ["day", token, date],
@@ -75,38 +88,14 @@ export function Dashboard({ view }: { view: "today" | "food" }) {
     enabled: Boolean(token),
   });
 
-  const createMutation = useMutation({
-    mutationFn: (pending: PendingCreate) => createFood(token, pending.key, pending.body),
-    onSuccess: async () => {
-      pendingCreate.current = null;
-      await queryClient.invalidateQueries({ queryKey: ["day", token] });
-      setNotice("Food added to your log.");
-      setLogOpen(false);
-    },
-    onError: (error) => setNotice(error.message),
+  const refresh = ["day", "overview"];
+
+  const createMutation = useIdempotentCreate<PendingFood>(token, (pending, key) => createFood(token, key, pending.input), {
+    refresh, success: () => "Food added to your log.", onSuccess: () => setLogOpen(false),
+    signature: (pending) => pending.signature,
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: (entry: FoodEntry) => {
-      const key = pendingDeletes.current.get(entry.id) || crypto.randomUUID();
-      pendingDeletes.current.set(entry.id, key);
-
-      return deleteFood(token, entry, key);
-    },
-    onSuccess: async (_, entry) => {
-      pendingDeletes.current.delete(entry.id);
-      await queryClient.invalidateQueries({ queryKey: ["day", token] });
-      setNotice("Food removed from your log.");
-    },
-    onError: (error) => {
-      setNotice(error.message);
-
-      if (error.message.includes("conflict")) {
-        pendingDeletes.current.clear();
-        void queryClient.invalidateQueries({ queryKey: ["day", token] });
-      }
-    },
-  });
+  const deleteMutation = useIdempotentDelete<FoodEntry>(token, (entry, key) => deleteFood(token, entry, key), { refresh, success: () => "Food removed from your log." });
 
   const day = dayQuery.data;
   const entries = day?.food.entries || [];
@@ -120,13 +109,13 @@ export function Dashboard({ view }: { view: "today" | "food" }) {
     queryClient.clear();
     setToken(next);
     setConnectionOpen(false);
-    setNotice("");
+    toast.dismiss();
   }
 
   function selectDate(next: string) {
     sessionStorage.setItem(dateKey, next);
     setDate(next);
-    setNotice("");
+    toast.dismiss();
   }
 
   function disconnect() {
@@ -135,10 +124,10 @@ export function Dashboard({ view }: { view: "today" | "food" }) {
     queryClient.clear();
     setToken("");
     setConnectionOpen(false);
-    setNotice("");
+    toast.dismiss();
   }
 
-  function saveFood(event: FormEvent<HTMLFormElement>, food: FoodInput) {
+  function saveFood(event: FormEvent<HTMLFormElement>, food: FoodInput, time: string) {
     event.preventDefault();
 
     if (!token) {
@@ -148,19 +137,30 @@ export function Dashboard({ view }: { view: "today" | "food" }) {
       return;
     }
 
-    const signature = JSON.stringify({ date, zone, food });
+    createMutation.mutate({
+      input: submissionSchema.parse({ occurredAt: occurredAt(date, time), timeZone: zone, food }),
+      signature: JSON.stringify({ date, time, zone, food }),
+    });
+  }
 
-    if (pendingCreate.current?.signature !== signature)
-      pendingCreate.current = {
-        signature,
-        key: crypto.randomUUID(),
-        body: JSON.stringify({
-          occurredAt: occurredAt(date),
-          timeZone: zone,
-          food,
-        }),
-      };
-    createMutation.mutate(pendingCreate.current);
+  function openLog(kind: "food" | "workout" | "sleep") {
+    setLogMenuOpen(false);
+
+    if (kind === "food") setLogOpen(true);
+    else setRecordDialog(kind);
+  }
+
+  function saveRecord<Input extends MeasurementInput | WorkoutInput | SleepInput>(path: RecordPath, label: string) {
+    return (input: Input) => {
+      if (!token) {
+        setRecordDialog(null);
+        setConnectionOpen(true);
+
+        return;
+      }
+
+      journal.create.mutate({ path, label, input, signature: `${path} ${JSON.stringify(input)}` }, { onSuccess: () => setRecordDialog(null) });
+    };
   }
 
   const dateActions = (
@@ -204,127 +204,18 @@ export function Dashboard({ view }: { view: "today" | "food" }) {
         </button>
       </span>
     ) : !token ? (
-      "Connect your log from the sidebar to see your foods."
+      "Connect your log to see your foods."
     ) : entries.length === 0 ? (
       <>
         <strong {...stylex.props(styles.emptyTitle)}>No foods logged yet</strong>
-        <Button variant="outline" size="sm" onClick={() => setLogOpen(true)}>
-          <Plus size={15} /> Log a food
-        </Button>
       </>
     ) : null;
 
-  return (
-    <div {...stylex.props(styles.appShell)}>
-      <aside {...stylex.props(styles.sidebar)}>
-        <Link to="/" {...stylex.props(styles.brand)}>
-          <span {...stylex.props(styles.brandIcon)}>
-            <UtensilsCrossed size={17} strokeWidth={2.5} />
-          </span>
-          <span>NOURI</span>
-        </Link>
-        <nav {...stylex.props(styles.sidebarNav)} aria-label="Main navigation">
-          <p {...stylex.props(styles.navCaption)}>WORKSPACE</p>
-          <Link
-            to="/"
-            {...stylex.props(styles.navItem, view === "today" && styles.navItemActive)}
-          >
-            <LayoutDashboard size={17} {...stylex.props(view === "today" && styles.iconAccent)} />
-            Today
-          </Link>
-          <button {...stylex.props(styles.navItem)} onClick={() => setLogOpen(true)}>
-            <Plus size={19} />
-            Log a food
-          </button>
-          <p {...stylex.props(styles.navCaption, styles.navCaptionData)}>YOUR DATA</p>
-          <Link
-            to="/food"
-            {...stylex.props(styles.navItem, view === "food" && styles.navItemActive)}
-          >
-            <UtensilsCrossed size={17} {...stylex.props(view === "food" && styles.iconAccent)} />
-            Food
-          </Link>
-        </nav>
-        <div {...stylex.props(styles.sidebarBottom)}>
-          <button {...stylex.props(styles.helpLink)} onClick={() => setConnectionOpen(true)}>
-            <CircleHelp size={16} />{" "}
-            {token ? "Connection settings" : "Connect your log"}
-          </button>
-          <div {...stylex.props(styles.profile)}>
-            <span {...stylex.props(styles.avatar)}>N</span>
-            <div>
-              <strong {...stylex.props(styles.profileText)}>Personal space</strong>
-              <small {...stylex.props(styles.profileText, styles.profileSubtext)}>{token ? "Connected" : "Not connected"}</small>
-            </div>
-          </div>
-        </div>
-      </aside>
-      <main {...stylex.props(styles.mainArea)}>
-        <div {...stylex.props(styles.topbar)}>
-          <span>
-            YOUR SPACE <span {...stylex.props(styles.slash)}>/</span>{" "}
-            {view === "today" ? "TODAY" : "FOOD"}
-          </span>
-          <span {...stylex.props(styles.topbarDate)}>{dateLabel(date)}</span>
-        </div>
-        <div {...stylex.props(styles.pageContent)}>
-          {view === "today" ? (
-            <header {...stylex.props(styles.dayHeader)}>
-              <div>
-                <p {...stylex.props(styles.eyebrow)}>MY DAY</p>
-                <h1 {...stylex.props(styles.dayHeadline)}>{isToday ? "Today" : dateLabel(date)}</h1>
-              </div>
-              <div {...stylex.props(styles.dateActions)}>
-                {dateActions}
-                <Button sx={styles.pageHeaderButton} onClick={() => setLogOpen(true)}>
-                  <Plus size={17} /> Log a food
-                </Button>
-              </div>
-            </header>
-          ) : (
-            <>
-              <header {...stylex.props(styles.pageHeader)}>
-                <div>
-                  <p {...stylex.props(styles.eyebrow)}>YOUR FOOD JOURNAL</p>
-                  <h1 {...stylex.props(styles.headline)}>Food journal</h1>
-                  <p {...stylex.props(styles.subtitle)}>Search, log, and review the foods in your day.</p>
-                </div>
-                <Button sx={styles.pageHeaderButton} onClick={() => setLogOpen(true)}>
-                  <Plus size={17} /> Log a food
-                </Button>
-              </header>
-              <div {...stylex.props(styles.dateToolbar)}>
-                <span {...stylex.props(styles.dateLabel)}>
-                  <CalendarDays size={16} {...stylex.props(styles.iconAccent)} /> {isToday ? "Today" : dateLabel(date)}
-                </span>
-                <div {...stylex.props(styles.dateActions)}>{dateActions}</div>
-              </div>
-            </>
-          )}
-          {notice && (
-            <div {...stylex.props(styles.notice)} role="status">
-              {notice}
-              <button
-                {...stylex.props(styles.noticeDismiss)}
-                onClick={() => setNotice("")}
-                aria-label="Dismiss message"
-              >
-                ×
-              </button>
-            </div>
-          )}
-          {view === "today" ? (
-            <MyDay
-              token={token}
-              day={day}
-              isToday={isToday}
-              status={timelineStatus}
-              deletePending={deleteMutation.isPending}
-              onLog={() => setLogOpen(true)}
-              onDelete={(entry) => deleteMutation.mutate(entry)}
-            />
-          ) : (
-            <div {...stylex.props(styles.dashboardGrid)}>
+  const pages: Record<View, { eyebrow: string; crumb: string; render: ReactNode }> = {
+    today: { eyebrow: "MY DAY", crumb: "TODAY", render: <MyDay token={token} day={day} date={date} onConnect={() => setConnectionOpen(true)} isToday={isToday} status={timelineStatus} deletePending={deleteMutation.isPending} onDelete={(entry) => deleteMutation.mutate(entry)} /> },
+    overview: { eyebrow: "OVERVIEW", crumb: "OVERVIEW", render: <Overview token={token} date={date} onLogFood={() => setLogOpen(true)} onLogWorkout={() => setRecordDialog("workout")} onLogSleep={() => setRecordDialog("sleep")} onLogMeasurement={() => setRecordDialog("measurement")} onConnect={() => setConnectionOpen(true)} /> },
+    food: { eyebrow: "YOUR FOOD JOURNAL", crumb: "FOOD", render: (
+<div {...stylex.props(styles.dashboardGrid)}>
               <div {...stylex.props(styles.column)}>
                 <Card>
                   <CardHeader sx={styles.cardHeader}>
@@ -492,11 +383,108 @@ export function Dashboard({ view }: { view: "today" | "food" }) {
                 </Card>
               </div>
             </div>
+    ) },
+  };
+
+  return (
+    <div {...stylex.props(styles.appShell)}>
+      <aside {...stylex.props(styles.sidebar)}>
+        <Link to="/" {...stylex.props(styles.brand)}>
+          <span {...stylex.props(styles.brandIcon)}>
+            <UtensilsCrossed size={17} strokeWidth={2.5} />
+          </span>
+          <span>NOURI</span>
+        </Link>
+        <Popover open={logMenuOpen} onOpenChange={setLogMenuOpen}>
+          <PopoverTrigger asChild>
+            <Button variant="ghost" sx={styles.logButton} aria-expanded={logMenuOpen}>
+              + Log
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent sx={styles.logMenu} align="start" sideOffset={8}>
+            <button type="button" {...stylex.props(styles.logMenuItem)} onClick={() => openLog("food")}><UtensilsCrossed size={17} /> Food</button>
+            <button type="button" {...stylex.props(styles.logMenuItem)} onClick={() => openLog("sleep")}><Moon size={17} /> Sleep</button>
+            <button type="button" {...stylex.props(styles.logMenuItem)} onClick={() => openLog("workout")}><Dumbbell size={17} /> Exercise</button>
+          </PopoverContent>
+        </Popover>
+        <nav {...stylex.props(styles.sidebarNav)} aria-label="Main navigation">
+          <p {...stylex.props(styles.navCaption)}>WORKSPACE</p>
+          <Link
+            to="/"
+            {...stylex.props(styles.navItem, view === "today" && styles.navItemActive)}
+          >
+            <LayoutDashboard size={17} {...stylex.props(view === "today" && styles.iconAccent)} />
+            Today
+          </Link>
+          <Link
+            to="/overview"
+            {...stylex.props(styles.navItem, view === "overview" && styles.navItemActive)}
+          >
+            <ChartColumn size={17} {...stylex.props(view === "overview" && styles.iconAccent)} />
+            Overview
+          </Link>
+          <p {...stylex.props(styles.navCaption, styles.navCaptionData)}>YOUR DATA</p>
+          <Link
+            to="/food"
+            {...stylex.props(styles.navItem, view === "food" && styles.navItemActive)}
+          >
+            <UtensilsCrossed size={17} {...stylex.props(view === "food" && styles.iconAccent)} />
+            Food
+          </Link>
+        </nav>
+        <div {...stylex.props(styles.sidebarBottom)}>
+          <div {...stylex.props(styles.profile)}>
+            <span {...stylex.props(styles.avatar)}>N</span>
+            <div>
+              <strong {...stylex.props(styles.profileText)}>Personal space</strong>
+              <small {...stylex.props(styles.profileText, styles.profileSubtext)}>{token ? "Connected" : "Not connected"}</small>
+            </div>
+          </div>
+        </div>
+      </aside>
+      <main {...stylex.props(styles.mainArea)}>
+        <div {...stylex.props(styles.topbar)}>
+          <span>
+            YOUR SPACE <span {...stylex.props(styles.slash)}>/</span>{" "}
+            {pages[view].crumb}
+          </span>
+        </div>
+        <div {...stylex.props(styles.pageContent)}>
+          {view !== "food" ? (
+            <header {...stylex.props(styles.dayHeader)}>
+              <div>
+                <p {...stylex.props(styles.eyebrow)}>{pages[view].eyebrow}</p>
+                <h1 {...stylex.props(styles.dayHeadline)}>{isToday ? "Today" : dateLabel(date)}</h1>
+              </div>
+              <div {...stylex.props(styles.dateActions)}>
+                {dateActions}
+              </div>
+            </header>
+          ) : (
+            <>
+              <header {...stylex.props(styles.pageHeader)}>
+                <div>
+                  <p {...stylex.props(styles.eyebrow)}>YOUR FOOD JOURNAL</p>
+                  <h1 {...stylex.props(styles.headline)}>Food journal</h1>
+                  <p {...stylex.props(styles.subtitle)}>Search, log, and review the foods in your day.</p>
+                </div>
+              </header>
+              <div {...stylex.props(styles.dateToolbar)}>
+                <span {...stylex.props(styles.dateLabel)}>
+                  <CalendarDays size={16} {...stylex.props(styles.iconAccent)} /> {isToday ? "Today" : dateLabel(date)}
+                </span>
+                <div {...stylex.props(styles.dateActions)}>{dateActions}</div>
+              </div>
+            </>
           )}
+          {pages[view].render}
         </div>
       </main>
       <ConnectionDialog open={connectionOpen} onOpenChange={setConnectionOpen} token={token} onConnect={connect} onDisconnect={disconnect} />
       <LogFoodDialog open={logOpen} onOpenChange={setLogOpen} token={token} date={date} isToday={isToday} pending={createMutation.isPending} onSave={saveFood} onConnect={() => { setLogOpen(false); setConnectionOpen(true); }} />
+      <WorkoutDialog open={recordDialog === "workout"} onOpenChange={(open) => setRecordDialog(open ? "workout" : null)} date={date} pending={journal.create.isPending} onSave={saveRecord("/v1/workouts", "Workout")} />
+      <SleepDialog open={recordDialog === "sleep"} onOpenChange={(open) => setRecordDialog(open ? "sleep" : null)} date={date} pending={journal.create.isPending} onSave={saveRecord("/v1/sleep-sessions", "Sleep")} />
+      <MeasurementDialog open={recordDialog === "measurement"} onOpenChange={(open) => setRecordDialog(open ? "measurement" : null)} date={date} pending={journal.create.isPending} onSave={saveRecord("/v1/measurements", "Measurement")} />
     </div>
   );
 }

@@ -22,8 +22,8 @@ const styles = stylex.create({
 export function DialogContent({ sx, children, ...props }: Omit<React.ComponentProps<typeof DialogPrimitive.Content>, "className" | "style"> & { sx?: StyleXStyles }) {
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Overlay {...stylex.props(styles.overlay)} />
-      <DialogPrimitive.Content {...props} {...stylex.props(styles.content, sx)}>
+      <DialogPrimitive.Overlay data-slot="dialog-overlay" {...stylex.props(styles.overlay)} />
+      <DialogPrimitive.Content {...props} {...stylex.props(styles.content, sx)} data-slot="dialog-content">
         {children}
         <DialogPrimitive.Close {...stylex.props(styles.close)} aria-label="Close"><X size={18} /></DialogPrimitive.Close>
       </DialogPrimitive.Content>
