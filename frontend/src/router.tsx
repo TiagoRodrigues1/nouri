@@ -2,28 +2,27 @@ import {
   createRootRoute,
   createRoute,
   createRouter,
-  Outlet,
 } from "@tanstack/react-router";
-import { Dashboard } from "./views";
+import { Dashboard, FoodRoute, OverviewRoute, TodayRoute } from "./views";
 
-const rootRoute = createRootRoute({ component: () => <Outlet /> });
+const rootRoute = createRootRoute({ component: Dashboard });
 
 const todayRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
-  component: () => <Dashboard view="today" />,
+  component: TodayRoute,
 });
 
 const foodRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/food",
-  component: () => <Dashboard view="food" />,
+  component: FoodRoute,
 });
 
 const overviewRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/overview",
-  component: () => <Dashboard view="overview" />,
+  component: OverviewRoute,
 });
 
 export const router = createRouter({

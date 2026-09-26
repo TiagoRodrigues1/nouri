@@ -9,7 +9,7 @@ import { DashboardCardsDialog, useDashboardCards } from "./dashboard-cards";
 import { reference, fastingGoalHours, waterGoalMl, waterPresets } from "./lib/goals";
 import { useWater } from "./lib/use-water";
 import { useQuery } from "@tanstack/react-query";
-import { getOverview, format, type CardId, type Day, type FoodEntry, type WaterEntry } from "./lib/api";
+import { getWorkoutSummary, format, type CardId, type Day, type FoodEntry, type WaterEntry } from "./lib/api";
 
 const clock = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit" });
 
@@ -22,15 +22,14 @@ type MyDayProps = {
   token: string;
   day: Day | undefined;
   date: string;
-  onConnect: () => void;
   isToday: boolean;
   status: ReactNode;
   deletePending: boolean;
   onDelete: (entry: FoodEntry) => void;
+  water: ReturnType<typeof useWater>;
 };
 
-export function MyDay({ token, day, date, onConnect, isToday, status, deletePending, onDelete }: MyDayProps) {
-  const water = useWater(token, date, onConnect);
+export function MyDay({ token, day, date, isToday, status, deletePending, onDelete, water }: MyDayProps) {
   const now = useNow();
   const entries = day?.food.entries ?? [];
   const totals = day?.food.totals;
@@ -69,7 +68,7 @@ export function MyDay({ token, day, date, onConnect, isToday, status, deletePend
       />
     ),
     mix: <MixCard proteinG={totals?.proteinG} carbsG={totals?.carbsG} fatG={totals?.fatG} />,
-    activity: <ActivityCard token={token} date={day?.date} />,
+    activity: <ActivityCard token={token} date={date} />,
     fasting: isToday && last ? <FastingCard since={now.getTime() - last.getTime()} last={last} /> : <WindowCard first={times[0]} last={times.at(-1)} />,
     largest: <LargestCard entries={entries} totalKcal={totals?.kcal} />,
     meals: <MealsCard times={times} entries={entries} />,
@@ -391,8 +390,8 @@ function MixCard({ proteinG, carbsG, fatG }: MixProps) {
 }
 
 function ActivityCard({ token, date }: { token: string; date: string | undefined }) {
-  const query = useQuery({ queryKey: ["overview", token, date], queryFn: () => getOverview(token, date!), enabled: Boolean(token && date) });
-  const sports = query.data?.sports;
+  const query = useQuery({ queryKey: ["workout-summary", token, date], queryFn: () => getWorkoutSummary(token, date!), enabled: Boolean(token && date) });
+  const sports = query.data;
 
   return (
     <section {...stylex.props(styles.card)} aria-label="Activity">

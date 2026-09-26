@@ -2,24 +2,26 @@ import { useRef } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ApiError } from "./api";
+import { PendingCreates } from "./pending-creates";
 
 export function useIdempotentCreate<Input>(
   token: string, send: (input: Input, key: string) => Promise<object | void>,
   options: { refresh: string[]; success?: (input: Input) => string; onSuccess?: () => void; signature?: (input: Input) => string },
 ) {
   const client = useQueryClient();
-  const pending = useRef<{ signature: string; key: string; input: Input } | null>(null);
+  const pending = useRef(new PendingCreates<Input, object | void>());
 
   return useMutation({
     mutationFn: (input: Input) => {
       const signature = options.signature?.(input) ?? JSON.stringify(input);
 
-      if (pending.current?.signature !== signature) pending.current = { signature, key: crypto.randomUUID(), input };
-
-      return send(pending.current.input, pending.current.key);
+      return pending.current.run(input, signature, send);
     },
-    onSuccess: async (_, input) => {
-      pending.current = null;
+    onSuccess: async ({ key }, input) => {
+      const signature = options.signature?.(input) ?? JSON.stringify(input);
+
+      pending.current.complete(signature, key);
+
       await Promise.all(options.refresh.map((name) => client.invalidateQueries({ queryKey: [name, token] })));
 
       if (options.success) toast.success(options.success(input));

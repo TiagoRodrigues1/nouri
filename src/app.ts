@@ -26,8 +26,8 @@ import { sleepRecords } from "./sleep/sleep.js";
 import { occurredAtSchema, timeZoneSchema } from "./time.js";
 import { waterInputSchema } from "./water/contract.js";
 import { waterRecords } from "./water/water.js";
-import { workoutInputSchema } from "./workouts/contract.js";
-import { workoutRecords } from "./workouts/workouts.js";
+import { workoutInputSchema, workoutSummarySchema } from "./workouts/contract.js";
+import { getWorkoutSummary, workoutRecords } from "./workouts/workouts.js";
 
 function response(result: FoodMutationResult): Response {
   switch (result.outcome) {
@@ -191,21 +191,7 @@ export function createApp(db: AppDatabase, auth: { token: string; userId: string
     });
   });
 
-  function recordRoutes<Input, Entry>(path: string, label: string, kind: RecordKind<Input, Entry>, schema?: z.ZodType<Input>) {
-    if (schema) {
-      app.post(path, async (context) => {
-        const key = context.get("idempotencyKey");
-
-        const input = schema.safeParse(await context.req.json().catch(() => null));
-
-        if (!input.success) return error(400, `Invalid ${label.toLowerCase()}`);
-
-        return recordResponse(await mutateRecord(db, context.get("userId"), key, kind, { kind: "create", input: input.data }), label);
-      });
-
-      app.openAPIRegistry.registerPath({ method: "post", path, request: { headers: mutationHeaders, body: { content: { "application/json": { schema } } } }, responses: { 201: { description: `Created ${label.toLowerCase()}`, content: { "application/json": { schema: kind.schema } } }, 400: { description: "Invalid request", content: { "application/json": { schema: errorSchema } } }, 409: { description: "Idempotency conflict", content: { "application/json": { schema: errorSchema } } } } });
-    }
-
+  function recordDeletion<Input, Entry>(path: string, label: string, kind: RecordKind<Input, Entry>) {
     app.delete(`${path}/:id`, async (context) => {
       const key = context.get("idempotencyKey");
       const id = z.uuid().safeParse(context.req.param("id"));
@@ -218,11 +204,37 @@ export function createApp(db: AppDatabase, auth: { token: string; userId: string
     app.openAPIRegistry.registerPath({ method: "delete", path: `${path}/{id}`, request: { params: z.object({ id: z.uuid() }), headers: editHeaders }, responses: { 204: { description: `Deleted ${label.toLowerCase()}` }, 404: { description: `${label} not found`, content: { "application/json": { schema: errorSchema } } }, 409: { description: "Revision or idempotency conflict", content: { "application/json": { schema: errorSchema } } } } });
   }
 
-  recordRoutes(recordPaths.water, "Water entry", waterRecords, waterInputSchema);
-  recordRoutes(recordPaths.measurement, "Measurement", measurementRecords, measurementInputSchema);
-  recordRoutes(recordPaths.workout, "Workout", workoutRecords, workoutInputSchema);
-  recordRoutes(recordPaths.sleep, "Sleep session", sleepRecords, sleepInputSchema);
-  recordRoutes(recordPaths.photo, "Photo", photoRecords);
+  function jsonRecordCreation<Input, Entry>(path: string, label: string, kind: RecordKind<Input, Entry>, schema: z.ZodType<Input>) {
+    app.post(path, async (context) => {
+      const key = context.get("idempotencyKey");
+      const input = schema.safeParse(await context.req.json().catch(() => null));
+
+      if (!input.success) return error(400, `Invalid ${label.toLowerCase()}`);
+
+      return recordResponse(await mutateRecord(db, context.get("userId"), key, kind, { kind: "create", input: input.data }), label);
+    });
+
+    app.openAPIRegistry.registerPath({ method: "post", path, request: { headers: mutationHeaders, body: { content: { "application/json": { schema } } } }, responses: { 201: { description: `Created ${label.toLowerCase()}`, content: { "application/json": { schema: kind.schema } } }, 400: { description: "Invalid request", content: { "application/json": { schema: errorSchema } } }, 409: { description: "Idempotency conflict", content: { "application/json": { schema: errorSchema } } } } });
+  }
+
+  jsonRecordCreation(recordPaths.water, "Water entry", waterRecords, waterInputSchema);
+  jsonRecordCreation(recordPaths.measurement, "Measurement", measurementRecords, measurementInputSchema);
+  jsonRecordCreation(recordPaths.workout, "Workout", workoutRecords, workoutInputSchema);
+  jsonRecordCreation(recordPaths.sleep, "Sleep session", sleepRecords, sleepInputSchema);
+  recordDeletion(recordPaths.water, "Water entry", waterRecords);
+  recordDeletion(recordPaths.measurement, "Measurement", measurementRecords);
+  recordDeletion(recordPaths.workout, "Workout", workoutRecords);
+  recordDeletion(recordPaths.sleep, "Sleep session", sleepRecords);
+  recordDeletion(recordPaths.photo, "Photo", photoRecords);
+
+  app.get(`${recordPaths.workout}/summary/:date`, async (context) => {
+    const date = z.iso.date().safeParse(context.req.param("date"));
+
+    if (!date.success) return error(400, "Invalid workout summary request");
+
+    return context.json(await getWorkoutSummary(db, context.get("userId"), date.data));
+  });
+  app.openAPIRegistry.registerPath({ method: "get", path: `${recordPaths.workout}/summary/{date}`, request: { params: z.object({ date: z.iso.date() }) }, responses: { 200: { description: "Workout count and minutes for the local day", content: { "application/json": { schema: workoutSummarySchema } } } } });
 
   const uploadSchema = z.object({ file: z.instanceof(File), occurredAt: occurredAtSchema, timeZone: timeZoneSchema });
 

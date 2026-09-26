@@ -13,6 +13,7 @@ import { SleepSection } from "./overview/sleep";
 import { styles } from "./overview-styles";
 import { maxPhotoBytes } from "../../src/photos/contract";
 import { getOverview, occurredAt, timeZone, type RecordPath } from "./lib/api";
+import { recordPaths } from "../../src/journal/paths";
 
 const categories = [
   { id: "nutrition", name: "Nutrition" },
@@ -32,13 +33,12 @@ type OverviewProps = {
   onLogWorkout: () => void;
   onLogSleep: () => void;
   onLogMeasurement: () => void;
-  onConnect: () => void;
+  journal: ReturnType<typeof useJournal>;
+  water: ReturnType<typeof useWater>;
 };
 
-export function Overview({ token, date, onLogFood, onLogWorkout, onLogSleep, onLogMeasurement, onConnect }: OverviewProps) {
-  const water = useWater(token, date, onConnect);
+export function Overview({ token, date, onLogFood, onLogWorkout, onLogSleep, onLogMeasurement, journal, water }: OverviewProps) {
   const [tab, setTab] = useState<Tab>("all");
-  const journal = useJournal(token);
 
   const query = useQuery({
     queryKey: ["overview", token, date],
@@ -46,18 +46,20 @@ export function Overview({ token, date, onLogFood, onLogWorkout, onLogSleep, onL
     enabled: Boolean(token),
   });
 
-  function upload(file: File) {
+  async function upload(file: File) {
     if (file.size > maxPhotoBytes) {
       toast.error("Photos must be 8 MB or smaller.");
 
       return;
     }
 
+    const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+    const hash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
     const form = new FormData();
     form.set("file", file);
     form.set("occurredAt", occurredAt(date));
     form.set("timeZone", timeZone);
-    journal.create.mutate({ path: "/v1/progress-photos", label: "Photo", input: form, signature: JSON.stringify([date, file.name, file.size, file.lastModified]) });
+    journal.create.mutate({ path: recordPaths.photo, label: "Photo", input: form, signature: JSON.stringify([date, hash]) });
   }
 
   const data = query.data;

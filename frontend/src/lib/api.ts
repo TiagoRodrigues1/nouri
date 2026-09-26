@@ -3,8 +3,8 @@ import { recordPaths } from "../../../src/journal/paths";
 import type { FoodSubmission } from "../../../src/food/contract";
 import type { WaterInput } from "../../../src/water/contract";
 import type { MeasurementInput } from "../../../src/measurements/contract";
-import type { WorkoutInput } from "../../../src/workouts/contract";
 import type { SleepInput } from "../../../src/sleep/contract";
+import { workoutSummarySchema, type WorkoutInput, type WorkoutSummary } from "../../../src/workouts/contract";
 import { dashboardSchema } from "../../../src/dashboard/contract";
 import type { Dashboard } from "../../../src/dashboard/contract";
 import { daySchema } from "../../../src/days/contract";
@@ -13,8 +13,6 @@ import { entrySchema, searchResultSchema } from "../../../src/food/contract";
 import type { FoodEntry, SearchResult } from "../../../src/food/contract";
 import { overviewSchema } from "../../../src/overview/contract";
 import type { Overview } from "../../../src/overview/contract";
-import { waterEntrySchema } from "../../../src/water/contract";
-import type { WaterEntry } from "../../../src/water/contract";
 
 export type { CardId, Dashboard } from "../../../src/dashboard/contract";
 
@@ -34,9 +32,13 @@ export type { SleepSession } from "../../../src/sleep/contract";
 
 export type { Activity, Workout } from "../../../src/workouts/contract";
 
-export type RecordPath = typeof recordPaths.measurement | typeof recordPaths.workout | typeof recordPaths.sleep | typeof recordPaths.photo;
+export type RecordPath = (typeof recordPaths)[keyof typeof recordPaths];
 
-export type RecordInput = MeasurementInput | WorkoutInput | SleepInput | FormData;
+export type RecordCommand =
+  | { path: typeof recordPaths.water; input: WaterInput }
+  | { path: typeof recordPaths.measurement; input: MeasurementInput }
+  | { path: typeof recordPaths.workout; input: WorkoutInput }
+  | { path: typeof recordPaths.sleep; input: SleepInput };
 
 export class ApiError extends Error {
   constructor(message: string, readonly status: number) { super(message); }
@@ -107,31 +109,27 @@ export async function deleteFood(token: string, entry: FoodEntry, key: string): 
   });
 }
 
-export async function createWater(token: string, key: string, input: WaterInput): Promise<WaterEntry> {
-  return request(token, recordPaths.water, waterEntrySchema, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "Idempotency-Key": key },
-    body: JSON.stringify(input),
-  });
-}
-
-export async function deleteWater(token: string, entry: WaterEntry, key: string): Promise<void> {
-  await request(token, `${recordPaths.water}/${encodeURIComponent(entry.id)}`, z.null(), {
-    method: "DELETE",
-    headers: { "Idempotency-Key": key, "If-Match": `"${entry.revision}"` },
-  });
-}
-
 export async function getOverview(token: string, date: string): Promise<Overview> {
   return request(token, `/v1/overview/${date}`, overviewSchema);
 }
 
-// A photo upload is multipart form data; every other record is JSON.
-export async function createRecord(token: string, path: RecordPath, key: string, body: RecordInput): Promise<void> {
-  await request(token, path, recordSchema, {
+export async function getWorkoutSummary(token: string, date: string): Promise<WorkoutSummary> {
+  return request(token, `${recordPaths.workout}/summary/${date}`, workoutSummarySchema);
+}
+
+export async function createRecord(token: string, key: string, command: RecordCommand): Promise<void> {
+  await request(token, command.path, recordSchema, {
     method: "POST",
-    headers: body instanceof FormData ? { "Idempotency-Key": key } : { "Content-Type": "application/json", "Idempotency-Key": key },
-    body: body instanceof FormData ? body : JSON.stringify(body),
+    headers: { "Content-Type": "application/json", "Idempotency-Key": key },
+    body: JSON.stringify(command.input),
+  });
+}
+
+export async function createPhoto(token: string, key: string, form: FormData): Promise<void> {
+  await request(token, recordPaths.photo, recordSchema, {
+    method: "POST",
+    headers: { "Idempotency-Key": key },
+    body: form,
   });
 }
 

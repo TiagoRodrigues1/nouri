@@ -1,15 +1,18 @@
-import { createWater, deleteWater, occurredAt, timeZone } from "./api";
+import { createRecord, deleteRecord, occurredAt, timeZone } from "./api";
+import { recordPaths } from "../../../src/journal/paths";
 import type { WaterEntry, WaterInput } from "../../../src/water/contract";
 import { useIdempotentCreate, useIdempotentDelete } from "./use-idempotent";
+
+type PendingWater = { input: WaterInput; signature: string };
 
 export function useWater(token: string, date: string, onConnect: () => void) {
   const refresh = ["day", "overview"];
 
-  const create = useIdempotentCreate<WaterInput>(token, (input, key) => createWater(token, key, input), {
-    refresh, signature: (input) => JSON.stringify({ date, volumeMl: input.volumeMl }),
+  const create = useIdempotentCreate<PendingWater>(token, (pending, key) => createRecord(token, key, { path: recordPaths.water, input: pending.input }), {
+    refresh, signature: (pending) => pending.signature,
   });
 
-  const remove = useIdempotentDelete<WaterEntry>(token, (entry, key) => deleteWater(token, entry, key), { refresh, success: () => "Water removed from your log." });
+  const remove = useIdempotentDelete<WaterEntry>(token, (entry, key) => deleteRecord(token, recordPaths.water, entry, key), { refresh, success: () => "Water removed from your log." });
 
   return {
     pending: create.isPending || remove.isPending,
@@ -20,7 +23,10 @@ export function useWater(token: string, date: string, onConnect: () => void) {
         return;
       }
 
-      create.mutate({ occurredAt: occurredAt(date), timeZone, volumeMl });
+      create.mutate({
+        input: { occurredAt: occurredAt(date), timeZone, volumeMl },
+        signature: JSON.stringify({ date, volumeMl }),
+      });
     },
     remove: (entry: WaterEntry) => remove.mutate(entry),
   };

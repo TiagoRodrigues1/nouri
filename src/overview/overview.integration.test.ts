@@ -65,6 +65,9 @@ void test("overview combines nutrition, sports, measurements, sleep, and photos"
     assert.equal(empty.nutrition.food.entryCount, 0);
     assert.equal(empty.nutrition.water.totalMl, null);
     assert.deepEqual(empty.sports, { entries: [], entryCount: 0, totalMinutes: null, energyKcal: null });
+    assert.deepEqual(await (await app.request("/v1/workouts/summary/2026-09-24", { headers: auth })).json(), { entryCount: 0, totalMinutes: null });
+    assert.equal((await app.request("/v1/workouts/summary/invalid", { headers: auth })).status, 400);
+    assert.equal((await app.request("/v1/workouts/summary/2026-09-24")).status, 401);
     assert.deepEqual(empty.sleep, { sessions: [], totalMinutes: null, stages: null });
     assert.equal(empty.measurements.bmi, null);
     assert.deepEqual(empty.photos, []);
@@ -104,6 +107,7 @@ void test("overview combines nutrition, sports, measurements, sleep, and photos"
     day = await overview("2026-09-24");
     assert.equal(day.sports.entryCount, 2);
     assert.equal(day.sports.totalMinutes, 92);
+    assert.deepEqual(await (await app.request("/v1/workouts/summary/2026-09-24", { headers: auth })).json(), { entryCount: 2, totalMinutes: 92 });
     assert.equal(day.sports.energyKcal, null);
     assert.deepEqual(day.sports.entries[1].strengthExercises, strengthExercises);
 

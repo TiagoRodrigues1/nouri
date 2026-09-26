@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, count, eq, isNull, sum } from "drizzle-orm";
 import { workouts } from "../db/schema.js";
 import type { AppDatabase } from "../db/database.js";
 import type { RecordKind } from "../journal/records.js";
 import { localDate } from "../time.js";
 import { workoutSchema } from "./contract.js";
-import type { Workout, WorkoutDay, WorkoutInput } from "./contract.js";
+import type { Workout, WorkoutDay, WorkoutInput, WorkoutSummary } from "./contract.js";
 
 type WorkoutRow = typeof workouts.$inferSelect;
 
@@ -62,4 +62,12 @@ export async function getWorkoutDay(db: AppDatabase, userId: string, date: strin
     totalMinutes: rows.length === 0 ? null : rows.reduce((sum, row) => sum + row.durationMinutes, 0),
     energyKcal: rows.length === 0 || !estimated ? null : rows.reduce((sum, row) => sum + (row.energyKcal ?? 0), 0),
   };
+}
+
+export async function getWorkoutSummary(db: AppDatabase, userId: string, date: string): Promise<WorkoutSummary> {
+  const [row] = await db.select({ entryCount: count(), totalMinutes: sum(workouts.durationMinutes) }).from(workouts).where(and(
+    eq(workouts.userId, userId), eq(workouts.localDate, date), isNull(workouts.deletedAt),
+  ));
+
+  return { entryCount: row?.entryCount ?? 0, totalMinutes: row?.totalMinutes == null ? null : Number(row.totalMinutes) };
 }
