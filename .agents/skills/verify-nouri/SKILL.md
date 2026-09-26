@@ -1,6 +1,6 @@
 ---
 name: verify-nouri
-description: Verify Nouri's food journal web page and API through an isolated local PostgreSQL instance and a real browser. Use after changes to connection, food search, food or water logging, daily totals, date navigation, deletion, My Day cards, or the Overview page (measurements, workouts, sleep, progress photos).
+description: Verify Nouri's food journal web page and API through an isolated local PostgreSQL instance and a real browser. Use after changes to food search, food or water logging, daily totals, date navigation, deletion, My Day cards, or the Overview page (measurements, workouts, sleep, progress photos).
 ---
 
 # Verify Nouri
@@ -32,7 +32,7 @@ Run this read-only check first whenever the instance looks wrong. It requires th
 
 ## Drive
 
-Use the helper's `browser` action, which runs `playwright cli` in this run's scratch directory with session `nouri-$RUN_ID`. Playwright's automatic snapshots stay there and disappear during cleanup. Use the selectors and accessible names in the feature map. Open the page; the server embeds this run's token, so it loads already connected.
+Use the helper's `browser` action, which runs `playwright cli` in this run's scratch directory with session `nouri-$RUN_ID`. Playwright's automatic snapshots stay there and disappear during cleanup. Use the selectors and accessible names in the feature map. Open the page to load the journal.
 
 ```sh
 "$CONTROL" browser "$RUN_ID" open "$NOURI_BASE_URL/"

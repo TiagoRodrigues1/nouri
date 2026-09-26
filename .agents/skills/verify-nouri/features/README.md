@@ -6,7 +6,7 @@ This index is the maintained list of Nouri's user paths. Read the relevant file 
 
 - Launch a fresh run with `control-nouri launch RUN_ID`, source its `/tmp/nouri-verify-RUN_ID/env`, and run `control-nouri doctor RUN_ID`.
 - Open `$NOURI_BASE_URL/` in the run's own `"$CONTROL" browser "$RUN_ID"` session.
-- Start from an empty database. The page loads connected because the server embeds the run's token.
+- Start from an empty database and open the journal page.
 - Keep screenshots and redacted snapshots in `/tmp/nouri-verification-evidence/$RUN_ID`.
 
 ## Proof rules
@@ -18,7 +18,6 @@ This index is the maintained list of Nouri's user paths. Read the relevant file 
 
 ## Features
 
-- [Connection state](connect.md): embedded token and the connection dialog's unreachable paths.
 - [Search foods](search.md): Ciqual search results, no-match state, attribution.
 - [Log a catalog food](catalog-log.md): search, select, set grams, save and read back.
 - [Log a manual food](manual-log.md): manual tab, nutrition fields, save and read back.
