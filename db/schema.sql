@@ -149,3 +149,30 @@ CREATE TABLE IF NOT EXISTS progress_photos (
 );
 
 CREATE INDEX IF NOT EXISTS progress_photos_user_day_active_idx ON progress_photos (user_id, local_date) WHERE deleted_at IS NULL;
+
+-- One row per change; a day uses the latest list that took effect on or before it.
+CREATE TABLE IF NOT EXISTS supplement_stacks (
+  user_id uuid NOT NULL,
+  effective_from date NOT NULL,
+  supplements jsonb NOT NULL CHECK (jsonb_typeof(supplements) = 'array'),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, effective_from)
+);
+
+CREATE TABLE IF NOT EXISTS supplement_intakes (
+  id uuid PRIMARY KEY,
+  user_id uuid NOT NULL,
+  occurred_at timestamptz NOT NULL,
+  time_zone text NOT NULL,
+  local_date date NOT NULL,
+  supplement_id uuid NOT NULL,
+  name text NOT NULL CHECK (length(name) BETWEEN 1 AND 80),
+  kind text NOT NULL CHECK (kind IN ('vitamin', 'mineral', 'creatine', 'omega-3', 'other')),
+  dose jsonb NOT NULL,
+  revision integer NOT NULL DEFAULT 1 CHECK (revision >= 1),
+  deleted_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS supplement_intakes_user_day_active_idx ON supplement_intakes (user_id, local_date) WHERE deleted_at IS NULL;

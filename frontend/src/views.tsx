@@ -1,6 +1,6 @@
 import * as stylex from "@stylexjs/stylex";
 import { styles } from "./dashboard-styles";
-import { createContext, useContext, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { Link, Outlet, useLocation } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -11,6 +11,7 @@ import {
   ChartColumn,
   Dumbbell,
   Moon,
+  Pill,
   SlidersHorizontal,
   Target,
   UtensilsCrossed,
@@ -18,23 +19,18 @@ import {
 import { toast } from "sonner";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
-import {
-  createFood,
-  deleteFood,
-  dateLabel,
-  getDay,
-  localDate,
-  occurredAt,
-  shiftDate,
-  timeZone as zone,
-} from "./lib/api";
-import { useIdempotentCreate, useIdempotentDelete } from "./lib/use-idempotent";
+import { createFood, deleteFood, getDay } from "./lib/api";
+import { dateLabel, localDate, occurredAt, shiftDate, timeZone as zone } from "./lib/time";
+import { useIdempotentWrite, useIdempotentDelete } from "./lib/use-idempotent";
 import { useWater } from "./lib/use-water";
 import { submissionSchema, type FoodSubmission } from "../../src/food/contract";
 import { LogFoodDialog } from "./log-food-dialog";
+import { EditFoodDialog } from "./edit-food-dialog";
 import { ConnectionDialog } from "./connection-dialog";
 import { TargetsDialog } from "./targets-dialog";
+import { SupplementsDialog } from "./supplements-dialog";
 import { TodayPage } from "./today-page";
+import { dashboardPageContext } from "./dashboard-page-context";
 import { FoodPage } from "./food-page";
 import { Overview } from "./overview";
 import { MeasurementDialog, SleepDialog, WorkoutDialog } from "./overview-dialogs";
@@ -44,6 +40,8 @@ import type { FoodEntry, RecordCommand } from "./lib/api";
 import { recordPaths } from "../../src/journal/paths";
 
 const tokenKey = "nouri.apiToken";
+
+export { useDashboardPage } from "./dashboard-page-context";
 
 const disconnectedKey = "nouri.disconnected";
 
@@ -58,31 +56,6 @@ type FoodInput = FoodSubmission["food"];
 type View = "today" | "overview" | "food";
 
 type PendingFood = { input: FoodSubmission; signature: string };
-
-type DashboardPageContext = {
-  token: string;
-  date: string;
-  isToday: boolean;
-  onLogFood: () => void;
-  onLogWorkout: () => void;
-  onLogSleep: () => void;
-  onLogMeasurement: () => void;
-  foodDelete: ReturnType<typeof useIdempotentDelete<FoodEntry>>;
-  journal: ReturnType<typeof useJournal>;
-  water: ReturnType<typeof useWater>;
-  customizingCards: boolean;
-  onCustomizingCardsChange: (open: boolean) => void;
-};
-
-const dashboardPageContext = createContext<DashboardPageContext | null>(null);
-
-export function useDashboardPage() {
-  const context = useContext(dashboardPageContext);
-
-  if (!context) throw new Error("Dashboard page rendered outside its shell");
-
-  return context;
-}
 
 export function Dashboard() {
   const queryClient = useQueryClient();
@@ -101,11 +74,13 @@ export function Dashboard() {
   );
 
   const [logOpen, setLogOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [logMenuOpen, setLogMenuOpen] = useState(false);
   const [recordDialog, setRecordDialog] = useState<"workout" | "sleep" | "measurement" | null>(null);
   const [connectionOpen, setConnectionOpen] = useState(false);
   const [customizingCards, setCustomizingCards] = useState(false);
   const [targetsOpen, setTargetsOpen] = useState(false);
+  const [supplementsOpen, setSupplementsOpen] = useState(false);
 
   const journal = useJournal(token);
   const water = useWater(token, date, () => setConnectionOpen(true));
@@ -116,7 +91,7 @@ export function Dashboard() {
 
   const refresh = ["day", "overview"];
 
-  const createMutation = useIdempotentCreate<PendingFood>(token, (pending, key) => createFood(token, key, pending.input), {
+  const createMutation = useIdempotentWrite<PendingFood>(token, (pending, key) => createFood(token, key, pending.input), {
     refresh, success: () => "Food added to your log.", onSuccess: () => setLogOpen(false),
     signature: (pending) => pending.signature,
   });
@@ -146,6 +121,11 @@ export function Dashboard() {
     setToken("");
     setConnectionOpen(false);
     toast.dismiss();
+  }
+
+  function manageSupplements() {
+    if (token) setSupplementsOpen(true);
+    else setConnectionOpen(true);
   }
 
   function saveFood(event: FormEvent<HTMLFormElement>, food: FoodInput, time: string) {
@@ -219,7 +199,7 @@ export function Dashboard() {
   }[view];
 
   return (
-    <dashboardPageContext.Provider value={{ token, date, isToday, onLogFood: () => setLogOpen(true), onLogWorkout: () => setRecordDialog("workout"), onLogSleep: () => setRecordDialog("sleep"), onLogMeasurement: () => setRecordDialog("measurement"), foodDelete, journal, water, customizingCards, onCustomizingCardsChange: setCustomizingCards }}>
+    <dashboardPageContext.Provider value={{ token, date, isToday, onLogFood: () => setLogOpen(true), onEditFood: (entry) => setEditingId(entry.id), onLogWorkout: () => setRecordDialog("workout"), onLogSleep: () => setRecordDialog("sleep"), onLogMeasurement: () => setRecordDialog("measurement"), foodDelete, journal, water, onManageSupplements: manageSupplements, customizingCards, onCustomizingCardsChange: setCustomizingCards }}>
     <div {...stylex.props(styles.appShell)}>
       <aside {...stylex.props(styles.sidebar)}>
         <Link to="/" {...stylex.props(styles.brand)}>
@@ -271,6 +251,14 @@ export function Dashboard() {
           >
             <Target size={17} {...stylex.props(targetsOpen && styles.iconAccent)} />
             Targets
+          </button>
+          <button
+            type="button"
+            {...stylex.props(styles.navItem, supplementsOpen && styles.navItemActive)}
+            onClick={manageSupplements}
+          >
+            <Pill size={17} {...stylex.props(supplementsOpen && styles.iconAccent)} />
+            Supplements
           </button>
         </nav>
         <div {...stylex.props(styles.sidebarBottom)}>
@@ -327,8 +315,10 @@ export function Dashboard() {
         </div>
       </main>
       <TargetsDialog open={targetsOpen} onOpenChange={setTargetsOpen} token={token} />
+      <SupplementsDialog open={supplementsOpen} onOpenChange={setSupplementsOpen} token={token} />
       <ConnectionDialog open={connectionOpen} onOpenChange={setConnectionOpen} token={token} onConnect={connect} onDisconnect={disconnect} />
       <LogFoodDialog open={logOpen} onOpenChange={setLogOpen} token={token} date={date} isToday={isToday} pending={createMutation.isPending} onSave={saveFood} onConnect={() => { setLogOpen(false); setConnectionOpen(true); }} />
+      <EditFoodDialog token={token} date={date} entryId={editingId} onClose={() => setEditingId(null)} />
       <WorkoutDialog open={recordDialog === "workout"} onOpenChange={(open) => setRecordDialog(open ? "workout" : null)} date={date} pending={journal.create.isPending} onSave={(input) => saveRecord({ path: recordPaths.workout, input }, "Workout")} />
       <SleepDialog open={recordDialog === "sleep"} onOpenChange={(open) => setRecordDialog(open ? "sleep" : null)} date={date} pending={journal.create.isPending} onSave={(input) => saveRecord({ path: recordPaths.sleep, input }, "Sleep")} />
       <MeasurementDialog open={recordDialog === "measurement"} onOpenChange={(open) => setRecordDialog(open ? "measurement" : null)} date={date} pending={journal.create.isPending} onSave={(input) => saveRecord({ path: recordPaths.measurement, input }, "Measurement")} />
@@ -338,19 +328,13 @@ export function Dashboard() {
 }
 
 export function TodayRoute() {
-  const { token, date, isToday, foodDelete, water, customizingCards, onCustomizingCardsChange } = useDashboardPage();
-
-  return <TodayPage token={token} date={date} isToday={isToday} foodDelete={foodDelete} water={water} customizingCards={customizingCards} onCustomizingCardsChange={onCustomizingCardsChange} />;
+  return <TodayPage />;
 }
 
 export function FoodRoute() {
-  const { token, date, isToday, onLogFood, foodDelete } = useDashboardPage();
-
-  return <FoodPage token={token} date={date} isToday={isToday} onLogFood={onLogFood} foodDelete={foodDelete} />;
+  return <FoodPage />;
 }
 
 export function OverviewRoute() {
-  const { token, date, onLogFood, onLogWorkout, onLogSleep, onLogMeasurement, journal, water } = useDashboardPage();
-
-  return <Overview token={token} date={date} onLogFood={onLogFood} onLogWorkout={onLogWorkout} onLogSleep={onLogSleep} onLogMeasurement={onLogMeasurement} journal={journal} water={water} />;
+  return <Overview />;
 }

@@ -337,7 +337,7 @@ export function WaterCard({ connected, goalMl, entries, totalMl, pending, onAdd,
                 <Button
                   variant="ghost"
                   size="icon"
-                  {...stylex.props(styles.entryDelete)}
+                  {...stylex.props(styles.entryAction)}
                   aria-label={`Delete ${entry.volumeMl} ml of water at ${clock.format(new Date(entry.occurredAt))}`}
                   disabled={pending}
                   onClick={() => onDelete(entry)}

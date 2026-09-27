@@ -15,5 +15,5 @@ export async function getOverview(db: AppDatabase, userId: string, date: string)
     getRecentPhotos(db, userId, date),
   ]);
 
-  return { date, nutrition: { food: day.food, water: day.water }, sports, measurements, sleep, photos };
+  return { date, nutrition: { food: day.food, water: day.water }, sports, measurements, sleep, supplements: day.supplements, photos };
 }

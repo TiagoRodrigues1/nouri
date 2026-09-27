@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { PendingCreates } from "../../frontend/src/lib/pending-creates.js";
+import { PendingWrites } from "../../frontend/src/lib/pending-writes.js";
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -11,7 +11,7 @@ function deferred<T>() {
 }
 
 void test("a successful create does not discard another operation's retry key", async () => {
-  const pending = new PendingCreates<string, string>();
+  const pending = new PendingWrites<string, string>();
   const a = deferred<string>();
   const b = deferred<string>();
   const sent: { input: string; key: string }[] = [];
@@ -53,7 +53,7 @@ void test("a successful create does not discard another operation's retry key", 
 });
 
 void test("overlapping attempts for the same operation share one request", async () => {
-  const pending = new PendingCreates<string, string>();
+  const pending = new PendingWrites<string, string>();
   const reply = deferred<string>();
   const sent: string[] = [];
 

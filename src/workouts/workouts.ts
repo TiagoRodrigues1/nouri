@@ -26,6 +26,7 @@ function workout(row: WorkoutRow): Workout {
 
 export const workoutRecords: RecordKind<WorkoutInput, Workout> = {
   name: "workout",
+  label: "Workout",
   table: workouts,
   schema: workoutSchema,
   create: async (tx, userId, input) => {
@@ -44,7 +45,7 @@ export const workoutRecords: RecordKind<WorkoutInput, Workout> = {
 
     if (!row) throw new Error("Workout insert returned no row");
 
-    return workout(row);
+    return { outcome: "created", entry: workout(row) };
   },
 };
 

@@ -22,8 +22,10 @@ This index is the maintained list of Nouri's user paths. Read the relevant file 
 - [Log a catalog food](catalog-log.md): search, select, set grams, save and read back.
 - [Log a manual food](manual-log.md): manual tab, nutrition fields, save and read back.
 - [Browse dates and delete](dates-delete.md): date input and arrows, daily totals, remove a row.
+- [Edit a food](edit.md): pencil on Food page and timeline rows, catalog amount, manual fields and time, revision conflict.
 - [Log water](water.md): preset and custom amounts, daily total, remove a drink.
-- [Overview](overview.md): sidebar link, category tabs, measurements, workouts, sleep, progress photos, deletion.
+- [Overview](overview.md): sidebar link, category tabs, measurements, workouts, sleep, progress photos, deletion. The Supplements tab is covered in [Supplements](supplements.md).
 - [Customize My Day cards](cards.md): show, hide, reorder, save, reload, and restore defaults.
 - [Food page](food-page.md): intake against targets, meals by time of day, top foods, log again, delete.
+- [Supplements](supplements.md): sidebar dialog edits the list from today, My Day checklist and Overview `Take` buttons tick and untick intakes, earlier days keep their list.
 - [Targets](targets.md): sidebar dialog, save, pages reflect new targets, earlier days keep old ones.

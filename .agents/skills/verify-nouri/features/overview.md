@@ -1,6 +1,6 @@
 # Overview
 
-Choose the `Overview` sidebar link and check the `Overview categories` tabs: All, Nutrition, Sports, Measurements, and Sleep. On an empty day, each section shows dashes and empty states.
+Choose the `Overview` sidebar link and check the `Overview categories` tabs: All, Nutrition, Sports, Measurements, Sleep, and Supplements. On an empty day, each section shows dashes and empty states; Supplements says `No supplements on your list for this day.`
 
 Choose `Log measurement` and save a Height of `180` and a Weight of `81.5`. The Weight tile reads `81.5 kg` and the BMI tile reads `25.2`, labeled Overweight. Choose `Log workout` and save a 45-minute Run with `8.2` km and `520` kcal. The Activity tile reads `45 min`, `520 kcal`, and `8.2 km`. Choose `Log sleep` with the default 23:00 and 07:00 times, and enter Light 230, Deep 90, REM 110, and Awake 20. Time asleep reads `8 h 0 min`, and the stage bar lists four rows.
 

@@ -24,6 +24,12 @@ case $action in
       echo "Run already exists: $runtime" >&2
       exit 1
     fi
+    # The server serves the built page, so a build older than the frontend sources verifies stale code.
+    dist="$root/web/dist/index.html"
+    if [[ ! -f $dist ]] || [[ -n $(find "$root/frontend/index.html" "$root/frontend/src" "$root/src" -newer "$dist" \( -name index.html -o -name '*.ts' -o -name '*.tsx' -o -name '*.css' \) -not -name '*.test.ts' -print -quit) ]]; then
+      echo 'The built page is missing or older than the frontend sources. Run `pnpm build:web` first.' >&2
+      exit 1
+    fi
     mkdir -m 700 "$runtime"
     trap '"$0" cleanup "$run_id" >/dev/null || true' ERR
     docker run -d --rm --name "$container" \

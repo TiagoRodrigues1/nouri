@@ -1,6 +1,6 @@
 ---
 name: verify-nouri
-description: Verify Nouri's food journal web page and API through an isolated local PostgreSQL instance and a real browser. Use after changes to food search, food or water logging, daily totals, date navigation, deletion, My Day cards, or the Overview page (measurements, workouts, sleep, progress photos).
+description: Verify Nouri's food journal web page and API through an isolated local PostgreSQL instance and a real browser. Use after changes to food search, food or water logging, food edits, daily totals, date navigation, deletion, My Day cards, targets, supplements (the list and daily ticks on My Day or Overview), or the Overview page (measurements, workouts, sleep, supplements, progress photos).
 ---
 
 # Verify Nouri
@@ -10,6 +10,8 @@ Read [features/README.md](features/README.md) and the relevant feature file befo
 ## Launch
 
 Run from the repository root. Docker, `pnpm`, `pg_isready`, `curl`, Python 3, OpenSSL, and `playwright cli` must be on `PATH`. Dependencies are described in the root and `frontend/package.json` files; run `pnpm install` if `node_modules` is absent. The helper starts a disposable `postgres:16-alpine` container on a random localhost port, applies `db/schema.sql`, and starts `src/server.ts` on another free localhost port. Each run gets its own token and user UUID.
+
+The server serves the built page from `web/dist`. `launch` refuses to start when that build is missing or older than `frontend/index.html` or the TypeScript and CSS under `frontend/src` and `src` (the page imports its contracts from `src`). Run `pnpm build:web` first. The helper does not build for you, because rebuilding replaces assets under any other run serving the same `web/dist`.
 
 ```sh
 RUN_ID="nouri-$(date +%s)-$$"
@@ -45,7 +47,7 @@ The token is a secret. Do not put `env`, browser storage, request headers, or un
 
 Save proof under `$EVIDENCE`; cleanup never removes it. For each feature, record the feature ID and entry point, a screenshot or redacted page snapshot before the user action, the browser action, and the resulting screen. `"$CONTROL" browser "$RUN_ID" screenshot --filename "$EVIDENCE/before.png"` and the same command with `after.png` save screenshots directly. For text proof, pipe `snapshot` through `sed "s/$API_TOKEN/[REDACTED]/g"` before writing it to `$EVIDENCE`.
 
-For a mutation, save an authenticated readback from the endpoint that owns the result: `GET /v1/days/<date>` for food and water, `GET /v1/overview/<date>` for Overview records, or `GET /v1/dashboard` for card layout. Assert the relevant entries and totals. This is a second read of persisted state, not a substitute for the browser action. Search proof should show query, results or empty state, and source attribution. Follow real page controls. Do not use internal setters or test-only endpoints. Mock only a production boundary that already exists; the default Nouri run uses the real local database. Nouri has no dry-run mode. If a future recipe uses one, inspect actual files, network activity, and database state to establish what it skips.
+For a mutation, save an authenticated readback from the endpoint that owns the result: `GET /v1/days/<date>` for food, water, and supplement intakes, `GET /v1/supplement-stack/<date>` for the supplement list, `GET /v1/overview/<date>` for Overview records, or `GET /v1/dashboard` for card layout. Assert the relevant entries and totals. This is a second read of persisted state, not a substitute for the browser action. Search proof should show query, results or empty state, and source attribution. Follow real page controls. Do not use internal setters or test-only endpoints. Mock only a production boundary that already exists; the default Nouri run uses the real local database. Nouri has no dry-run mode. If a future recipe uses one, inspect actual files, network activity, and database state to establish what it skips.
 
 Example readback, after choosing a date in the page:
 

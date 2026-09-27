@@ -40,6 +40,7 @@ export function detectPhotoType(image: Buffer): PhotoType | null {
 
 export const photoRecords: RecordKind<PhotoInput, Photo> = {
   name: "photo",
+  label: "Photo",
   table: progressPhotos,
   schema: photoSchema,
   fingerprint: (input) => createHash("sha256").update(input.image).update(JSON.stringify([input.occurredAt, input.timeZone])).digest("hex"),
@@ -59,7 +60,7 @@ export const photoRecords: RecordKind<PhotoInput, Photo> = {
 
     if (!row) throw new Error("Photo insert returned no row");
 
-    return photo(row);
+    return { outcome: "created", entry: photo(row) };
   },
 };
 

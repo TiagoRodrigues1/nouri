@@ -32,6 +32,7 @@ function session(row: SleepRow): SleepSession {
 
 export const sleepRecords: RecordKind<SleepInput, SleepSession> = {
   name: "sleep",
+  label: "Sleep session",
   table: sleepSessions,
   schema: sleepSessionSchema,
   create: async (tx, userId, input) => {
@@ -51,7 +52,7 @@ export const sleepRecords: RecordKind<SleepInput, SleepSession> = {
 
     if (!row) throw new Error("Sleep insert returned no row");
 
-    return session(row);
+    return { outcome: "created", entry: session(row) };
   },
 };
 

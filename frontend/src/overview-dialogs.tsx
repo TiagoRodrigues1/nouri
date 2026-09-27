@@ -7,12 +7,15 @@ import { Label } from "./components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
 import { TimePicker } from "./components/ui/time-picker";
 import { styles as formStyles } from "./form-styles";
+import { useExitingRows } from "./lib/use-exiting-rows";
+import { selectValue } from "./lib/select-value";
 import type { MeasurementInput } from "../../src/measurements/contract";
 import type { StrengthExercise, WorkoutInput } from "../../src/workouts/contract";
 import type { SleepInput } from "../../src/sleep/contract";
 import { activities } from "../../src/workouts/contract";
 import { measurementKinds, measurementLimits } from "../../src/measurements/contract";
-import { currentTime, dateLabel, occurredAt, shiftDate, timeZone, type Activity, type MeasurementKind } from "./lib/api";
+import type { Activity, MeasurementKind } from "./lib/api";
+import { currentTime, dateLabel, occurredAt, shiftDate, timeZone } from "./lib/time";
 
 export const measurementLabels: Record<MeasurementKind, { name: string; unit: string; step: number }> = {
   weight: { name: "Weight", unit: "kg", step: 0.1 },
@@ -88,7 +91,7 @@ function MeasurementForm({ date, pending, onSave }: FormProps<MeasurementInput>)
       <div {...stylex.props(formStyles.manualGrid)}>
         <div>
           <Label htmlFor="measurement-kind" {...stylex.props(formStyles.formLabel)}>Measurement</Label>
-          <Select value={kind} onValueChange={(next) => setKind(measurementKinds.find((option) => option === next) ?? "weight")}>
+          <Select value={kind} onValueChange={(next) => setKind(selectValue(measurementKinds, next, "weight"))}>
             <SelectTrigger id="measurement-kind" {...stylex.props(formStyles.selectTrigger)}>
               <SelectValue />
             </SelectTrigger>
@@ -129,6 +132,17 @@ function WorkoutForm({ date, pending, onSave }: FormProps<WorkoutInput>) {
   const [activity, setActivity] = useState<Activity>("run");
   const [time, setTime] = useState(currentTime);
   const [exercises, setExercises] = useState(() => [{ id: crypto.randomUUID(), name: "", sets: "", reps: "", weight: "" }]);
+  const { add, remove, rowProps, busy } = useExitingRows();
+
+  function addExercise() {
+    const id = crypto.randomUUID();
+    add(id);
+    setExercises((current) => [...current, { id, name: "", sets: "", reps: "", weight: "" }]);
+  }
+
+  function removeExercise(id: string) {
+    remove(id, () => setExercises((current) => current.filter((exercise) => exercise.id !== id)));
+  }
 
   function updateExercise(id: string, field: "name" | "sets" | "reps" | "weight", value: string) {
     setExercises((current) => current.map((exercise) => exercise.id === id ? { ...exercise, [field]: value } : exercise));
@@ -162,7 +176,7 @@ function WorkoutForm({ date, pending, onSave }: FormProps<WorkoutInput>) {
       <div {...stylex.props(formStyles.manualGrid)}>
         <div>
           <Label htmlFor="workout-activity" {...stylex.props(formStyles.formLabel)}>Activity</Label>
-          <Select value={activity} onValueChange={(next) => setActivity(activities.find((option) => option === next) ?? "other")}>
+          <Select value={activity} onValueChange={(next) => setActivity(selectValue(activities, next, "other"))}>
             <SelectTrigger id="workout-activity" {...stylex.props(formStyles.selectTrigger)}>
               <SelectValue />
             </SelectTrigger>
@@ -191,13 +205,13 @@ function WorkoutForm({ date, pending, onSave }: FormProps<WorkoutInput>) {
         </div>
       </div>
       {activity === "strength" && (
-        <div {...stylex.props(styles.exerciseList)}>
+        <div data-exercise-list="" {...stylex.props(styles.exerciseList)}>
           <p {...stylex.props(formStyles.formSubhead)}>EXERCISES</p>
           {exercises.map((exercise, index) => (
-            <div key={exercise.id} {...stylex.props(styles.exerciseCard)}>
+            <div key={exercise.id} {...rowProps(exercise.id)} {...stylex.props(styles.exerciseCard)}>
               <div {...stylex.props(styles.exerciseHeader)}>
                 <strong>Exercise {index + 1}</strong>
-                <Button type="button" variant="ghost" size="sm" onClick={() => setExercises((current) => current.filter((item) => item.id !== exercise.id))}>Remove</Button>
+                <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() => removeExercise(exercise.id)}>Remove</Button>
               </div>
               <div>
                 <Label htmlFor={`exercise-name-${exercise.id}`} {...stylex.props(formStyles.formLabel)}>Exercise name</Label>
@@ -219,7 +233,7 @@ function WorkoutForm({ date, pending, onSave }: FormProps<WorkoutInput>) {
               </div>
             </div>
           ))}
-          <Button type="button" variant="outline" size="sm" disabled={exercises.length >= 30} onClick={() => setExercises((current) => [...current, { id: crypto.randomUUID(), name: "", sets: "", reps: "", weight: "" }])}>Add exercise</Button>
+          <Button type="button" variant="outline" size="sm" disabled={exercises.length >= 30} onClick={addExercise}>Add exercise</Button>
         </div>
       )}
       <div {...stylex.props(formStyles.timeField)}>
@@ -227,7 +241,7 @@ function WorkoutForm({ date, pending, onSave }: FormProps<WorkoutInput>) {
         <TimePicker id="workout-time" value={time} onChange={setTime} onNow={() => setTime(currentTime())} />
       </div>
       <div {...stylex.props(formStyles.dialogActions)}>
-        <Button type="submit" disabled={pending}>{pending ? "Saving…" : "Save workout"}</Button>
+        <Button type="submit" disabled={pending || busy}>{pending ? "Saving…" : "Save workout"}</Button>
       </div>
     </form>
   );

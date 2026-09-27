@@ -9,7 +9,8 @@ import { Label } from "./components/ui/label";
 import { Input } from "./components/ui/input";
 import { TimePicker } from "./components/ui/time-picker";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs";
-import { currentTime, dateLabel, format, searchFoods, type Candidate } from "./lib/api";
+import { format, searchFoods, type Candidate } from "./lib/api";
+import { currentTime, dateLabel } from "./lib/time";
 import type { FoodSubmission } from "../../src/food/contract";
 
 type FoodInput = FoodSubmission["food"];

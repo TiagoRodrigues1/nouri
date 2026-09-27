@@ -1,10 +1,10 @@
 import { z } from "zod";
 
-export const cardIds = ["totals", "water", "mix", "activity", "fasting", "largest", "meals"] as const;
+export const cardIds = ["totals", "water", "supplements", "mix", "activity", "fasting", "largest", "meals"] as const;
 
 export const cardIdSchema = z.enum(cardIds);
 
-export const defaultCards: CardId[] = ["totals", "water", "mix", "activity"];
+export const defaultCards: CardId[] = ["totals", "water", "supplements", "mix", "activity"];
 
 // The list is the full layout: its order is the display order and a missing card is hidden.
 export const dashboardSchema = z.object({

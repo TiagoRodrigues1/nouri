@@ -1,4 +1,4 @@
-export class PendingCreates<Input, Result> {
+export class PendingWrites<Input, Result> {
   private operations = new Map<string, { key: string; input: Input; request?: Promise<Result> }>();
 
   run(input: Input, signature: string, send: (input: Input, key: string) => Promise<Result>): Promise<{ key: string; result: Result }> {

@@ -1,10 +1,12 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { defaultTargets } from "../../../src/targets/contract";
-import { getTargets, saveTargets, type Targets } from "./api";
+import { defaultTargets, targetsForDaySchema } from "../../../src/targets/contract";
+import type { Targets } from "./api";
+import { datedResource } from "./dated-resource";
 
-export function useTargetsQuery(token: string, date: string) {
-  return useQuery({ queryKey: ["targets", token, date], queryFn: () => getTargets(token, date), enabled: Boolean(token) });
-}
+const targetsResource = datedResource<Targets, typeof targetsForDaySchema>("/v1/targets", "targets", targetsForDaySchema);
+
+export const useTargetsQuery = targetsResource.useDatedQuery;
+
+export const useSaveTargets = targetsResource.useSaveDated;
 
 // A failed read is its own state rather than the defaults, so a screen never presents numbers the person did not set.
 // Every state carries `targets`, so a screen reads it directly and compares only when it is there.
@@ -24,14 +26,4 @@ export function useTargets(token: string, date: string): TargetsState {
   if (query.isError) return { status: "error", message: query.error.message, retry: () => void query.refetch() };
 
   return { status: "loading" };
-}
-
-// Saves the set taking effect on `date`; the web app passes today, so editing never rewrites the days behind you.
-export function useSaveTargets(token: string, date: string) {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (targets: Targets) => saveTargets(token, date, targets),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["targets"] }),
-  });
 }

@@ -4,6 +4,7 @@ import type { FoodSubmission, RepeatInput } from "../../../src/food/contract";
 import type { WaterInput } from "../../../src/water/contract";
 import type { MeasurementInput } from "../../../src/measurements/contract";
 import type { SleepInput } from "../../../src/sleep/contract";
+import type { IntakeInput } from "../../../src/supplements/contract";
 import { workoutSummarySchema, type WorkoutInput, type WorkoutSummary } from "../../../src/workouts/contract";
 import { dashboardSchema } from "../../../src/dashboard/contract";
 import type { Dashboard } from "../../../src/dashboard/contract";
@@ -12,8 +13,6 @@ import type { Day } from "../../../src/days/contract";
 import { entrySchema, searchResultSchema } from "../../../src/food/contract";
 import type { FoodEntry, SearchResult } from "../../../src/food/contract";
 import { overviewSchema } from "../../../src/overview/contract";
-import { targetsForDaySchema } from "../../../src/targets/contract";
-import type { Targets, TargetsForDay } from "../../../src/targets/contract";
 import type { Overview } from "../../../src/overview/contract";
 
 export type { CardId, Dashboard } from "../../../src/dashboard/contract";
@@ -32,6 +31,8 @@ export type { Photo } from "../../../src/photos/contract";
 
 export type { SleepSession } from "../../../src/sleep/contract";
 
+export type { Supplement, SupplementDay, SupplementIntake, SupplementKind } from "../../../src/supplements/contract";
+
 export type { Targets } from "../../../src/targets/contract";
 
 export type { Activity, Workout } from "../../../src/workouts/contract";
@@ -42,7 +43,8 @@ export type RecordCommand =
   | { path: typeof recordPaths.water; input: WaterInput }
   | { path: typeof recordPaths.measurement; input: MeasurementInput }
   | { path: typeof recordPaths.workout; input: WorkoutInput }
-  | { path: typeof recordPaths.sleep; input: SleepInput };
+  | { path: typeof recordPaths.sleep; input: SleepInput }
+  | { path: typeof recordPaths.supplementIntake; input: IntakeInput };
 
 export class ApiError extends Error {
   constructor(message: string, readonly status: number) { super(message); }
@@ -52,7 +54,7 @@ const recordSchema = z.object({ id: z.uuid(), revision: z.number().int() });
 
 export type Candidate = SearchResult["items"][number];
 
-async function request<Schema extends z.ZodType>(
+export async function request<Schema extends z.ZodType>(
   token: string,
   path: string,
   schema: Schema,
@@ -110,6 +112,14 @@ export async function repeatFood(token: string, key: string, entry: FoodEntry, i
   return request(token, `/v1/food-entries/${encodeURIComponent(entry.id)}/repeats`, entrySchema, {
     method: "POST",
     headers: { "Content-Type": "application/json", "Idempotency-Key": key },
+    body: JSON.stringify(input),
+  });
+}
+
+export async function updateFood(token: string, key: string, entry: FoodEntry, input: FoodSubmission): Promise<FoodEntry> {
+  return request(token, `/v1/food-entries/${encodeURIComponent(entry.id)}`, entrySchema, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", "Idempotency-Key": key, "If-Match": `"${entry.revision}"` },
     body: JSON.stringify(input),
   });
 }
@@ -173,70 +183,10 @@ export async function saveDashboard(token: string, dashboard: Dashboard): Promis
   });
 }
 
-export async function getTargets(token: string, date: string): Promise<TargetsForDay> {
-  return request(token, `/v1/targets/${date}`, targetsForDaySchema);
-}
-
-export async function saveTargets(token: string, date: string, targets: Targets): Promise<TargetsForDay> {
-  return request(token, `/v1/targets/${date}`, targetsForDaySchema, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(targets),
-  });
-}
-
-export const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-
-export function localDate(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-}
-
-export function shiftDate(value: string, days: number): string {
-  const [y, m, d] = value.split("-").map(Number);
-
-  return localDate(new Date(y, m - 1, d + days));
-}
-
-export function dateLabel(value: string): string {
-  const [y, m, d] = value.split("-").map(Number);
-
-  return new Intl.DateTimeFormat("en", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  }).format(new Date(y, m - 1, d));
-}
-
 export function format(value: number | null | undefined, digits = 0): string {
   return value == null
     ? "—"
     : new Intl.NumberFormat("en", { maximumFractionDigits: digits }).format(
         value,
       );
-}
-
-export function currentTime(now = new Date()): string {
-  return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-}
-
-// `time` is a local "HH:MM"; without it the current time of day is used.
-export function occurredAt(value: string, time?: string): string {
-  const [y, m, d] = value.split("-").map(Number);
-  const now = new Date();
-
-  if (time) {
-    const [hours, minutes] = time.split(":").map(Number);
-
-    return new Date(y, m - 1, d, hours, minutes).toISOString();
-  }
-
-  return new Date(
-    y,
-    m - 1,
-    d,
-    now.getHours(),
-    now.getMinutes(),
-    now.getSeconds(),
-  ).toISOString();
 }

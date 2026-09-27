@@ -3,10 +3,10 @@ import { Activity as ActivityIcon, Plus, Ruler, Scale } from "lucide-react";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { measurementLabels } from "../overview-dialogs";
-import { dateLabel, format, type Overview as OverviewData, type Photo } from "../lib/api";
+import { format, type Overview as OverviewData, type Photo } from "../lib/api";
 import { styles } from "../overview-styles";
 import { colors } from "../theme.stylex";
-import { clock } from "../lib/time";
+import { clock, dateLabel } from "../lib/time";
 import { DeleteButton, Empty, Section, Sparkline, Stat, Tile, Value, Caption } from "./shared";
 import { PhotosTile } from "./photos";
 

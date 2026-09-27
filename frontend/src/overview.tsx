@@ -3,8 +3,6 @@ import { Fragment, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs";
-import { useWater } from "./lib/use-water";
-import { useJournal } from "./overview/use-journal";
 import { useTargets } from "./lib/use-targets";
 import { queryStatus } from "./query-status";
 import { TargetsNotice } from "./targets-notice";
@@ -12,9 +10,12 @@ import { NutritionSection } from "./overview/nutrition";
 import { SportsSection } from "./overview/sports";
 import { MeasurementsSection } from "./overview/measurements";
 import { SleepSection } from "./overview/sleep";
+import { SupplementsSection } from "./overview/supplements";
 import { styles } from "./overview-styles";
 import { maxPhotoBytes } from "../../src/photos/contract";
-import { getOverview, occurredAt, timeZone, type RecordPath } from "./lib/api";
+import { getOverview, type RecordPath } from "./lib/api";
+import { occurredAt, timeZone } from "./lib/time";
+import { useDashboardPage } from "./dashboard-page-context";
 import { recordPaths } from "../../src/journal/paths";
 
 const categories = [
@@ -22,24 +23,15 @@ const categories = [
   { id: "sports", name: "Sports" },
   { id: "measurements", name: "Measurements" },
   { id: "sleep", name: "Sleep" },
+  { id: "supplements", name: "Supplements" },
 ] as const;
 
 type Category = (typeof categories)[number]["id"];
 
 type Tab = "all" | Category;
 
-type OverviewProps = {
-  token: string;
-  date: string;
-  onLogFood: () => void;
-  onLogWorkout: () => void;
-  onLogSleep: () => void;
-  onLogMeasurement: () => void;
-  journal: ReturnType<typeof useJournal>;
-  water: ReturnType<typeof useWater>;
-};
-
-export function Overview({ token, date, onLogFood, onLogWorkout, onLogSleep, onLogMeasurement, journal, water }: OverviewProps) {
+export function Overview() {
+  const { token, date, onLogFood, onLogWorkout, onLogSleep, onLogMeasurement, journal, water } = useDashboardPage();
   const [tab, setTab] = useState<Tab>("all");
 
   const query = useQuery({
@@ -87,7 +79,8 @@ export function Overview({ token, date, onLogFood, onLogWorkout, onLogSleep, onL
       />
     ),
     sleep: <SleepSection sleep={data.sleep} goalMinutes={targets.targets?.sleepMinutes} busy={busy} onLog={onLogSleep} onDelete={remove("/v1/sleep-sessions", "Sleep session")} />,
-  } : { nutrition: null, sports: null, measurements: null, sleep: null };
+    supplements: <SupplementsSection day={data.supplements} />,
+  } : { nutrition: null, sports: null, measurements: null, sleep: null, supplements: null };
 
   const status = queryStatus(token, query, { disconnected: "Connect your log to see your overview.", loading: "Loading your overview…" });
 

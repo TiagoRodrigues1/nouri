@@ -1,20 +1,21 @@
 import * as stylex from "@stylexjs/stylex";
 import { useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Flame, ListOrdered, Plus, RotateCcw, Trash2, Utensils, UtensilsCrossed } from "lucide-react";
+import { Flame, ListOrdered, Pencil, Plus, RotateCcw, Trash2, Utensils, UtensilsCrossed } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
 import { Progress } from "./components/ui/progress";
 import { Tabs, TabsList, TabsTrigger } from "./components/ui/tabs";
 import { styles } from "./food-page-styles";
 import { colors } from "./theme.stylex";
-import { format, getDay, type Day, type FoodEntry } from "./lib/api";
+import { format, type Day, type FoodEntry } from "./lib/api";
+import { dayQueryOptions } from "./lib/day-query";
 import { kcalPerGram } from "./lib/nutrition";
 import { entryHour, entryTime } from "./lib/time";
-import { useIdempotentDelete } from "./lib/use-idempotent";
 import { useLogAgain } from "./lib/use-log-again";
 import { useTargets, type TargetsState } from "./lib/use-targets";
 import { queryStatus } from "./query-status";
+import { useDashboardPage } from "./dashboard-page-context";
 import { TargetsNotice } from "./targets-notice";
 
 // Grouped by the hour eaten rather than by a meal label the log does not record.
@@ -27,16 +28,9 @@ const periods = [
 
 type Totals = Day["food"]["totals"];
 
-type FoodPageProps = {
-  token: string;
-  date: string;
-  isToday: boolean;
-  onLogFood: () => void;
-  foodDelete: ReturnType<typeof useIdempotentDelete<FoodEntry>>;
-};
-
-export function FoodPage({ token, date, isToday, onLogFood, foodDelete }: FoodPageProps) {
-  const dayQuery = useQuery({ queryKey: ["day", token, date], queryFn: () => getDay(token, date), enabled: Boolean(token) });
+export function FoodPage() {
+  const { token, date, isToday, onLogFood, onEditFood, foodDelete } = useDashboardPage();
+  const dayQuery = useQuery(dayQueryOptions(token, date));
   const targets = useTargets(token, date);
   const logAgain = useLogAgain(token, date);
   const entries = dayQuery.data?.food.entries ?? [];
@@ -54,6 +48,7 @@ export function FoodPage({ token, date, isToday, onLogFood, foodDelete }: FoodPa
           busy={foodDelete.isPending || logAgain.pending}
           onLogFood={onLogFood}
           onLogAgain={logAgain.logAgain}
+          onEdit={onEditFood}
           onDelete={(entry) => foodDelete.mutate(entry)}
         />
       </div>
@@ -134,7 +129,8 @@ function IntakeCard({ totals, entries, targets: state, isToday }: { totals: Tota
   );
 }
 
-function MealsCard({ entries, isToday, busy, onLogFood, onLogAgain, onDelete }: { entries: FoodEntry[]; isToday: boolean; busy: boolean; onLogFood: () => void; onLogAgain: (entry: FoodEntry) => void; onDelete: (entry: FoodEntry) => void }) {
+function MealsCard({ entries, isToday, busy, onLogFood, onLogAgain, onEdit, onDelete }: { entries: FoodEntry[]; isToday: boolean; busy: boolean; onLogFood: () => void; onLogAgain: (entry: FoodEntry) => void; onEdit: (entry: FoodEntry) => void; onDelete: (entry: FoodEntry) => void }) {
+
   const groups = periods.flatMap((period, index) => {
     const eaten = entries.filter((entry) => {
       const hour = entryHour(entry);
@@ -183,6 +179,9 @@ function MealsCard({ entries, isToday, busy, onLogFood, onLogAgain, onDelete }: 
                       <span {...stylex.props(styles.entryKcal)}>{format(nutrients.kcal)} kcal</span>
                       <Button variant="ghost" size="icon" {...stylex.props(styles.entryAction)} aria-label={`Log ${name} again ${logAgainWhen}`} title={`Log again ${logAgainWhen}`} disabled={busy} onClick={() => onLogAgain(entry)}>
                         <RotateCcw size={15} />
+                      </Button>
+                      <Button variant="ghost" size="icon" {...stylex.props(styles.entryAction)} aria-label={`Edit ${name}`} title="Edit" disabled={busy} onClick={() => onEdit(entry)}>
+                        <Pencil size={15} />
                       </Button>
                       <Button variant="ghost" size="icon" {...stylex.props(styles.entryAction)} aria-label={`Delete ${name}`} disabled={busy} onClick={() => onDelete(entry)}>
                         <Trash2 size={15} />

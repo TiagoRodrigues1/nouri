@@ -1,14 +1,15 @@
-import { createRecord, deleteRecord, occurredAt, timeZone } from "./api";
+import { createRecord, deleteRecord } from "./api";
+import { occurredAt, timeZone } from "./time";
 import { recordPaths } from "../../../src/journal/paths";
 import type { WaterEntry, WaterInput } from "../../../src/water/contract";
-import { useIdempotentCreate, useIdempotentDelete } from "./use-idempotent";
+import { useIdempotentWrite, useIdempotentDelete } from "./use-idempotent";
 
 type PendingWater = { input: WaterInput; signature: string };
 
 export function useWater(token: string, date: string, onConnect: () => void) {
   const refresh = ["day", "overview"];
 
-  const create = useIdempotentCreate<PendingWater>(token, (pending, key) => createRecord(token, key, { path: recordPaths.water, input: pending.input }), {
+  const create = useIdempotentWrite<PendingWater>(token, (pending, key) => createRecord(token, key, { path: recordPaths.water, input: pending.input }), {
     refresh, signature: (pending) => pending.signature,
   });
 
