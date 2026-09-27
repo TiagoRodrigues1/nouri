@@ -123,7 +123,7 @@ export const styles = stylex.create({
   entryName: { fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   entryKcal: { color: colors.mutedForeground, fontSize: 11, whiteSpace: "nowrap" },
   entryTime: { color: colors.mutedForeground, fontSize: 11, fontVariantNumeric: "tabular-nums" },
-  entryDelete: {
+  entryAction: {
     width: 26,
     height: 26,
     color: colors.mutedForeground,

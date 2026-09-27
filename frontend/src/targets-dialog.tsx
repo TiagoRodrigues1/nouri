@@ -7,7 +7,8 @@ import { Label } from "./components/ui/label";
 import { styles as formStyles } from "./form-styles";
 import { defaultTargets, targetLimits, targetsSchema } from "../../src/targets/contract";
 import { useSaveTargets, useTargetsQuery } from "./lib/use-targets";
-import { localDate, type Targets } from "./lib/api";
+import type { Targets } from "./lib/api";
+import { localDate } from "./lib/time";
 import { queryStatus } from "./query-status";
 
 type TargetKey = keyof Targets;

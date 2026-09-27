@@ -6,10 +6,10 @@ import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../components/ui/dialog";
 import { styles as formStyles } from "../form-styles";
-import { dateLabel, getPhotoImage, type Photo } from "../lib/api";
+import { getPhotoImage, type Photo } from "../lib/api";
 import { styles } from "../overview-styles";
 import { Empty, Tile } from "./shared";
-import { clock } from "../lib/time";
+import { clock, dateLabel } from "../lib/time";
 
 // Photos need the bearer token, so they load as blobs and show through object URLs.
 function usePhotoUrl(token: string, id: string): string | null {

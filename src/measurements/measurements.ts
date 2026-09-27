@@ -25,6 +25,7 @@ function measurement(row: MeasurementRow): Measurement {
 
 export const measurementRecords: RecordKind<MeasurementInput, Measurement> = {
   name: "measurement",
+  label: "Measurement",
   table: bodyMeasurements,
   schema: measurementSchema,
   create: async (tx, userId, input) => {
@@ -40,7 +41,7 @@ export const measurementRecords: RecordKind<MeasurementInput, Measurement> = {
 
     if (!row) throw new Error("Measurement insert returned no row");
 
-    return measurement(row);
+    return { outcome: "created", entry: measurement(row) };
   },
 };
 

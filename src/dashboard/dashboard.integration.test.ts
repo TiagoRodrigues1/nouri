@@ -20,13 +20,13 @@ void test("dashboard layout defaults, saving, and validation", async () => {
 
   try {
     assert.equal((await app.request("/v1/dashboard")).status, 401);
-    assert.deepEqual(await cards(app), ["totals", "water", "mix", "activity"]);
+    assert.deepEqual(await cards(app), ["totals", "water", "supplements", "mix", "activity"]);
 
     const saved = await put({ cards: ["meals", "totals"] });
     assert.equal(saved.status, 200);
     assert.deepEqual(await saved.json(), { cards: ["meals", "totals"] });
     assert.deepEqual(await cards(app), ["meals", "totals"]);
-    assert.deepEqual(await cards(otherApp), ["totals", "water", "mix", "activity"]);
+    assert.deepEqual(await cards(otherApp), ["totals", "water", "supplements", "mix", "activity"]);
 
     assert.equal((await put({ cards: [] })).status, 200);
     assert.deepEqual(await cards(app), []);

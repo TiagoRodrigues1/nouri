@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { OpenAPIHono } from "@hono/zod-openapi";
+import type { RouteConfig } from "@hono/zod-openapi";
 import { bodyLimit } from "hono/body-limit";
 import { z } from "zod";
 import { dashboardSchema } from "./dashboard/contract.js";
@@ -11,6 +12,7 @@ import { entrySchema, repeatInputSchema, searchResultSchema, submissionSchema } 
 import { searchFoods } from "./food/catalog.js";
 import { mutateFood } from "./food/food.js";
 import type { AppDatabase } from "./db/database.js";
+import { getDated, saveDated, type DatedKind, type DatedTable } from "./effective-dated.js";
 import type { FoodMutationResult } from "./food/food.js";
 import { recordPaths } from "./journal/paths.js";
 import { mutateRecord } from "./journal/records.js";
@@ -23,8 +25,9 @@ import { maxPhotoBytes, photoSchema, photoUploadSchema } from "./photos/contract
 import { detectPhotoType, getPhotoImage, photoRecords } from "./photos/photos.js";
 import { sleepInputSchema } from "./sleep/contract.js";
 import { sleepRecords } from "./sleep/sleep.js";
-import { targetsForDaySchema, targetsSchema } from "./targets/contract.js";
-import { getTargets, saveTargets } from "./targets/targets.js";
+import { intakeInputSchema } from "./supplements/contract.js";
+import { intakeRecords, stackKind } from "./supplements/supplements.js";
+import { targetsKind } from "./targets/targets.js";
 import { occurredAtSchema, timeZoneSchema } from "./time.js";
 import { waterInputSchema } from "./water/contract.js";
 import { waterRecords } from "./water/water.js";
@@ -61,6 +64,8 @@ function recordResponse<Entry>(result: RecordMutationResult<Entry>, label: strin
       return new Response(null, { status: 204 });
     case "missing":
       return error(404, `${label} not found`);
+    case "unknown-reference":
+      return error(404, result.message);
     case "stale":
       return error(409, "Revision conflict");
     case "key-reuse":
@@ -211,7 +216,8 @@ export function createApp(db: AppDatabase, auth: { token: string; userId: string
     });
   });
 
-  function recordDeletion<Input, Entry>(path: string, label: string, kind: RecordKind<Input, Entry>) {
+  function recordDeletion<Input, Entry>(path: string, kind: RecordKind<Input, Entry>) {
+    const { label } = kind;
     app.delete(`${path}/:id`, async (context) => {
       const key = context.get("idempotencyKey");
       const id = z.uuid().safeParse(context.req.param("id"));
@@ -224,7 +230,8 @@ export function createApp(db: AppDatabase, auth: { token: string; userId: string
     app.openAPIRegistry.registerPath({ method: "delete", path: `${path}/{id}`, request: { params: z.object({ id: z.uuid() }), headers: editHeaders }, responses: { 204: { description: `Deleted ${label.toLowerCase()}` }, 404: { description: `${label} not found`, content: { "application/json": { schema: errorSchema } } }, 409: { description: "Revision or idempotency conflict", content: { "application/json": { schema: errorSchema } } } } });
   }
 
-  function jsonRecordCreation<Input, Entry>(path: string, label: string, kind: RecordKind<Input, Entry>, schema: z.ZodType<Input>) {
+  function jsonRecordCreation<Input, Entry>(path: string, kind: RecordKind<Input, Entry>, schema: z.ZodType<Input>, docs?: { 404?: string }) {
+    const { label } = kind;
     app.post(path, async (context) => {
       const key = context.get("idempotencyKey");
       const input = schema.safeParse(await context.req.json().catch(() => null));
@@ -234,18 +241,23 @@ export function createApp(db: AppDatabase, auth: { token: string; userId: string
       return recordResponse(await mutateRecord(db, context.get("userId"), key, kind, { kind: "create", input: input.data }), label);
     });
 
-    app.openAPIRegistry.registerPath({ method: "post", path, request: { headers: mutationHeaders, body: { content: { "application/json": { schema } } } }, responses: { 201: { description: `Created ${label.toLowerCase()}`, content: { "application/json": { schema: kind.schema } } }, 400: { description: "Invalid request", content: { "application/json": { schema: errorSchema } } }, 409: { description: "Idempotency conflict", content: { "application/json": { schema: errorSchema } } } } });
+    const responses: RouteConfig["responses"] = { 201: { description: `Created ${label.toLowerCase()}`, content: { "application/json": { schema: kind.schema } } }, 400: { description: "Invalid request", content: { "application/json": { schema: errorSchema } } }, 409: { description: "Idempotency conflict", content: { "application/json": { schema: errorSchema } } } };
+
+    if (docs?.[404]) responses[404] = { description: docs[404], content: { "application/json": { schema: errorSchema } } };
+    app.openAPIRegistry.registerPath({ method: "post", path, request: { headers: mutationHeaders, body: { content: { "application/json": { schema } } } }, responses });
   }
 
-  jsonRecordCreation(recordPaths.water, "Water entry", waterRecords, waterInputSchema);
-  jsonRecordCreation(recordPaths.measurement, "Measurement", measurementRecords, measurementInputSchema);
-  jsonRecordCreation(recordPaths.workout, "Workout", workoutRecords, workoutInputSchema);
-  jsonRecordCreation(recordPaths.sleep, "Sleep session", sleepRecords, sleepInputSchema);
-  recordDeletion(recordPaths.water, "Water entry", waterRecords);
-  recordDeletion(recordPaths.measurement, "Measurement", measurementRecords);
-  recordDeletion(recordPaths.workout, "Workout", workoutRecords);
-  recordDeletion(recordPaths.sleep, "Sleep session", sleepRecords);
-  recordDeletion(recordPaths.photo, "Photo", photoRecords);
+  jsonRecordCreation(recordPaths.water, waterRecords, waterInputSchema);
+  jsonRecordCreation(recordPaths.measurement, measurementRecords, measurementInputSchema);
+  jsonRecordCreation(recordPaths.workout, workoutRecords, workoutInputSchema);
+  jsonRecordCreation(recordPaths.sleep, sleepRecords, sleepInputSchema);
+  jsonRecordCreation(recordPaths.supplementIntake, intakeRecords, intakeInputSchema, { 404: "Supplement is not on your stack for that day" });
+  recordDeletion(recordPaths.water, waterRecords);
+  recordDeletion(recordPaths.measurement, measurementRecords);
+  recordDeletion(recordPaths.workout, workoutRecords);
+  recordDeletion(recordPaths.sleep, sleepRecords);
+  recordDeletion(recordPaths.photo, photoRecords);
+  recordDeletion(recordPaths.supplementIntake, intakeRecords);
 
   app.get(`${recordPaths.workout}/summary/:date`, async (context) => {
     const date = z.iso.date().safeParse(context.req.param("date"));
@@ -273,7 +285,7 @@ export function createApp(db: AppDatabase, auth: { token: string; userId: string
     if (!contentType) return error(415, "Photo must be a JPEG, PNG, or WebP image");
     const input = { occurredAt: form.data.occurredAt, timeZone: form.data.timeZone, contentType, image };
 
-    return recordResponse(await mutateRecord(db, context.get("userId"), key, photoRecords, { kind: "create", input }), "Photo");
+    return recordResponse(await mutateRecord(db, context.get("userId"), key, photoRecords, { kind: "create", input }), photoRecords.label);
   });
 
   app.get("/v1/progress-photos/:id/image", async (context) => {
@@ -308,23 +320,33 @@ export function createApp(db: AppDatabase, auth: { token: string; userId: string
     return context.json(await saveDashboard(db, context.get("userId"), input.data));
   });
 
-  app.get("/v1/targets/:date", async (context) => {
-    const date = z.iso.date().safeParse(context.req.param("date"));
+  function datedRoutes<T extends DatedTable, Input, Result>(path: string, kind: DatedKind<T, Input, Result>, docs: { label: string; read: string; save: string; invalid: string }) {
+    app.get(`${path}/:date`, async (context) => {
+      const date = z.iso.date().safeParse(context.req.param("date"));
 
-    if (!date.success) return error(400, "Invalid targets request");
+      if (!date.success) return error(400, `Invalid ${docs.label} request`);
 
-    return context.json(await getTargets(db, context.get("userId"), date.data));
-  });
+      return context.json(await getDated(db, kind, context.get("userId"), date.data));
+    });
 
-  // Replaces the whole set from that day on, so repeating the request is safe without an idempotency key.
-  app.put("/v1/targets/:date", async (context) => {
-    const date = z.iso.date().safeParse(context.req.param("date"));
-    const input = targetsSchema.safeParse(await context.req.json().catch(() => null));
+    // Replaces the whole value from that day on, so repeating the request is safe without an idempotency key.
+    app.put(`${path}/:date`, async (context) => {
+      const date = z.iso.date().safeParse(context.req.param("date"));
+      const input = kind.input.safeParse(await context.req.json().catch(() => null));
 
-    if (!date.success || !input.success) return error(400, "Invalid targets");
+      if (!date.success || !input.success) return error(400, `Invalid ${docs.label}`);
 
-    return context.json(await saveTargets(db, context.get("userId"), date.data, input.data));
-  });
+      return context.json(await saveDated(db, kind, context.get("userId"), date.data, input.data));
+    });
+
+    const datedPath = `${path}/{date}`;
+    const params = z.object({ date: z.iso.date() });
+    app.openAPIRegistry.registerPath({ method: "get", path: datedPath, request: { params }, responses: { 200: { description: docs.read, content: { "application/json": { schema: kind.schema } } } } });
+    app.openAPIRegistry.registerPath({ method: "put", path: datedPath, request: { params, body: { content: { "application/json": { schema: kind.input } } } }, responses: { 200: { description: docs.save, content: { "application/json": { schema: kind.schema } } }, 400: { description: docs.invalid, content: { "application/json": { schema: errorSchema } } } } });
+  }
+
+  datedRoutes("/v1/targets", targetsKind, { label: "targets", read: "Targets in force on the local day; defaults until the user saves some", save: "Targets saved to take effect on the local day, until the next change", invalid: "Missing or out-of-range target" });
+  datedRoutes(recordPaths.supplementStack, stackKind, { label: "supplement stack", read: "Supplements in force on the local day; empty until the user saves some", save: "Supplements saved to take effect on the local day, until the next change", invalid: "Invalid supplement or repeated id" });
 
   app.openAPIRegistry.registerPath({ method: "post", path: "/v1/food-entries", request: { headers: mutationHeaders, body: { content: { "application/json": { schema: submissionSchema } } } }, responses: { 201: { description: "Created food entry", content: { "application/json": { schema: entrySchema } } }, 400: { description: "Invalid request", content: { "application/json": { schema: errorSchema } } }, 404: { description: "Catalog food not found", content: { "application/json": { schema: errorSchema } } }, 409: { description: "Idempotency conflict", content: { "application/json": { schema: errorSchema } } } } });
   app.openAPIRegistry.registerPath({ method: "post", path: "/v1/food-entries/{id}/repeats", request: { params: z.object({ id: z.uuid() }), headers: mutationHeaders, body: { content: { "application/json": { schema: repeatInputSchema } } } }, responses: { 201: { description: "A new entry copying the saved food, amount and nutrients", content: { "application/json": { schema: entrySchema } } }, 400: { description: "Invalid request", content: { "application/json": { schema: errorSchema } } }, 404: { description: "Entry not found", content: { "application/json": { schema: errorSchema } } }, 409: { description: "Idempotency conflict", content: { "application/json": { schema: errorSchema } } } } });
@@ -337,8 +359,6 @@ export function createApp(db: AppDatabase, auth: { token: string; userId: string
   app.openAPIRegistry.registerPath({ method: "post", path: recordPaths.photo, request: { headers: mutationHeaders, body: { content: { "multipart/form-data": { schema: photoUploadSchema } } } }, responses: { 201: { description: "Uploaded progress photo", content: { "application/json": { schema: photoSchema } } }, 400: { description: "Invalid request", content: { "application/json": { schema: errorSchema } } }, 409: { description: "Idempotency conflict", content: { "application/json": { schema: errorSchema } } }, 413: { description: "Photo larger than 8 MB", content: { "application/json": { schema: errorSchema } } }, 415: { description: "Not a JPEG, PNG, or WebP image", content: { "application/json": { schema: errorSchema } } } } });
   app.openAPIRegistry.registerPath({ method: "get", path: "/v1/progress-photos/{id}/image", request: { params: z.object({ id: z.uuid() }) }, responses: { 200: { description: "The stored image bytes", content: { "image/jpeg": { schema: z.string().meta({ format: "binary" }) }, "image/png": { schema: z.string().meta({ format: "binary" }) }, "image/webp": { schema: z.string().meta({ format: "binary" }) } } }, 404: { description: "Photo not found", content: { "application/json": { schema: errorSchema } } } } });
   app.openAPIRegistry.registerPath({ method: "get", path: "/v1/overview/{date}", request: { params: z.object({ date: z.iso.date() }) }, responses: { 200: { description: "Nutrition, sports, measurements, sleep, and recent progress photos for the local day", content: { "application/json": { schema: overviewSchema } } } } });
-  app.openAPIRegistry.registerPath({ method: "get", path: "/v1/targets/{date}", request: { params: z.object({ date: z.iso.date() }) }, responses: { 200: { description: "Targets in force on the local day; defaults until the user saves some", content: { "application/json": { schema: targetsForDaySchema } } } } });
-  app.openAPIRegistry.registerPath({ method: "put", path: "/v1/targets/{date}", request: { params: z.object({ date: z.iso.date() }), body: { content: { "application/json": { schema: targetsSchema } } } }, responses: { 200: { description: "Targets saved to take effect on the local day, until the next change", content: { "application/json": { schema: targetsForDaySchema } } }, 400: { description: "Missing or out-of-range target", content: { "application/json": { schema: errorSchema } } } } });
   app.doc31("/openapi.json", { openapi: "3.1.0", info: { title: "Nouri API", version: "1.0.0" } });
 
   return app;

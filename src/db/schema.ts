@@ -2,6 +2,7 @@ import { bigint, customType, date, integer, jsonb, pgTable, primaryKey, text, ti
 import type { FoodQuantity } from "../contracts.js";
 import type { MeasurementKind } from "../measurements/contract.js";
 import type { PhotoType } from "../photos/contract.js";
+import type { Dose, Supplement, SupplementKind } from "../supplements/contract.js";
 import type { Activity, StrengthExercise } from "../workouts/contract.js";
 import { sql } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
@@ -101,6 +102,22 @@ export const userTargets = pgTable("user_targets", {
   weightG: integer("weight_g"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [primaryKey({ columns: [table.userId, table.effectiveFrom] })]);
+
+export const supplementStacks = pgTable("supplement_stacks", {
+  userId: uuid("user_id").notNull(),
+  effectiveFrom: date("effective_from").notNull(),
+  supplements: jsonb("supplements").$type<Supplement[]>().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [primaryKey({ columns: [table.userId, table.effectiveFrom] })]);
+
+export const supplementIntakes = pgTable("supplement_intakes", {
+  ...journalColumns,
+  ...occurredAtColumn,
+  supplementId: uuid("supplement_id").notNull(),
+  name: text("name").notNull(),
+  kind: text("kind").$type<SupplementKind>().notNull(),
+  dose: jsonb("dose").$type<Dose>().notNull(),
+}, (table) => [activeDayIndex("supplement_intakes", table)]);
 
 export const mutationReceipts = pgTable("mutation_receipts", {
   userId: uuid("user_id").notNull(),

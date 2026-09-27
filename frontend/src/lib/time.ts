@@ -24,3 +24,44 @@ export function entryTime({ occurredAt, timeZone }: Logged): string {
 export function entryHour({ occurredAt, timeZone }: Logged): number {
   return Number(entryClock(timeZone).formatToParts(new Date(occurredAt)).find((part) => part.type === "hour")?.value);
 }
+
+export const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+
+// `time` is a local "HH:MM"; without it the current time of day is used.
+export function occurredAt(value: string, time?: string): string {
+  const [y = 0, m = 1, d = 1] = value.split("-").map(Number);
+  const now = new Date();
+
+  if (time) {
+    const [hours = 0, minutes = 0] = time.split(":").map(Number);
+
+    return new Date(y, m - 1, d, hours, minutes).toISOString();
+  }
+
+  return new Date(y, m - 1, d, now.getHours(), now.getMinutes(), now.getSeconds()).toISOString();
+}
+
+export function localDate(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+export function shiftDate(value: string, days: number): string {
+  const [y = 0, m = 1, d = 1] = value.split("-").map(Number);
+
+  return localDate(new Date(y, m - 1, d + days));
+}
+
+export function dateLabel(value: string): string {
+  const [y = 0, m = 1, d = 1] = value.split("-").map(Number);
+
+  return new Intl.DateTimeFormat("en", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(new Date(y, m - 1, d));
+}
+
+export function currentTime(now = new Date()): string {
+  return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+}

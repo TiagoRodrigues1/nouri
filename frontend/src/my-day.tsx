@@ -1,6 +1,6 @@
 import * as stylex from "@stylexjs/stylex";
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { Beef, Droplet, Flame, Trash2, Wheat } from "lucide-react";
+import { Beef, Droplet, Flame, Pencil, Trash2, Wheat } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { colors } from "./theme.stylex";
 import { styles } from "./my-day-styles";
@@ -8,7 +8,9 @@ import { DashboardCardsDialog, useDashboardCards } from "./dashboard-cards";
 import { clock, entryHour, entryTime } from "./lib/time";
 import { useTargets } from "./lib/use-targets";
 import { TargetsNotice } from "./targets-notice";
-import { useWater } from "./lib/use-water";
+import { useSupplements } from "./lib/use-supplements";
+import { useDashboardPage } from "./dashboard-page-context";
+import { SupplementsCard } from "./my-day/supplements-card";
 import { format, type CardId, type Day, type FoodEntry } from "./lib/api";
 import { ActivityCard, FastingCard, Gauge, LargestCard, MealsCard, MixCard, WaterCard, WindowCard } from "./my-day/cards";
 
@@ -17,20 +19,13 @@ type Row =
   | { kind: "entry"; entry: FoodEntry; at: Date }
   | { kind: "now" };
 
-type MyDayProps = {
-  token: string;
-  day: Day | undefined;
-  date: string;
-  isToday: boolean;
-  status: ReactNode;
-  deletePending: boolean;
-  onDelete: (entry: FoodEntry) => void;
-  water: ReturnType<typeof useWater>;
-  customizingCards: boolean;
-  onCustomizingCardsChange: (open: boolean) => void;
-};
+type MyDayProps = { day: Day | undefined; status: ReactNode };
 
-export function MyDay({ token, day, date, isToday, status, deletePending, onDelete, water, customizingCards, onCustomizingCardsChange }: MyDayProps) {
+export function MyDay({ day, status }: MyDayProps) {
+  const { token, date, isToday, onEditFood: onEdit, foodDelete, water, onManageSupplements, customizingCards, onCustomizingCardsChange } = useDashboardPage();
+  const supplements = useSupplements(token, date);
+  const busy = foodDelete.isPending;
+  const onDelete = (entry: FoodEntry) => foodDelete.mutate(entry);
   const now = useNow();
   const entries = day?.food.entries ?? [];
   const totals = day?.food.totals;
@@ -72,6 +67,16 @@ export function MyDay({ token, day, date, isToday, status, deletePending, onDele
         onDelete={water.remove}
       />
     ),
+    supplements: (
+      <SupplementsCard
+        connected={connected}
+        day={day?.supplements}
+        pending={supplements.pending}
+        onTake={supplements.take}
+        onRemove={supplements.remove}
+        onManage={onManageSupplements}
+      />
+    ),
     mix: <MixCard kcal={totals?.kcal} proteinG={totals?.proteinG} carbsG={totals?.carbsG} fatG={totals?.fatG} />,
     activity: <ActivityCard token={token} date={date} targets={targets} />,
     fasting: isToday && last ? <FastingCard since={now.getTime() - last.getTime()} last={last} goalHours={targets.fastingHours} /> : <WindowCard first={times[0]} last={times.at(-1)} />,
@@ -86,7 +91,8 @@ export function MyDay({ token, day, date, isToday, status, deletePending, onDele
         now={isToday ? now : null}
         summary={connected ? `${entries.length} ${entries.length === 1 ? "food" : "foods"} · ${format(totals?.kcal)} kcal` : ""}
         status={status}
-        deletePending={deletePending}
+        busy={busy}
+        onEdit={onEdit}
         onDelete={onDelete}
       />
       <div {...stylex.props(styles.side)}>
@@ -163,11 +169,12 @@ type TimelineProps = {
   now: Date | null;
   summary: string;
   status: ReactNode;
-  deletePending: boolean;
+  busy: boolean;
+  onEdit: (entry: FoodEntry) => void;
   onDelete: (entry: FoodEntry) => void;
 };
 
-function Timeline({ entries, now, summary, status, deletePending, onDelete }: TimelineProps) {
+function Timeline({ entries, now, summary, status, busy, onEdit, onDelete }: TimelineProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const focusRef = useRef<HTMLLIElement>(null);
   const hasNow = now !== null;
@@ -225,9 +232,19 @@ function Timeline({ entries, now, summary, status, deletePending, onDelete }: Ti
                   <Button
                     variant="ghost"
                     size="icon"
-                    {...stylex.props(styles.entryDelete)}
+                    {...stylex.props(styles.entryAction)}
+                    aria-label={`Edit ${entry.food.name}`}
+                    disabled={busy}
+                    onClick={() => onEdit(entry)}
+                  >
+                    <Pencil size={14} />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    {...stylex.props(styles.entryAction)}
                     aria-label={`Delete ${entry.food.name}`}
-                    disabled={deletePending}
+                    disabled={busy}
                     onClick={() => onDelete(entry)}
                   >
                     <Trash2 size={14} />

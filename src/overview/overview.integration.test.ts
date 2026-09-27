@@ -71,6 +71,17 @@ void test("overview combines nutrition, sports, measurements, sleep, and photos"
     assert.deepEqual(empty.sleep, { sessions: [], totalMinutes: null, stages: null });
     assert.equal(empty.measurements.bmi, null);
     assert.deepEqual(empty.photos, []);
+    assert.deepEqual(empty.supplements, { items: [], unlisted: [] });
+
+    // Supplements: the day's checklist comes with the overview, so ticking one shows up here.
+    const creatine = { id: randomUUID(), name: "Creatine", kind: "creatine", dose: { amount: 5, unit: "g" } };
+    assert.equal((await app.request("/v1/supplement-stack/2026-09-24", { method: "PUT", headers: { ...auth, "Content-Type": "application/json" }, body: JSON.stringify({ supplements: [creatine] }) })).status, 200);
+    const taken = await app.request("/v1/supplement-intakes", { method: "POST", headers: { ...auth, "Content-Type": "application/json", "Idempotency-Key": randomUUID() }, body: JSON.stringify({ occurredAt: "2026-09-24T07:40:00Z", timeZone: zone, supplementId: creatine.id }) });
+    assert.equal(taken.status, 201);
+    const checklist = (await overview("2026-09-24")).supplements;
+    assert.deepEqual(checklist.items[0].supplement, creatine);
+    assert.deepEqual(checklist.items[0].intakes, [await taken.json()]);
+    assert.deepEqual((await overview("2026-09-23")).supplements, { items: [], unlisted: [] });
 
     // Measurements carry forward, and BMI uses the latest weight and height.
     assert.equal((await post("/v1/measurements", { occurredAt: "2026-09-20T08:00:00Z", timeZone: zone, kind: "height", value: 180 })).status, 201);

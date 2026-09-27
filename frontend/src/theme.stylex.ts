@@ -36,6 +36,8 @@ export const colors = stylex.defineVars({
   exercise: "#78d916",
   workouts: "#12c8d8",
   measurements: "#db2777",
+  supplements: "#e0457b",
+  supplementsSoft: "#fdeef3",
   sleep: "#6366f1",
   sleepAwake: "#f59e0b",
   sleepLight: "#93c5fd",

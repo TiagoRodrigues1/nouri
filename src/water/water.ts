@@ -22,6 +22,7 @@ function entry(row: WaterRow): WaterEntry {
 
 export const waterRecords: RecordKind<WaterInput, WaterEntry> = {
   name: "water",
+  label: "Water entry",
   table: waterEntries,
   schema: waterEntrySchema,
   create: async (tx, userId, input) => {
@@ -33,7 +34,7 @@ export const waterRecords: RecordKind<WaterInput, WaterEntry> = {
 
     if (!row) throw new Error("Water insert returned no row");
 
-    return entry(row);
+    return { outcome: "created", entry: entry(row) };
   },
 };
 

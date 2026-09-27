@@ -12,18 +12,20 @@ export type RecordCommand<Input> =
 
 export type RecordMutationResult<Entry> =
   | { outcome: "created"; entry: Entry }
-  | { outcome: "deleted" | "missing" | "stale" | "key-reuse" };
+  | { outcome: "deleted" | "missing" | "stale" | "key-reuse" }
+  | { outcome: "unknown-reference"; message: string };
 
 export type RecordKind<Input, Entry> = {
   // Receipts share one key space, so the fingerprint names the record kind.
   name: string;
+  label: string;
   table: PgTable;
   schema: z.ZodType<Entry>;
-  create: (tx: Transaction, userId: string, input: Input) => Promise<Entry>;
-  // What identifies a create request when the input is too large to hash as JSON.
   fingerprint?: (input: Input) => string;
-  // Extra columns to clear when a record is removed.
   erase?: SQL;
+  create: (tx: Transaction, userId: string, input: Input) => Promise<
+    { outcome: "created"; entry: Entry } | { outcome: "unknown-reference"; message: string }
+  >;
 };
 
 function hash<Input, Entry>(kind: RecordKind<Input, Entry>, command: RecordCommand<Input>): string {
@@ -34,7 +36,7 @@ function hash<Input, Entry>(kind: RecordKind<Input, Entry>, command: RecordComma
   return createHash("sha256").update(JSON.stringify(request)).digest("hex");
 }
 
-export async function softDelete(tx: Transaction, table: PgTable, userId: string, id: string, revision: number, erase: SQL | undefined): Promise<RecordMutationResult<never>> {
+export async function softDelete(tx: Transaction, table: PgTable, userId: string, id: string, revision: number, erase: SQL | undefined): Promise<{ outcome: "deleted" | "missing" | "stale" }> {
   const deleted = await tx.execute(sql`
     UPDATE ${table} SET revision = revision + 1, deleted_at = now(), updated_at = now()${erase ? sql`, ${erase}` : sql``}
     WHERE user_id = ${userId} AND id = ${id} AND revision = ${revision} AND deleted_at IS NULL
@@ -60,7 +62,9 @@ export async function mutateRecord<Input, Entry>(db: AppDatabase, userId: string
     if (outcome === "updated") throw new Error("Journal records are never updated");
 
     return { outcome };
-  }, async (tx): Promise<RecordMutationResult<Entry>> => command.kind === "create"
-    ? { outcome: "created", entry: await kind.create(tx, userId, command.input) }
-    : softDelete(tx, kind.table, userId, command.id, command.revision, kind.erase));
+  }, async (tx): Promise<RecordMutationResult<Entry>> => {
+    if (command.kind === "delete") return softDelete(tx, kind.table, userId, command.id, command.revision, kind.erase);
+
+    return kind.create(tx, userId, command.input);
+  }, "unknown-reference");
 }

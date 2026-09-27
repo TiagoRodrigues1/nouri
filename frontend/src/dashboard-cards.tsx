@@ -14,6 +14,7 @@ import { getDashboard, saveDashboard, type CardId } from "./lib/api";
 export const cardLabels: Record<CardId, { name: string; description: string }> = {
   totals: { name: "Daily totals", description: "Energy, protein, carbs, and fat against your targets" },
   water: { name: "Water", description: "Log drinks and track your daily goal" },
+  supplements: { name: "Supplements", description: "Tick off the supplements you take each day" },
   mix: { name: "Energy mix", description: "How protein, carbs, and fat split your energy" },
   activity: { name: "Activity", description: "Workouts and movement for the day" },
   fasting: { name: "Fasting", description: "Time since your last food, or your eating window" },
