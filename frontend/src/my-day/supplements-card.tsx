@@ -1,5 +1,5 @@
 import * as stylex from "@stylexjs/stylex";
-import { Check, Pill, Settings2, Trash2, X } from "lucide-react";
+import { Check, Pill, Settings2, Trash2 } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { colors } from "../theme.stylex";
 import { styles as cardStyles } from "../my-day-styles";
@@ -44,18 +44,13 @@ export function SupplementsCard({ connected, day, pending, onTake, onRemove, onM
                 <span {...stylex.props(styles.name, last && styles.done)}>{supplement.name}</span>
                 <span {...stylex.props(styles.meta)}>{meta}</span>
               </span>
-              {/* One click takes it now; the X removes the latest intake, so a slip is one click to undo. */}
+              {/* One click takes it now; clicking the taken button removes the latest intake, so a slip is one click to undo. */}
               {last ? (
-                <>
-                  <time dateTime={last.occurredAt} {...stylex.props(styles.takenTime)}>
-                    <Check size={13} /> {timesLabel}{takenAt(last)}
-                  </time>
-                  <Button variant="ghost" size="icon-sm" {...stylex.props(styles.undo)} aria-label={unmarkLabel} title="Undo" disabled={!connected || pending} onClick={() => onRemove(last)}>
-                    <X size={15} />
-                  </Button>
-                </>
+                <Button variant="secondary" size="sm" {...stylex.props(styles.taken)} aria-label={unmarkLabel} disabled={!connected || pending} onClick={() => onRemove(last)}>
+                  <Check size={15} /> {timesLabel}{takenAt(last)}
+                </Button>
               ) : (
-                <Button variant="outline" size="icon-sm" {...stylex.props(styles.take)} aria-label={markLabel} title="Mark as taken" disabled={!connected || pending} onClick={() => onTake(supplement)}>
+                <Button variant="outline" size="icon-sm" aria-label={markLabel} title="Mark as taken" disabled={!connected || pending} onClick={() => onTake(supplement)}>
                   <Check size={15} />
                 </Button>
               )}
@@ -111,16 +106,5 @@ const styles = stylex.create({
   name: { fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%" },
   done: { color: colors.mutedForeground },
   meta: { color: colors.mutedForeground, fontSize: 11, fontWeight: 400 },
-  takenTime: {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: 4,
-    color: colors.supplements,
-    fontSize: 11,
-    fontWeight: 600,
-    fontVariantNumeric: "tabular-nums",
-    whiteSpace: "nowrap",
-  },
-  take: { color: { default: colors.supplements, ":hover": colors.supplements } },
-  undo: { color: { default: colors.mutedForeground, ":hover": colors.foreground } },
+  taken: { color: colors.supplements, backgroundColor: colors.supplementsSoft, fontVariantNumeric: "tabular-nums" },
 });
