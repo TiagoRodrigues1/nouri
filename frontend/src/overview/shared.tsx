@@ -5,8 +5,6 @@ import { Button } from "../components/ui/button";
 import { Trash2 } from "lucide-react";
 import { styles } from "../overview-styles";
 
-export const clock = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit" });
-
 export function Section({ title, description, icon, color, action, children }: { title: string; description: string; icon: ReactNode; color: string; action?: ReactNode; children: ReactNode }) {
   const id = useId();
 

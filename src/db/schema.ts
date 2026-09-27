@@ -84,6 +84,24 @@ export const dashboardLayouts = pgTable("dashboard_layouts", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const userTargets = pgTable("user_targets", {
+  userId: uuid("user_id").notNull(),
+  effectiveFrom: date("effective_from").notNull(),
+  kcal: integer("kcal").notNull(),
+  proteinG: integer("protein_g").notNull(),
+  carbsG: integer("carbs_g").notNull(),
+  fatG: integer("fat_g").notNull(),
+  waterMl: integer("water_ml").notNull(),
+  steps: integer("steps").notNull(),
+  sleepMinutes: integer("sleep_minutes").notNull(),
+  fastingHours: integer("fasting_hours").notNull(),
+  burnedKcal: integer("burned_kcal").notNull(),
+  exerciseMinutes: integer("exercise_minutes").notNull(),
+  workouts: integer("workouts").notNull(),
+  weightG: integer("weight_g"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [primaryKey({ columns: [table.userId, table.effectiveFrom] })]);
+
 export const mutationReceipts = pgTable("mutation_receipts", {
   userId: uuid("user_id").notNull(),
   key: text("key").notNull(),

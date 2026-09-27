@@ -45,7 +45,10 @@ export const workoutDaySchema = z.object({
   energyKcal: z.number().int().nullable(),
 });
 
-export const workoutSummarySchema = workoutDaySchema.pick({ entryCount: true, totalMinutes: true });
+export const workoutSummarySchema = workoutDaySchema.pick({ entryCount: true, totalMinutes: true }).extend({
+  // Sum of the estimates that were recorded; workouts without one add nothing.
+  burnedKcal: z.number().int().nullable(),
+});
 
 export type WorkoutSummary = z.infer<typeof workoutSummarySchema>;
 

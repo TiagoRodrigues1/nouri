@@ -12,6 +12,7 @@ import {
   Dumbbell,
   Moon,
   SlidersHorizontal,
+  Target,
   UtensilsCrossed,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -32,6 +33,7 @@ import { useWater } from "./lib/use-water";
 import { submissionSchema, type FoodSubmission } from "../../src/food/contract";
 import { LogFoodDialog } from "./log-food-dialog";
 import { ConnectionDialog } from "./connection-dialog";
+import { TargetsDialog } from "./targets-dialog";
 import { TodayPage } from "./today-page";
 import { FoodPage } from "./food-page";
 import { Overview } from "./overview";
@@ -103,6 +105,7 @@ export function Dashboard() {
   const [recordDialog, setRecordDialog] = useState<"workout" | "sleep" | "measurement" | null>(null);
   const [connectionOpen, setConnectionOpen] = useState(false);
   const [customizingCards, setCustomizingCards] = useState(false);
+  const [targetsOpen, setTargetsOpen] = useState(false);
 
   const journal = useJournal(token);
   const water = useWater(token, date, () => setConnectionOpen(true));
@@ -261,6 +264,14 @@ export function Dashboard() {
             <UtensilsCrossed size={17} {...stylex.props(view === "food" && styles.iconAccent)} />
             Food
           </Link>
+          <button
+            type="button"
+            {...stylex.props(styles.navItem, targetsOpen && styles.navItemActive)}
+            onClick={() => (token ? setTargetsOpen(true) : setConnectionOpen(true))}
+          >
+            <Target size={17} {...stylex.props(targetsOpen && styles.iconAccent)} />
+            Targets
+          </button>
         </nav>
         <div {...stylex.props(styles.sidebarBottom)}>
           <div {...stylex.props(styles.profile)}>
@@ -315,6 +326,7 @@ export function Dashboard() {
           <Outlet />
         </div>
       </main>
+      <TargetsDialog open={targetsOpen} onOpenChange={setTargetsOpen} token={token} />
       <ConnectionDialog open={connectionOpen} onOpenChange={setConnectionOpen} token={token} onConnect={connect} onDisconnect={disconnect} />
       <LogFoodDialog open={logOpen} onOpenChange={setLogOpen} token={token} date={date} isToday={isToday} pending={createMutation.isPending} onSave={saveFood} onConnect={() => { setLogOpen(false); setConnectionOpen(true); }} />
       <WorkoutDialog open={recordDialog === "workout"} onOpenChange={(open) => setRecordDialog(open ? "workout" : null)} date={date} pending={journal.create.isPending} onSave={(input) => saveRecord({ path: recordPaths.workout, input }, "Workout")} />

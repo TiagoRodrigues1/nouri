@@ -65,9 +65,13 @@ export async function getWorkoutDay(db: AppDatabase, userId: string, date: strin
 }
 
 export async function getWorkoutSummary(db: AppDatabase, userId: string, date: string): Promise<WorkoutSummary> {
-  const [row] = await db.select({ entryCount: count(), totalMinutes: sum(workouts.durationMinutes) }).from(workouts).where(and(
+  const [row] = await db.select({ entryCount: count(), totalMinutes: sum(workouts.durationMinutes), burnedKcal: sum(workouts.energyKcal) }).from(workouts).where(and(
     eq(workouts.userId, userId), eq(workouts.localDate, date), isNull(workouts.deletedAt),
   ));
 
-  return { entryCount: row?.entryCount ?? 0, totalMinutes: row?.totalMinutes == null ? null : Number(row.totalMinutes) };
+  return {
+    entryCount: row?.entryCount ?? 0,
+    totalMinutes: row?.totalMinutes == null ? null : Number(row.totalMinutes),
+    burnedKcal: row?.burnedKcal == null ? null : Number(row.burnedKcal),
+  };
 }

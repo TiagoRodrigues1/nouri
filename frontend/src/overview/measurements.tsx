@@ -6,13 +6,15 @@ import { measurementLabels } from "../overview-dialogs";
 import { dateLabel, format, type Overview as OverviewData, type Photo } from "../lib/api";
 import { styles } from "../overview-styles";
 import { colors } from "../theme.stylex";
-import { DeleteButton, Empty, Section, Sparkline, Stat, Tile, Value, Caption, clock } from "./shared";
+import { clock } from "../lib/time";
+import { DeleteButton, Empty, Section, Sparkline, Stat, Tile, Value, Caption } from "./shared";
 import { PhotosTile } from "./photos";
 
 type MeasurementsProps = {
   token: string;
   date: string;
   measurements: OverviewData["measurements"];
+  weightGoalKg: number | null;
   photos: Photo[];
   busy: boolean;
   onLog: () => void;
@@ -32,7 +34,14 @@ function bmiCategory(bmi: number): string {
   return "Obesity";
 }
 
-export function MeasurementsSection({ token, date, measurements, photos, busy, onLog, onDelete, onUpload, onDeletePhoto }: MeasurementsProps) {
+function goalProgress(weight: number | undefined, goal: number): string {
+  if (weight === undefined) return `Goal ${format(goal, 1)} kg`;
+  const gap = Math.abs(weight - goal);
+
+  return gap < 0.05 ? `At your ${format(goal, 1)} kg goal` : `${format(gap, 1)} kg from your ${format(goal, 1)} kg goal`;
+}
+
+export function MeasurementsSection({ token, date, measurements, weightGoalKg, photos, busy, onLog, onDelete, onUpload, onDeletePhoto }: MeasurementsProps) {
   const { latest, bmi, weightChange } = measurements;
   const asOf = (recorded: { localDate: string } | null) => (recorded && recorded.localDate !== date ? `Recorded ${dateLabel(recorded.localDate)}` : "Recorded this day");
 
@@ -52,6 +61,7 @@ export function MeasurementsSection({ token, date, measurements, photos, busy, o
         <Value value={format(latest.weight?.value, 1)} unit="kg" />
         <Sparkline points={measurements.weightHistory.map((point) => point.value)} />
         <Caption>{latest.weight ? asOf(latest.weight) : "No weight recorded yet"}</Caption>
+        {weightGoalKg !== null && <Caption>{goalProgress(latest.weight?.value, weightGoalKg)}</Caption>}
       </Tile>
       <Tile title="BMI" icon={<ActivityIcon size={16} />} aside={bmi === null ? null : <Badge variant="secondary">{bmiCategory(bmi)}</Badge>}>
         <Value value={format(bmi, 1)} />

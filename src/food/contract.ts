@@ -55,6 +55,12 @@ export const catalogInputSchema = z.object({
 export const submissionSchema = z.union([manualInputSchema, catalogInputSchema]).refine((input) =>
   !("catalogRef" in input.food && input.food.catalogRef?.provider === "ciqual"));
 
+// Logging a saved entry again copies what was recorded, so it keeps working after the catalog it came from changes.
+export const repeatInputSchema = z.object({
+  occurredAt: occurredAtSchema,
+  timeZone: timeZoneSchema,
+}).strict();
+
 export const entrySchema = recordBaseSchema.extend({
   food: manualInputSchema.shape.food.extend({ catalogRef: recordedRefSchema.nullable() }),
 });
@@ -85,6 +91,8 @@ export type FoodInput = z.infer<typeof manualInputSchema>;
 export type CatalogFoodInput = z.infer<typeof catalogInputSchema>;
 
 export type FoodSubmission = z.infer<typeof submissionSchema>;
+
+export type RepeatInput = z.infer<typeof repeatInputSchema>;
 
 export type FoodEntry = z.infer<typeof entrySchema>;
 

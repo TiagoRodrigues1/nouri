@@ -3,9 +3,11 @@ import { Fragment, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs";
-import { Button } from "./components/ui/button";
 import { useWater } from "./lib/use-water";
 import { useJournal } from "./overview/use-journal";
+import { useTargets } from "./lib/use-targets";
+import { queryStatus } from "./query-status";
+import { TargetsNotice } from "./targets-notice";
 import { NutritionSection } from "./overview/nutrition";
 import { SportsSection } from "./overview/sports";
 import { MeasurementsSection } from "./overview/measurements";
@@ -63,17 +65,19 @@ export function Overview({ token, date, onLogFood, onLogWorkout, onLogSleep, onL
   }
 
   const data = query.data;
+  const targets = useTargets(token, date);
   const remove = (path: RecordPath, label: string) => (entry: { id: string; revision: number }) => journal.remove.mutate({ path, label, ...entry });
   const busy = journal.create.isPending || journal.remove.isPending;
 
   const sections: Record<Category, ReactNode> = data ? {
-    nutrition: <NutritionSection nutrition={data.nutrition} onLogFood={onLogFood} waterPending={water.pending} onAddWater={water.add} />,
+    nutrition: <NutritionSection nutrition={data.nutrition} targets={targets.targets} onLogFood={onLogFood} waterPending={water.pending} onAddWater={water.add} />,
     sports: <SportsSection sports={data.sports} busy={busy} onLog={onLogWorkout} onDelete={remove("/v1/workouts", "Workout")} />,
     measurements: (
       <MeasurementsSection
         token={token}
         date={date}
         measurements={data.measurements}
+        weightGoalKg={targets.targets?.weightKg ?? null}
         photos={data.photos}
         busy={busy}
         onLog={onLogMeasurement}
@@ -82,19 +86,10 @@ export function Overview({ token, date, onLogFood, onLogWorkout, onLogSleep, onL
         onDeletePhoto={remove("/v1/progress-photos", "Photo")}
       />
     ),
-    sleep: <SleepSection sleep={data.sleep} busy={busy} onLog={onLogSleep} onDelete={remove("/v1/sleep-sessions", "Sleep session")} />,
+    sleep: <SleepSection sleep={data.sleep} goalMinutes={targets.targets?.sleepMinutes} busy={busy} onLog={onLogSleep} onDelete={remove("/v1/sleep-sessions", "Sleep session")} />,
   } : { nutrition: null, sports: null, measurements: null, sleep: null };
 
-  const status = !token ? (
-    "Connect your log to see your overview."
-  ) : query.isPending ? (
-    "Loading your overview…"
-  ) : query.isError ? (
-    <>
-      {query.error.message}{" "}
-      <Button variant="outline" size="sm" onClick={() => void query.refetch()}>Try again</Button>
-    </>
-  ) : null;
+  const status = queryStatus(token, query, { disconnected: "Connect your log to see your overview.", loading: "Loading your overview…" });
 
   return (
     <>
@@ -109,6 +104,7 @@ export function Overview({ token, date, onLogFood, onLogWorkout, onLogSleep, onL
           <p {...stylex.props(styles.status)}>{status}</p>
         ) : (
           <>
+            <TargetsNotice state={targets} style={styles.targetsNotice} />
             <TabsContent value="all" {...stylex.props(styles.sections)}>
               {categories.map((category) => <Fragment key={category.id}>{sections[category.id]}</Fragment>)}
             </TabsContent>
