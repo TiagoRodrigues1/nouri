@@ -73,9 +73,9 @@ Imported sleep and workouts are outside the manual delete path, so deleting thei
 
 ## Automated tests
 
-`src/google-health/google-health.integration.test.ts` runs the real app against PostgreSQL. `src/test/fake-google.ts` stands in for Google. It serves the documented shapes from `src/google-health/fixtures/` and checks client credentials, the redirect URI, and PKCE. Its subtests cover first import of sleep and workouts, repeated import, correction, deletion and revival, token refresh, an outage, a revoked grant, reconnect, a sleep-only grant, disconnect, and CSRF rejections. `src/test/wearables.test.ts` covers the exercise mapping.
+`tests/integration/google-health.test.ts` runs the real app against PostgreSQL. `tests/fake-google.ts` stands in for Google. It serves the documented shapes from `src/google-health/fixtures/` and checks client credentials, the redirect URI, and PKCE. Its subtests cover first import of sleep and workouts, repeated import, correction, deletion and revival, token refresh, an outage, a revoked grant, reconnect, a sleep-only grant, disconnect, and CSRF rejections. `tests/unit/wearables.test.ts` covers the exercise mapping.
 
-`src/test/fake-google-server.ts` runs the app with the same fixtures, for driving the page in a browser without a Google account. A sync there proves Nouri's handling of fixtures. It is not a live connection.
+`tests/fake-google-server.ts` runs the app with the same fixtures, for driving the page in a browser without a Google account. A sync there proves Nouri's handling of fixtures. It is not a live connection.
 
 ## Live setup
 

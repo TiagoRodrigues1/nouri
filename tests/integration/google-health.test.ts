@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
-import { googleHealthProvider } from "./google.js";
-import type { SleepDay, SleepSession } from "../sleep/contract.js";
-import type { Workout, WorkoutDay } from "../workouts/contract.js";
-import { FakeGoogle, fixture, googleConfig } from "../test/fake-google.js";
-import { createHarness } from "../test/harness.js";
+import { googleHealthProvider } from "../../src/google-health/google.js";
+import type { SleepDay, SleepSession } from "../../src/sleep/contract.js";
+import type { Workout, WorkoutDay } from "../../src/workouts/contract.js";
+import { FakeGoogle, fixture, googleConfig } from "../fake-google.js";
+import { createHarness } from "../harness.js";
 
 const google = new FakeGoogle();
 

@@ -10,7 +10,7 @@ To drive Connect without a Google account, start the fixture-backed app on the r
 source "/tmp/nouri-verify-$RUN_ID/env"
 PORT2=<free port>
 setsid env DATABASE_URL="$DATABASE_URL" API_TOKEN="$API_TOKEN" API_USER_ID="$API_USER_ID" PORT=$PORT2 \
-  node --import tsx src/test/fake-google-server.ts > "/tmp/nouri-verify-$RUN_ID/fake-google.log" 2>&1 &
+  node --import tsx tests/fake-google-server.ts > "/tmp/nouri-verify-$RUN_ID/fake-google.log" 2>&1 &
 echo $! > "/tmp/nouri-verify-$RUN_ID/fake-google-pid"
 ```
 

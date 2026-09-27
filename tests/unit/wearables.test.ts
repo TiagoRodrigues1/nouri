@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { wearablesFromEnv } from "../google-health/config.js";
-import { exerciseDataPointSchema, sleepDataPointSchema } from "../google-health/contract.js";
-import { sleepRecord } from "../google-health/sleep-import.js";
-import { workoutRecord } from "../google-health/workout-import.js";
-import { fixture, googleConfig } from "./fake-google.js";
+import { wearablesFromEnv } from "../../src/google-health/config.js";
+import { exerciseDataPointSchema, sleepDataPointSchema } from "../../src/google-health/contract.js";
+import { sleepRecord } from "../../src/google-health/sleep-import.js";
+import { workoutRecord } from "../../src/google-health/workout-import.js";
+import { fixture, googleConfig } from "../fake-google.js";
 
 void test("wearable configuration requires complete credentials, callback path, and encryption key", () => {
   assert.equal(wearablesFromEnv({}, fetch), undefined);

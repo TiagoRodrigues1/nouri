@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { z } from "zod";
-import { googleEndpoints } from "../google-health/google.js";
+import { googleEndpoints } from "../src/google-health/google.js";
 
 const clientId = "nouri-test.apps.googleusercontent.com";
 
@@ -37,7 +37,7 @@ function civilStart(point: Fixture): string {
 const bothScopes = "https://www.googleapis.com/auth/googlehealth.sleep.readonly https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly";
 
 export function fixture(name: string): Fixture {
-  return pointSchema.parse(JSON.parse(readFileSync(new URL(`../google-health/fixtures/${name}.json`, import.meta.url), "utf8")));
+  return pointSchema.parse(JSON.parse(readFileSync(new URL(`../src/google-health/fixtures/${name}.json`, import.meta.url), "utf8")));
 }
 
 function json(status: number, body: Fixture | Record<string, string | number | Fixture[] | undefined>): Response {

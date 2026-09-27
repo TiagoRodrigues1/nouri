@@ -4,9 +4,9 @@ import { serve } from "@hono/node-server";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { z } from "zod";
-import { createApp } from "../app.js";
-import { oauthCallbackPath } from "../wearables/provider.js";
-import { wearablesFromEnv } from "../google-health/config.js";
+import { createApp } from "../src/app.js";
+import { oauthCallbackPath } from "../src/wearables/provider.js";
+import { wearablesFromEnv } from "../src/google-health/config.js";
 import { FakeGoogle, fixture, googleConfig } from "./fake-google.js";
 
 const settings = z.object({

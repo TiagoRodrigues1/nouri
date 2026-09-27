@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import { createApp } from "../app.js";
-import { applyMigrations } from "../db/migrations.js";
-import type { WearableRuntime } from "../wearables/provider.js";
+import { createApp } from "../src/app.js";
+import { applyMigrations } from "../src/db/migrations.js";
+import type { WearableRuntime } from "../src/wearables/provider.js";
 
 export function createHarness(wearables?: WearableRuntime) {
   const url = process.env.DATABASE_URL;

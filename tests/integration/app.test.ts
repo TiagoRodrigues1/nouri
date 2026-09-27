@@ -1,8 +1,8 @@
-import { createHarness } from "./test/harness.js";
+import { createHarness } from "../harness.js";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { test } from "node:test";
-import type { FoodInput } from "./food/contract.js";
+import type { FoodInput } from "../../src/food/contract.js";
 
 const { app, otherApp, client, token, userId, headers, setup, cleanup } = createHarness();
 
