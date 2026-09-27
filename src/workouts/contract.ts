@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { recordBaseSchema } from "../journal/contract.js";
 import { occurredAtSchema, timeZoneSchema } from "../time.js";
+import { wearableProviderSchema } from "../wearables/contract.js";
 
 export const activities = ["strength", "run", "walk", "cycle", "swim", "other"] as const;
 
@@ -29,12 +30,20 @@ export const workoutInputSchema = z.object({
   }
 });
 
+// Imported workouts also keep the provider's name for the session, since Nouri's activities are coarser.
+export const workoutSourceSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("manual") }),
+  z.object({ kind: z.literal("wearable"), provider: wearableProviderSchema, device: z.string().nullable(), title: z.string().nullable() }),
+]);
+
 export const workoutSchema = recordBaseSchema.extend({
   activity: z.enum(activities),
   durationMinutes: z.number().int(),
   distanceM: z.number().int().nullable(),
   energyKcal: z.number().int().nullable(),
   strengthExercises: z.array(strengthExerciseSchema).nullable(),
+  // Receipts saved before sources existed replay as manual workouts.
+  source: workoutSourceSchema.default({ kind: "manual" }),
 });
 
 export const workoutDaySchema = z.object({

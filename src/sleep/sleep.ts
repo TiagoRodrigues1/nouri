@@ -17,6 +17,16 @@ function stages(row: SleepRow): Stages | null {
   return { awake: awakeMinutes, light: lightMinutes, deep: deepMinutes, rem: remMinutes };
 }
 
+function source(row: SleepRow): SleepSession["source"] {
+  if (row.source === "manual") return { kind: "manual" };
+
+  return {
+    kind: "wearable",
+    provider: row.source,
+    device: row.sourceDevice,
+  };
+}
+
 function session(row: SleepRow): SleepSession {
   return {
     id: row.id,
@@ -27,6 +37,7 @@ function session(row: SleepRow): SleepSession {
     localDate: row.localDate,
     durationMinutes: Math.round((row.endedAt.getTime() - row.startedAt.getTime()) / 60_000),
     stages: stages(row),
+    source: source(row),
   };
 }
 
@@ -35,6 +46,8 @@ export const sleepRecords: RecordKind<SleepInput, SleepSession> = {
   label: "Sleep session",
   table: sleepSessions,
   schema: sleepSessionSchema,
+  // Imported rows are outside the manual delete path. Their provider owns deletion.
+  deletable: eq(sleepSessions.source, "manual"),
   create: async (tx, userId, input) => {
     const [row] = await tx.insert(sleepSessions).values({
       id: randomUUID(),

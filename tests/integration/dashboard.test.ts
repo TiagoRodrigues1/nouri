@@ -1,4 +1,4 @@
-import { createHarness } from "../test/harness.js";
+import { createHarness } from "../harness.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 

@@ -176,3 +176,63 @@ CREATE TABLE IF NOT EXISTS supplement_intakes (
 );
 
 CREATE INDEX IF NOT EXISTS supplement_intakes_user_day_active_idx ON supplement_intakes (user_id, local_date) WHERE deleted_at IS NULL;
+
+-- Imported sleep keeps its provider identity; manual sleep has no source columns.
+-- Add a provider to this list when its adapter lands.
+ALTER TABLE sleep_sessions ADD COLUMN IF NOT EXISTS source text NOT NULL DEFAULT 'manual' CHECK (source IN ('manual', 'google-health'));
+ALTER TABLE sleep_sessions ADD COLUMN IF NOT EXISTS source_id text;
+ALTER TABLE sleep_sessions ADD COLUMN IF NOT EXISTS source_fingerprint text;
+ALTER TABLE sleep_sessions ADD COLUMN IF NOT EXISTS source_device text;
+
+DO $$ BEGIN
+  ALTER TABLE sleep_sessions ADD CONSTRAINT sleep_sessions_source_identity CHECK (
+    (source = 'manual' AND source_id IS NULL AND source_fingerprint IS NULL)
+    OR (source <> 'manual' AND source_id IS NOT NULL AND source_fingerprint IS NOT NULL)
+  );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+-- Deleted imports keep their row, so a record the source restores revives instead of duplicating.
+CREATE UNIQUE INDEX IF NOT EXISTS sleep_sessions_user_source_idx ON sleep_sessions (user_id, source, source_id) WHERE source_id IS NOT NULL;
+
+-- Imported workouts keep their provider identity the same way; the title is the provider's name for the session.
+ALTER TABLE workouts ADD COLUMN IF NOT EXISTS source text NOT NULL DEFAULT 'manual' CHECK (source IN ('manual', 'google-health'));
+ALTER TABLE workouts ADD COLUMN IF NOT EXISTS source_id text;
+ALTER TABLE workouts ADD COLUMN IF NOT EXISTS source_fingerprint text;
+ALTER TABLE workouts ADD COLUMN IF NOT EXISTS source_device text;
+ALTER TABLE workouts ADD COLUMN IF NOT EXISTS source_title text;
+
+DO $$ BEGIN
+  ALTER TABLE workouts ADD CONSTRAINT workouts_source_identity CHECK (
+    (source = 'manual' AND source_id IS NULL AND source_fingerprint IS NULL AND source_title IS NULL)
+    OR (source <> 'manual' AND source_id IS NOT NULL AND source_fingerprint IS NOT NULL)
+  );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+CREATE UNIQUE INDEX IF NOT EXISTS workouts_user_source_idx ON workouts (user_id, source, source_id) WHERE source_id IS NOT NULL;
+
+-- One row per cloud provider the person connected, such as Google Health.
+CREATE TABLE IF NOT EXISTS wearable_connections (
+  user_id uuid NOT NULL,
+  provider text NOT NULL,
+  scope text NOT NULL,
+  -- AES-256-GCM ciphertext; the key is WEARABLE_TOKEN_KEY and never reaches the database.
+  refresh_token text,
+  access_token text,
+  access_token_expires_at timestamptz,
+  last_synced_at timestamptz,
+  last_error text,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, provider)
+);
+
+-- One row per sign-in attempt; the callback consumes it, so a state works once.
+CREATE TABLE IF NOT EXISTS wearable_oauth_states (
+  state_hash text PRIMARY KEY,
+  user_id uuid NOT NULL,
+  provider text NOT NULL,
+  code_verifier text NOT NULL,
+  expires_at timestamptz NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);

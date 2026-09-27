@@ -132,7 +132,7 @@ export async function mutateFood(db: AppDatabase, userId: string, key: string, c
     let result: Exclude<FoodMutationResult, { outcome: "catalog-missing" }>;
 
     if (command.kind === "delete") {
-      result = await softDelete(tx, foodEntries, userId, command.id, command.revision, undefined);
+      result = await softDelete(tx, foodEntries, userId, command.id, command.revision);
     } else if (command.kind === "repeat") {
       const input = await sourceInput(tx, userId, command.sourceId, command.input);
 

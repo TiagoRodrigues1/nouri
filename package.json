@@ -11,8 +11,8 @@
     "dev:api": "node --env-file-if-exists=.env --import=tsx src/server.ts",
     "dev": "pnpm build:web && concurrently --kill-others --names api,web \"pnpm dev:api\" \"pnpm dev:web\"",
     "db:migrate": "node --env-file-if-exists=.env --import=tsx src/db/migrate.ts",
-    "test:unit": "node --import=tsx --test src/test/*.test.ts",
-    "test:integration": "node --env-file-if-exists=.env --import=tsx --test src/app.integration.test.ts src/water/water.integration.test.ts src/dashboard/dashboard.integration.test.ts src/overview/overview.integration.test.ts src/targets/targets.integration.test.ts src/supplements/supplements.integration.test.ts"
+    "test:unit": "node --import=tsx --test tests/unit/*.test.ts",
+    "test:integration": "node --env-file-if-exists=.env --import=tsx --test tests/integration/*.test.ts"
   },
   "devDependencies": {
     "@oxlint/plugins": "1.85.0",

@@ -1,8 +1,8 @@
-import { createHarness } from "../test/harness.js";
+import { createHarness } from "../harness.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { defaultTargets } from "./contract.js";
-import type { Targets } from "./contract.js";
+import { defaultTargets } from "../../src/targets/contract.js";
+import type { Targets } from "../../src/targets/contract.js";
 
 const { app, otherApp, headers, setup, cleanup } = createHarness();
 

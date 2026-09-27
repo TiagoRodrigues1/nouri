@@ -6,7 +6,8 @@ import { defineConfig, loadEnv } from "vite";
 
 export default defineConfig(({ mode }) => ({
   plugins: [
-    stylex.vite({ useCSSLayers: true, dev: process.env.NODE_ENV === "development", runtimeInjection: false }),
+    // Tailwind's layers go first so StyleX outranks its reset. Without this the dev server declares StyleX's layers first and loses.
+    stylex.vite({ useCSSLayers: { before: ["properties", "theme", "base", "components", "utilities"] }, dev: process.env.NODE_ENV === "development", runtimeInjection: false }),
     tailwindcss(),
     react(),
     // Only the dev server gets the token; the API adds it to the built page at request time.
@@ -23,6 +24,8 @@ export default defineConfig(({ mode }) => ({
     proxy: {
       "/v1": "http://localhost:3000",
       "/openapi.json": "http://localhost:3000",
+      // Provider sign-in returns here; the API checks the state cookie and redirects back to /overview.
+      "/oauth": "http://localhost:3000",
     },
   },
   build: { outDir: "../web/dist", emptyOutDir: true },

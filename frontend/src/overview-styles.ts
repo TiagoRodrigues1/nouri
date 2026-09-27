@@ -120,6 +120,8 @@ export const styles = stylex.create({
   stageSegment: (share: string, color: string) => ({ width: share, backgroundColor: color }),
   swatch: (color: string) => ({ width: 8, height: 8, flexShrink: 0, borderRadius: "50%", backgroundColor: color }),
   fileInput: { display: "none" },
+  alert: { margin: 0, color: colors.destructive, fontSize: 12, lineHeight: 1.45 },
+  note: { margin: 0, color: colors.mutedForeground, fontSize: 12, lineHeight: 1.45 },
   photos: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fill, minmax(92px, 1fr))",

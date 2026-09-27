@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { draftFor, editableRef, editedSubmission, scaleNutrients } from "../../frontend/src/lib/food-edit.js";
-import type { FoodEntry } from "../food/contract.js";
+import type { FoodEntry } from "../../src/food/contract.js";
 
 const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 

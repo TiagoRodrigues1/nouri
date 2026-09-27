@@ -1,0 +1,24 @@
+{
+  "name": "users/4f7c2a/dataTypes/sleep/dataPoints/9100000000000000002",
+  "dataSource": {
+    "recordingMethod": "PASSIVELY_RECORDED",
+    "device": { "manufacturer": "Google", "model": "Fitbit Air", "formFactor": "WRIST_WORN" },
+    "platform": "IOS"
+  },
+  "sleep": {
+    "interval": {
+      "startTime": "2026-09-24T18:10:00Z",
+      "startUtcOffset": "-14400s",
+      "endTime": "2026-09-24T18:55:00Z",
+      "endUtcOffset": "-14400s"
+    },
+    "type": "CLASSIC",
+    "stages": [
+      { "startTime": "2026-09-24T18:10:00Z", "endTime": "2026-09-24T18:50:00Z", "type": "ASLEEP" },
+      { "startTime": "2026-09-24T18:50:00Z", "endTime": "2026-09-24T18:55:00Z", "type": "RESTLESS" }
+    ],
+    "metadata": { "processed": true, "nap": true, "manuallyEdited": false },
+    "createTime": "2026-09-24T19:02:40Z",
+    "updateTime": "2026-09-24T19:02:40Z"
+  }
+}

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { sleepRecordBaseSchema } from "../journal/contract.js";
 import { occurredAtSchema, timeZoneSchema } from "../time.js";
+import { recordSourceSchema } from "../wearables/contract.js";
 
 const minutes = z.number().int().min(0).max(1440);
 
@@ -24,6 +25,8 @@ export const sleepSessionSchema = sleepRecordBaseSchema.extend({
   endedAt: z.iso.datetime(),
   durationMinutes: z.number().int(),
   stages: stagesSchema.nullable(),
+  // Receipts saved before sources existed replay as manual sleep.
+  source: recordSourceSchema.default({ kind: "manual" }),
 });
 
 export const sleepDaySchema = z.object({

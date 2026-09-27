@@ -1,4 +1,3 @@
-import { timingSafeEqual } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { OpenAPIHono } from "@hono/zod-openapi";
 import type { RouteConfig } from "@hono/zod-openapi";
@@ -14,6 +13,10 @@ import { mutateFood } from "./food/food.js";
 import type { AppDatabase } from "./db/database.js";
 import { getDated, saveDated, type DatedKind, type DatedTable } from "./effective-dated.js";
 import type { FoodMutationResult } from "./food/food.js";
+import { integrationRoutes } from "./wearables/routes.js";
+import { sameSecret } from "./crypto.js";
+import { error, errorSchema } from "./http-error.js";
+import type { WearableRuntime } from "./wearables/provider.js";
 import { recordPaths } from "./journal/paths.js";
 import { mutateRecord } from "./journal/records.js";
 import type { RecordKind, RecordMutationResult } from "./journal/records.js";
@@ -73,26 +76,17 @@ function recordResponse<Entry>(result: RecordMutationResult<Entry>, label: strin
   }
 }
 
-function error(status: number, message: string): Response {
-  return new Response(JSON.stringify({ error: message }), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
-}
-
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (character) => `&#${character.charCodeAt(0)};`);
 }
 
 function sameToken(actual: string | undefined, expected: string): boolean {
   if (!actual?.startsWith("Bearer ")) return false;
-  const supplied = Buffer.from(actual.slice(7));
-  const configured = Buffer.from(expected);
 
-  return supplied.length === configured.length && timingSafeEqual(supplied, configured);
+  return sameSecret(actual.slice(7), expected);
 }
 
-export function createApp(db: AppDatabase, auth: { token: string; userId: string }) {
+export function createApp(db: AppDatabase, auth: { token: string; userId: string }, wearables?: WearableRuntime) {
   const app = new OpenAPIHono<{ Variables: { userId: string; idempotencyKey: string } }>();
 
   const pageHeaders = {
@@ -133,7 +127,6 @@ export function createApp(db: AppDatabase, auth: { token: string; userId: string
     return new Response(body, { headers: { ...pageHeaders, "Content-Type": contentType } });
   });
 
-  const errorSchema = z.object({ error: z.string() });
   const keyParameter = z.string().min(1).max(200);
   const mutationHeaders = z.object({ "Idempotency-Key": keyParameter });
   const editHeaders = z.object({ "Idempotency-Key": keyParameter, "If-Match": z.string() });
@@ -145,13 +138,16 @@ export function createApp(db: AppDatabase, auth: { token: string; userId: string
   });
 
   app.use("/v1/*", async (context, next) => {
-    if (!["POST", "PATCH", "DELETE"].includes(context.req.method)) return next();
+    // Connecting, syncing, and disconnecting are safe to repeat, so integrations take no Idempotency-Key.
+    if (!["POST", "PATCH", "DELETE"].includes(context.req.method) || context.req.path.startsWith("/v1/integrations/")) return next();
     const key = context.req.header("Idempotency-Key");
 
     if (!key || key.length > 200) return error(400, "Idempotency-Key required");
     context.set("idempotencyKey", key);
     await next();
   });
+
+  app.route("/", integrationRoutes(db, wearables, auth.userId));
 
   app.post("/v1/food-entries", async (context) => {
     const key = context.get("idempotencyKey");
@@ -359,6 +355,7 @@ export function createApp(db: AppDatabase, auth: { token: string; userId: string
   app.openAPIRegistry.registerPath({ method: "post", path: recordPaths.photo, request: { headers: mutationHeaders, body: { content: { "multipart/form-data": { schema: photoUploadSchema } } } }, responses: { 201: { description: "Uploaded progress photo", content: { "application/json": { schema: photoSchema } } }, 400: { description: "Invalid request", content: { "application/json": { schema: errorSchema } } }, 409: { description: "Idempotency conflict", content: { "application/json": { schema: errorSchema } } }, 413: { description: "Photo larger than 8 MB", content: { "application/json": { schema: errorSchema } } }, 415: { description: "Not a JPEG, PNG, or WebP image", content: { "application/json": { schema: errorSchema } } } } });
   app.openAPIRegistry.registerPath({ method: "get", path: "/v1/progress-photos/{id}/image", request: { params: z.object({ id: z.uuid() }) }, responses: { 200: { description: "The stored image bytes", content: { "image/jpeg": { schema: z.string().meta({ format: "binary" }) }, "image/png": { schema: z.string().meta({ format: "binary" }) }, "image/webp": { schema: z.string().meta({ format: "binary" }) } } }, 404: { description: "Photo not found", content: { "application/json": { schema: errorSchema } } } } });
   app.openAPIRegistry.registerPath({ method: "get", path: "/v1/overview/{date}", request: { params: z.object({ date: z.iso.date() }) }, responses: { 200: { description: "Nutrition, sports, measurements, sleep, and recent progress photos for the local day", content: { "application/json": { schema: overviewSchema } } } } });
+
   app.doc31("/openapi.json", { openapi: "3.1.0", info: { title: "Nouri API", version: "1.0.0" } });
 
   return app;

@@ -1,7 +1,7 @@
-import { createHarness } from "../test/harness.js";
+import { createHarness } from "../harness.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { Supplement } from "./contract.js";
+import type { Supplement } from "../../src/supplements/contract.js";
 
 // Each test gets its own schema, because cleanup closes the harness's connections.
 let { app, otherApp, headers, setup, cleanup } = createHarness();

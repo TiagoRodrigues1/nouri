@@ -1,0 +1,7 @@
+{
+  "name": "users/4f7c2a/dataTypes/sleep/dataPoints/9100000000000000003",
+  "sleep": {
+    "interval": { "startTime": "2026-09-20T00:00:00Z", "endTime": "2026-09-21T06:00:00Z" },
+    "type": "CLASSIC"
+  }
+}

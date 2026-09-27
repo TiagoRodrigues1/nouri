@@ -1,16 +1,30 @@
 import * as stylex from "@stylexjs/stylex";
+import type { ReactNode } from "react";
 import { BedDouble, Moon, Plus } from "lucide-react";
+import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Progress } from "../components/ui/progress";
 import { type Overview as OverviewData } from "../lib/api";
 import { styles } from "../overview-styles";
 import { colors } from "../theme.stylex";
 import { clock } from "../lib/time";
+import { providerDetails } from "../lib/wearables";
 import { Caption, DeleteButton, Empty, Section, Tile, Value, duration } from "./shared";
 
-type SleepProps = { sleep: OverviewData["sleep"]; goalMinutes: number | undefined; busy: boolean; onLog: () => void; onDelete: (session: OverviewData["sleep"]["sessions"][number]) => void };
+type Session = OverviewData["sleep"]["sessions"][number];
 
-export function SleepSection({ sleep, goalMinutes, busy, onLog, onDelete }: SleepProps) {
+type SleepProps = { connection: ReactNode; sleep: OverviewData["sleep"]; goalMinutes: number | undefined; busy: boolean; onLog: () => void; onDelete: (session: Session) => void };
+
+// Imported sleep names its device and service; it changes only at its source, so it has no delete button.
+function origin(session: Session) {
+  if (session.source.kind === "manual") return duration(session.durationMinutes);
+  const service = providerDetails[session.source.provider].name;
+  const source = session.source.device ? `${session.source.device} · ${service}` : service;
+
+  return `${duration(session.durationMinutes)} · ${source}`;
+}
+
+export function SleepSection({ connection, sleep, goalMinutes, busy, onLog, onDelete }: SleepProps) {
   const stages = sleep.stages;
   const stageTotal = stages ? stages.awake + stages.light + stages.deep + stages.rem : 0;
 
@@ -66,16 +80,16 @@ export function SleepSection({ sleep, goalMinutes, busy, onLog, onDelete }: Slee
                 <li key={session.id} {...stylex.props(styles.listRow)}>
                   <span {...stylex.props(styles.listText)}>
                     <strong {...stylex.props(styles.listName)}>{range}</strong>
-                    <small {...stylex.props(styles.listMeta)}>{duration(session.durationMinutes)}</small>
+                    <small {...stylex.props(styles.listMeta)}>{origin(session)}</small>
                   </span>
-                  <DeleteButton label={`Delete sleep ${range}`} disabled={busy} onClick={() => onDelete(session)} />
+                  {session.source.kind !== "manual" ? <Badge variant="outline">Imported</Badge> : <DeleteButton label={`Delete sleep ${range}`} disabled={busy} onClick={() => onDelete(session)} />}
                 </li>
               );
             })}
           </ul>
         )}
       </Tile>
+      {connection}
     </Section>
   );
 }
-
