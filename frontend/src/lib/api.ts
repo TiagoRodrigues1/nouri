@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { recordPaths } from "../../../src/journal/paths";
-import type { FoodSubmission } from "../../../src/food/contract";
+import type { FoodSubmission, RepeatInput } from "../../../src/food/contract";
 import type { WaterInput } from "../../../src/water/contract";
 import type { MeasurementInput } from "../../../src/measurements/contract";
 import type { SleepInput } from "../../../src/sleep/contract";
@@ -12,6 +12,8 @@ import type { Day } from "../../../src/days/contract";
 import { entrySchema, searchResultSchema } from "../../../src/food/contract";
 import type { FoodEntry, SearchResult } from "../../../src/food/contract";
 import { overviewSchema } from "../../../src/overview/contract";
+import { targetsForDaySchema } from "../../../src/targets/contract";
+import type { Targets, TargetsForDay } from "../../../src/targets/contract";
 import type { Overview } from "../../../src/overview/contract";
 
 export type { CardId, Dashboard } from "../../../src/dashboard/contract";
@@ -29,6 +31,8 @@ export type { Overview } from "../../../src/overview/contract";
 export type { Photo } from "../../../src/photos/contract";
 
 export type { SleepSession } from "../../../src/sleep/contract";
+
+export type { Targets } from "../../../src/targets/contract";
 
 export type { Activity, Workout } from "../../../src/workouts/contract";
 
@@ -102,6 +106,14 @@ export async function createFood(token: string, key: string, input: FoodSubmissi
   });
 }
 
+export async function repeatFood(token: string, key: string, entry: FoodEntry, input: RepeatInput): Promise<FoodEntry> {
+  return request(token, `/v1/food-entries/${encodeURIComponent(entry.id)}/repeats`, entrySchema, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Idempotency-Key": key },
+    body: JSON.stringify(input),
+  });
+}
+
 export async function deleteFood(token: string, entry: FoodEntry, key: string): Promise<void> {
   await request(token, `/v1/food-entries/${encodeURIComponent(entry.id)}`, z.null(), {
     method: "DELETE",
@@ -161,6 +173,18 @@ export async function saveDashboard(token: string, dashboard: Dashboard): Promis
   });
 }
 
+export async function getTargets(token: string, date: string): Promise<TargetsForDay> {
+  return request(token, `/v1/targets/${date}`, targetsForDaySchema);
+}
+
+export async function saveTargets(token: string, date: string, targets: Targets): Promise<TargetsForDay> {
+  return request(token, `/v1/targets/${date}`, targetsForDaySchema, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(targets),
+  });
+}
+
 export const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 
 export function localDate(date: Date): string {
@@ -192,9 +216,7 @@ export function format(value: number | null | undefined, digits = 0): string {
       );
 }
 
-export function currentTime(): string {
-  const now = new Date();
-
+export function currentTime(now = new Date()): string {
   return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
 }
 

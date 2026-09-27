@@ -7,7 +7,8 @@ import { activityLabels } from "../overview-dialogs";
 import { format, type Activity, type Overview as OverviewData } from "../lib/api";
 import { styles } from "../overview-styles";
 import { colors } from "../theme.stylex";
-import { Caption, DeleteButton, Empty, Section, Stat, Tile, Value, clock, duration } from "./shared";
+import { Caption, DeleteButton, Empty, Section, Stat, Tile, Value, duration } from "./shared";
+import { clock } from "../lib/time";
 
 const activityIcons: Record<Activity, ReactNode> = {
   strength: <Dumbbell size={16} />,

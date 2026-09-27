@@ -2,15 +2,15 @@ import * as stylex from "@stylexjs/stylex";
 import { BedDouble, Moon, Plus } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Progress } from "../components/ui/progress";
-import { sleepGoalMinutes } from "../lib/goals";
 import { type Overview as OverviewData } from "../lib/api";
 import { styles } from "../overview-styles";
 import { colors } from "../theme.stylex";
-import { Caption, DeleteButton, Empty, Section, Tile, Value, clock, duration } from "./shared";
+import { clock } from "../lib/time";
+import { Caption, DeleteButton, Empty, Section, Tile, Value, duration } from "./shared";
 
-type SleepProps = { sleep: OverviewData["sleep"]; busy: boolean; onLog: () => void; onDelete: (session: OverviewData["sleep"]["sessions"][number]) => void };
+type SleepProps = { sleep: OverviewData["sleep"]; goalMinutes: number | undefined; busy: boolean; onLog: () => void; onDelete: (session: OverviewData["sleep"]["sessions"][number]) => void };
 
-export function SleepSection({ sleep, busy, onLog, onDelete }: SleepProps) {
+export function SleepSection({ sleep, goalMinutes, busy, onLog, onDelete }: SleepProps) {
   const stages = sleep.stages;
   const stageTotal = stages ? stages.awake + stages.light + stages.deep + stages.rem : 0;
 
@@ -29,9 +29,9 @@ export function SleepSection({ sleep, busy, onLog, onDelete }: SleepProps) {
       color={colors.sleep}
       action={<Button variant="outline" size="sm" onClick={onLog}><Plus size={15} /> Log sleep</Button>}
     >
-      <Tile title="Time asleep" icon={<BedDouble size={16} />} aside="7–9 h recommended">
+      <Tile title="Time asleep" icon={<BedDouble size={16} />} aside={goalMinutes !== undefined && `${duration(goalMinutes)} goal`}>
         <Value value={sleep.totalMinutes === null ? "—" : duration(sleep.totalMinutes)} />
-        <Progress value={sleep.totalMinutes ?? 0} max={sleepGoalMinutes} color={colors.sleep} aria-label="Sleep against 8 hours" />
+        {goalMinutes !== undefined && <Progress value={sleep.totalMinutes ?? 0} max={goalMinutes} color={colors.sleep} aria-label="Sleep against your goal" />}
         <Caption>{sleep.sessions.length === 0 ? "No sleep logged" : `${sleep.sessions.length} ${sleep.sessions.length === 1 ? "session" : "sessions"}`}</Caption>
       </Tile>
       <Tile title="Sleep stages" icon={<Moon size={16} />}>

@@ -12,7 +12,7 @@ import { cardIds, defaultCards } from "../../src/dashboard/contract";
 import { getDashboard, saveDashboard, type CardId } from "./lib/api";
 
 export const cardLabels: Record<CardId, { name: string; description: string }> = {
-  totals: { name: "Daily totals", description: "Energy, protein, carbs, and fat against reference values" },
+  totals: { name: "Daily totals", description: "Energy, protein, carbs, and fat against your targets" },
   water: { name: "Water", description: "Log drinks and track your daily goal" },
   mix: { name: "Energy mix", description: "How protein, carbs, and fat split your energy" },
   activity: { name: "Activity", description: "Workouts and movement for the day" },

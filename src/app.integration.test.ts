@@ -112,6 +112,21 @@ void test("food CRUD, stable retries, day totals, and concurrent writes", async 
     assert.equal(missingLogged.food.nutrients.fatG, null);
     const catalogDay = await call("GET", "/v1/days/2026-09-26");
     assert.equal((await catalogDay.json()).food.totals.fatG, null);
+    // An entry from an older catalog release is logged again from its saved snapshot, not the current catalog.
+    await client`UPDATE food_entries SET catalog_ref = ${JSON.stringify({ ...editedCatalog.food.catalogRef, version: "2024" })}::jsonb WHERE id = ${logged.id}`;
+    const repeatBody = JSON.stringify({ occurredAt: "2026-09-27T08:00:00Z", timeZone: "Europe/Lisbon" });
+    const repeatHeaders = { ...headers, "Idempotency-Key": "repeat-1" };
+    const repeated = await app.request(`/v1/food-entries/${logged.id}/repeats`, { method: "POST", headers: repeatHeaders, body: repeatBody });
+    assert.equal(repeated.status, 201);
+    const repeatedEntry = await repeated.json();
+    assert.notEqual(repeatedEntry.id, logged.id);
+    assert.equal(repeatedEntry.localDate, "2026-09-27");
+    assert.deepEqual(repeatedEntry.food, { ...editedCatalog.food, catalogRef: { ...editedCatalog.food.catalogRef, version: "2024" } });
+    assert.deepEqual(await (await app.request(`/v1/food-entries/${logged.id}/repeats`, { method: "POST", headers: repeatHeaders, body: repeatBody })).json(), repeatedEntry);
+    assert.equal((await otherApp.request(`/v1/food-entries/${logged.id}/repeats`, { method: "POST", headers: { ...headers, "Idempotency-Key": "repeat-2" }, body: repeatBody })).status, 404);
+    assert.equal((await app.request(`/v1/food-entries/${logged.id}/repeats`, { method: "POST", headers: { ...headers, "Idempotency-Key": "repeat-3" }, body: JSON.stringify({ occurredAt: "2026-09-27T08:00:00Z" }) })).status, 400);
+    assert.equal((await call("DELETE", `/v1/food-entries/${repeatedEntry.id}`, undefined, "repeat-delete-1", 1)).status, 204);
+
     assert.equal((await call("DELETE", `/v1/food-entries/${logged.id}`, undefined, "catalog-delete-1", 2)).status, 204);
     assert.equal((await call("DELETE", `/v1/food-entries/${missingLogged.id}`, undefined, "catalog-delete-2", 1)).status, 204);
 

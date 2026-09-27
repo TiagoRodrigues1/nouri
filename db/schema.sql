@@ -55,6 +55,26 @@ CREATE TABLE IF NOT EXISTS dashboard_layouts (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
+-- One row per change; a day uses the latest row that took effect on or before it.
+CREATE TABLE IF NOT EXISTS user_targets (
+  user_id uuid NOT NULL,
+  effective_from date NOT NULL,
+  kcal integer NOT NULL CHECK (kcal > 0),
+  protein_g integer NOT NULL CHECK (protein_g > 0),
+  carbs_g integer NOT NULL CHECK (carbs_g > 0),
+  fat_g integer NOT NULL CHECK (fat_g > 0),
+  water_ml integer NOT NULL CHECK (water_ml > 0),
+  steps integer NOT NULL CHECK (steps > 0),
+  sleep_minutes integer NOT NULL CHECK (sleep_minutes > 0),
+  fasting_hours integer NOT NULL CHECK (fasting_hours BETWEEN 1 AND 23),
+  burned_kcal integer NOT NULL CHECK (burned_kcal > 0),
+  exercise_minutes integer NOT NULL CHECK (exercise_minutes > 0),
+  workouts integer NOT NULL CHECK (workouts > 0),
+  weight_g integer CHECK (weight_g > 0),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, effective_from)
+);
+
 CREATE TABLE IF NOT EXISTS body_measurements (
   id uuid PRIMARY KEY,
   user_id uuid NOT NULL,

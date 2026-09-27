@@ -25,3 +25,5 @@ This index is the maintained list of Nouri's user paths. Read the relevant file 
 - [Log water](water.md): preset and custom amounts, daily total, remove a drink.
 - [Overview](overview.md): sidebar link, category tabs, measurements, workouts, sleep, progress photos, deletion.
 - [Customize My Day cards](cards.md): show, hide, reorder, save, reload, and restore defaults.
+- [Food page](food-page.md): intake against targets, meals by time of day, top foods, log again, delete.
+- [Targets](targets.md): sidebar dialog, save, pages reflect new targets, earlier days keep old ones.

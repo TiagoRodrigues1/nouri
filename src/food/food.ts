@@ -7,13 +7,14 @@ import { foodEntries } from "../db/schema.js";
 import { localDate } from "../time.js";
 import { resolveFood } from "./catalog.js";
 import { entrySchema } from "./contract.js";
-import type { CatalogFoodInput, FoodEntry, FoodInput, FoodSubmission } from "./contract.js";
+import type { CatalogFoodInput, FoodEntry, FoodInput, FoodSubmission, RepeatInput } from "./contract.js";
 
 export type { FoodEntry, FoodInput } from "./contract.js";
 
 export type FoodCommand =
   | { kind: "create"; input: FoodSubmission }
   | { kind: "edit"; id: string; revision: number; input: FoodSubmission }
+  | { kind: "repeat"; sourceId: string; input: RepeatInput }
   | { kind: "delete"; id: string; revision: number };
 
 export type FoodMutationResult =
@@ -75,7 +76,7 @@ function hash(command: FoodCommand): string {
   let request: FoodCommand | { kind: "catalog-create"; input: CatalogFoodInput } | { kind: "catalog-edit"; id: string; revision: number; input: CatalogFoodInput } = command;
 
   // Keep the fingerprint format used by receipts written before catalog resolution moved here.
-  if (command.kind !== "delete" && isCatalogInput(command.input)) {
+  if ((command.kind === "create" || command.kind === "edit") && isCatalogInput(command.input)) {
     request = command.kind === "create"
       ? { kind: "catalog-create", input: command.input }
       : { kind: "catalog-edit", id: command.id, revision: command.revision, input: command.input };
@@ -97,6 +98,25 @@ async function missingOrStale(tx: Transaction, userId: string, id: string): Prom
   return { outcome: row ? "stale" : "missing" };
 }
 
+async function insert(tx: Transaction, userId: string, input: FoodInput): Promise<{ outcome: "created"; entry: FoodEntry }> {
+  const [row] = await tx.insert(foodEntries).values({ id: randomUUID(), userId, ...values(input) }).returning();
+
+  if (!row) throw new Error("Food insert returned no row");
+
+  return { outcome: "created", entry: entry(row) };
+}
+
+// Copies the saved name, amount, nutrients and catalog reference, never the catalog's current values.
+async function sourceInput(tx: Transaction, userId: string, sourceId: string, input: RepeatInput): Promise<FoodInput | null> {
+  const [source] = await tx.select().from(foodEntries)
+    .where(and(eq(foodEntries.userId, userId), eq(foodEntries.id, sourceId), isNull(foodEntries.deletedAt)));
+
+  if (!source) return null;
+  const { catalogRef, ...food } = entry(source).food;
+
+  return { ...input, food: catalogRef ? { ...food, catalogRef } : food };
+}
+
 export async function mutateFood(db: AppDatabase, userId: string, key: string, command: FoodCommand): Promise<FoodMutationResult> {
   const requestHash = hash(command);
 
@@ -113,6 +133,10 @@ export async function mutateFood(db: AppDatabase, userId: string, key: string, c
 
     if (command.kind === "delete") {
       result = await softDelete(tx, foodEntries, userId, command.id, command.revision, undefined);
+    } else if (command.kind === "repeat") {
+      const input = await sourceInput(tx, userId, command.sourceId, command.input);
+
+      result = input ? await insert(tx, userId, input) : { outcome: "missing" };
     } else {
       const input = resolveInput(command.input);
 
@@ -121,10 +145,7 @@ export async function mutateFood(db: AppDatabase, userId: string, key: string, c
       }
 
       if (command.kind === "create") {
-        const [row] = await tx.insert(foodEntries).values({ id: randomUUID(), userId, ...values(input) }).returning();
-
-        if (!row) throw new Error("Food insert returned no row");
-        result = { outcome: "created", entry: entry(row) };
+        result = await insert(tx, userId, input);
       } else {
         const [row] = await tx.update(foodEntries)
           .set({ ...values(input), revision: sql`${foodEntries.revision} + 1`, updatedAt: new Date() })

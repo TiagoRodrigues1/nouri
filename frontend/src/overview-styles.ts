@@ -2,7 +2,8 @@ import * as stylex from "@stylexjs/stylex";
 import { colors } from "./theme.stylex";
 
 export const styles = stylex.create({
-  tabs: { maxWidth: "100%", overflowX: "auto" },
+  tabs: { maxWidth: "100%", overflowX: "auto", overflowY: "hidden" },
+  targetsNotice: { margin: "16px 0 0", color: colors.mutedForeground, fontSize: 13 },
   status: {
     margin: "24px 0 0",
     padding: "28px 20px",
