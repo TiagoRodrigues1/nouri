@@ -1,0 +1,44 @@
+{
+  "name": "users/4f7c2a/dataTypes/exercise/dataPoints/9200000000000000001",
+  "dataSource": {
+    "recordingMethod": "ACTIVELY_MEASURED",
+    "device": {
+      "manufacturer": "Google",
+      "model": "Fitbit Air",
+      "formFactor": "WRIST_WORN"
+    },
+    "platform": "IOS"
+  },
+  "exercise": {
+    "interval": {
+      "startTime": "2026-09-24T21:30:00Z",
+      "startUtcOffset": "-14400s",
+      "endTime": "2026-09-24T22:15:00Z",
+      "endUtcOffset": "-14400s"
+    },
+    "exerciseType": "RUNNING",
+    "displayName": "Evening Run",
+    "activeDuration": "2520s",
+    "metricsSummary": {
+      "caloriesKcal": 512.4,
+      "distanceMillimeters": 8450000.0,
+      "steps": "7400",
+      "averageHeartRateBeatsPerMinute": "151",
+      "activeZoneMinutes": "38"
+    },
+    "exerciseEvents": [
+      {
+        "eventTime": "2026-09-24T21:50:00Z",
+        "eventUtcOffset": "-14400s",
+        "exerciseEventType": "PAUSE"
+      },
+      {
+        "eventTime": "2026-09-24T21:55:00Z",
+        "eventUtcOffset": "-14400s",
+        "exerciseEventType": "RESUME"
+      }
+    ],
+    "createTime": "2026-09-24T22:20:00Z",
+    "updateTime": "2026-09-25T08:00:00Z"
+  }
+}

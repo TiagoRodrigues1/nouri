@@ -1,8 +1,9 @@
-import { bigint, customType, date, integer, jsonb, pgTable, primaryKey, text, timestamp, uuid, index } from "drizzle-orm/pg-core";
+import { bigint, customType, date, integer, jsonb, pgTable, primaryKey, text, timestamp, uuid, index, uniqueIndex } from "drizzle-orm/pg-core";
 import type { FoodQuantity } from "../contracts.js";
 import type { MeasurementKind } from "../measurements/contract.js";
 import type { PhotoType } from "../photos/contract.js";
 import type { Dose, Supplement, SupplementKind } from "../supplements/contract.js";
+import type { SourceColumn, WearableProvider } from "../wearables/contract.js";
 import type { Activity, StrengthExercise } from "../workouts/contract.js";
 import { sql } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
@@ -57,7 +58,12 @@ export const workouts = pgTable("workouts", {
   distanceM: integer("distance_m"),
   energyKcal: integer("energy_kcal"),
   strengthExercises: jsonb("strength_exercises").$type<StrengthExercise[]>(),
-}, (table) => [activeDayIndex("workouts", table)]);
+  source: text("source").$type<SourceColumn>().notNull().default("manual"),
+  sourceId: text("source_id"),
+  sourceFingerprint: text("source_fingerprint"),
+  sourceDevice: text("source_device"),
+  sourceTitle: text("source_title"),
+}, (table) => [activeDayIndex("workouts", table), uniqueIndex("workouts_user_source_idx").on(table.userId, table.source, table.sourceId).where(sql`source_id IS NOT NULL`)]);
 
 export const sleepSessions = pgTable("sleep_sessions", {
   ...journalColumns,
@@ -67,7 +73,32 @@ export const sleepSessions = pgTable("sleep_sessions", {
   lightMinutes: integer("light_minutes"),
   deepMinutes: integer("deep_minutes"),
   remMinutes: integer("rem_minutes"),
-}, (table) => [activeDayIndex("sleep_sessions", table)]);
+  source: text("source").$type<SourceColumn>().notNull().default("manual"),
+  sourceId: text("source_id"),
+  sourceFingerprint: text("source_fingerprint"),
+  sourceDevice: text("source_device"),
+}, (table) => [activeDayIndex("sleep_sessions", table), uniqueIndex("sleep_sessions_user_source_idx").on(table.userId, table.source, table.sourceId).where(sql`source_id IS NOT NULL`)]);
+
+export const wearableConnections = pgTable("wearable_connections", {
+  userId: uuid("user_id").notNull(),
+  provider: text("provider").$type<WearableProvider>().notNull(),
+  scope: text("scope").notNull(),
+  refreshToken: text("refresh_token"),
+  accessToken: text("access_token"),
+  accessTokenExpiresAt: timestamp("access_token_expires_at", { withTimezone: true }),
+  lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
+  lastError: text("last_error"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [primaryKey({ columns: [table.userId, table.provider] })]);
+
+export const wearableOauthStates = pgTable("wearable_oauth_states", {
+  stateHash: text("state_hash").primaryKey(),
+  userId: uuid("user_id").notNull(),
+  provider: text("provider").$type<WearableProvider>().notNull(),
+  codeVerifier: text("code_verifier").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 const bytea = customType<{ data: Buffer }>({ dataType: () => "bytea" });
 

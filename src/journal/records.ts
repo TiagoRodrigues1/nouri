@@ -23,6 +23,7 @@ export type RecordKind<Input, Entry> = {
   schema: z.ZodType<Entry>;
   fingerprint?: (input: Input) => string;
   erase?: SQL;
+  deletable?: SQL;
   create: (tx: Transaction, userId: string, input: Input) => Promise<
     { outcome: "created"; entry: Entry } | { outcome: "unknown-reference"; message: string }
   >;
@@ -36,15 +37,19 @@ function hash<Input, Entry>(kind: RecordKind<Input, Entry>, command: RecordComma
   return createHash("sha256").update(JSON.stringify(request)).digest("hex");
 }
 
-export async function softDelete(tx: Transaction, table: PgTable, userId: string, id: string, revision: number, erase: SQL | undefined): Promise<{ outcome: "deleted" | "missing" | "stale" }> {
+export type SoftDeleteOptions = { erase?: SQL | undefined; deletable?: SQL | undefined };
+
+export async function softDelete(tx: Transaction, table: PgTable, userId: string, id: string, revision: number, { erase, deletable }: SoftDeleteOptions = {}): Promise<{ outcome: "deleted" | "missing" | "stale" }> {
+  const scope = deletable ? sql` AND ${deletable}` : sql``;
+
   const deleted = await tx.execute(sql`
     UPDATE ${table} SET revision = revision + 1, deleted_at = now(), updated_at = now()${erase ? sql`, ${erase}` : sql``}
-    WHERE user_id = ${userId} AND id = ${id} AND revision = ${revision} AND deleted_at IS NULL
+    WHERE user_id = ${userId} AND id = ${id} AND revision = ${revision} AND deleted_at IS NULL${scope}
     RETURNING id`);
 
   if (deleted.length > 0) return { outcome: "deleted" };
 
-  const current = await tx.execute(sql`SELECT id FROM ${table} WHERE user_id = ${userId} AND id = ${id} AND deleted_at IS NULL`);
+  const current = await tx.execute(sql`SELECT id FROM ${table} WHERE user_id = ${userId} AND id = ${id} AND deleted_at IS NULL${scope}`);
 
   return { outcome: current.length > 0 ? "stale" : "missing" };
 }
@@ -63,7 +68,7 @@ export async function mutateRecord<Input, Entry>(db: AppDatabase, userId: string
 
     return { outcome };
   }, async (tx): Promise<RecordMutationResult<Entry>> => {
-    if (command.kind === "delete") return softDelete(tx, kind.table, userId, command.id, command.revision, kind.erase);
+    if (command.kind === "delete") return softDelete(tx, kind.table, userId, command.id, command.revision, { erase: kind.erase, deletable: kind.deletable });
 
     return kind.create(tx, userId, command.input);
   }, "unknown-reference");

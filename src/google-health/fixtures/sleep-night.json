@@ -1,0 +1,38 @@
+{
+  "name": "users/4f7c2a/dataTypes/sleep/dataPoints/9100000000000000001",
+  "dataSource": {
+    "recordingMethod": "PASSIVELY_RECORDED",
+    "device": { "manufacturer": "Google", "model": "Fitbit Air", "formFactor": "WRIST_WORN" },
+    "platform": "IOS"
+  },
+  "sleep": {
+    "interval": {
+      "startTime": "2026-09-24T02:40:00Z",
+      "startUtcOffset": "-14400s",
+      "endTime": "2026-09-24T10:25:00Z",
+      "endUtcOffset": "-14400s"
+    },
+    "type": "STAGES",
+    "stages": [
+      { "startTime": "2026-09-24T02:40:00Z", "startUtcOffset": "-14400s", "endTime": "2026-09-24T03:10:00Z", "endUtcOffset": "-14400s", "type": "LIGHT" },
+      { "startTime": "2026-09-24T03:10:00Z", "startUtcOffset": "-14400s", "endTime": "2026-09-24T04:40:00Z", "endUtcOffset": "-14400s", "type": "DEEP" },
+      { "startTime": "2026-09-24T04:40:00Z", "startUtcOffset": "-14400s", "endTime": "2026-09-24T08:00:00Z", "endUtcOffset": "-14400s", "type": "LIGHT" },
+      { "startTime": "2026-09-24T08:00:00Z", "startUtcOffset": "-14400s", "endTime": "2026-09-24T09:50:00Z", "endUtcOffset": "-14400s", "type": "REM" },
+      { "startTime": "2026-09-24T09:50:00Z", "startUtcOffset": "-14400s", "endTime": "2026-09-24T10:25:00Z", "endUtcOffset": "-14400s", "type": "AWAKE" }
+    ],
+    "metadata": { "stagesStatus": "SUCCEEDED", "processed": true, "nap": false, "manuallyEdited": false },
+    "summary": {
+      "stagesSummary": [
+        { "type": "AWAKE", "minutes": "35", "count": "3" },
+        { "type": "LIGHT", "minutes": "230", "count": "14" },
+        { "type": "DEEP", "minutes": "90", "count": "4" },
+        { "type": "REM", "minutes": "110", "count": "5" }
+      ],
+      "minutesInSleepPeriod": "465",
+      "minutesAsleep": "430",
+      "minutesAwake": "35"
+    },
+    "createTime": "2026-09-24T10:31:12Z",
+    "updateTime": "2026-09-24T10:31:12Z"
+  }
+}

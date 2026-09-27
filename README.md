@@ -92,7 +92,22 @@ curl -X POST http://localhost:3000/v1/progress-photos \
   -F file=@progress.jpg -F occurredAt=2026-09-24T08:00:00Z -F timeZone=Europe/Lisbon
 ```
 
-The server accepts JPEG, PNG, and WebP up to 8 MB. It identifies the type from the file's first bytes, not from its name. The bytes are stored in PostgreSQL. `GET /v1/progress-photos/{id}/image` returns them. Deleting a photo erases its bytes. The Sports section's wearables card is a placeholder until the mobile app imports HealthKit or Health Connect data.
+The server accepts JPEG, PNG, and WebP up to 8 MB. It identifies the type from the file's first bytes, not from its name. The bytes are stored in PostgreSQL. `GET /v1/progress-photos/{id}/image` returns them. Deleting a photo erases its bytes.
+
+### Google Health sleep and workouts
+
+The Overview Sleep section can import sleep and workouts from Google Health, which is where a Fitbit Air syncs through the phone app. Nouri's server signs in to Google with the read-only sleep and activity-and-fitness scopes and keeps the tokens encrypted in PostgreSQL. The page never sees them. Set these in `.env` and restart:
+
+```sh
+GOOGLE_HEALTH_CLIENT_ID=...apps.googleusercontent.com
+GOOGLE_HEALTH_CLIENT_SECRET=...
+GOOGLE_HEALTH_REDIRECT_URI=http://127.0.0.1:3000/oauth/google-health/callback
+WEARABLE_TOKEN_KEY=$(openssl rand -hex 32)   # paste the output, not the command
+```
+
+Open Nouri on the same host and port as the redirect URI; the sign-in cookie is tied to that host. For `pnpm dev`, register and use `http://127.0.0.1:5173/oauth/google-health/callback` instead; Vite forwards `/oauth` to the API. Choose **Connect** in the Google Health tile, approve sleep and exercise access, and Nouri runs a first sync. **Sync now** re-reads the last 30 days and adds, updates, or removes imported nights and workouts to match Google. Imported workouts appear in Sports under their Google name, such as "Evening Run", and count toward the day's workout totals. Imported records show their device and cannot be deleted in Nouri. Delete them in Google Health, then sync. **Disconnect** revokes Nouri's access and removes everything it imported. Manual sleep and workouts are kept. A connection made before workouts were imported reads only sleep; the tile asks you to **Connect again** to add them.
+
+The API is `GET /v1/integrations/google-health` for status, `POST .../authorizations` to start sign-in, `POST .../syncs`, and `DELETE /v1/integrations/google-health`. [docs/wearables-design.md](docs/wearables-design.md) covers the Google Cloud setup, testing with a real Fitbit Air and iPhone, and adding another provider. The Sports section's wearables card for steps, resting heart rate, and active energy is still a placeholder.
 
 ## Verify
 

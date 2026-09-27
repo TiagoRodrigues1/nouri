@@ -21,6 +21,7 @@ function workout(row: WorkoutRow): Workout {
     distanceM: row.distanceM,
     energyKcal: row.energyKcal,
     strengthExercises: row.strengthExercises,
+    source: row.source === "manual" ? { kind: "manual" } : { kind: "wearable", provider: row.source, device: row.sourceDevice, title: row.sourceTitle },
   };
 }
 
@@ -29,6 +30,8 @@ export const workoutRecords: RecordKind<WorkoutInput, Workout> = {
   label: "Workout",
   table: workouts,
   schema: workoutSchema,
+  // Imported rows are outside the manual delete path. Their provider owns deletion.
+  deletable: eq(workouts.source, "manual"),
   create: async (tx, userId, input) => {
     const [row] = await tx.insert(workouts).values({
       id: randomUUID(),

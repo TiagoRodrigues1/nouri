@@ -13,7 +13,11 @@ import type { Day } from "../../../src/days/contract";
 import { entrySchema, searchResultSchema } from "../../../src/food/contract";
 import type { FoodEntry, SearchResult } from "../../../src/food/contract";
 import { overviewSchema } from "../../../src/overview/contract";
+import { authorizationSchema, callbackResults, connectionStatusSchema, disconnectResultSchema, syncResultSchema } from "../../../src/wearables/contract";
+import type { ConnectionStatus, DisconnectResult, SyncResult, WearableProvider } from "../../../src/wearables/contract";
 import type { Overview } from "../../../src/overview/contract";
+
+export { callbackResults };
 
 export type { CardId, Dashboard } from "../../../src/dashboard/contract";
 
@@ -34,6 +38,8 @@ export type { SleepSession } from "../../../src/sleep/contract";
 export type { Supplement, SupplementDay, SupplementIntake, SupplementKind } from "../../../src/supplements/contract";
 
 export type { Targets } from "../../../src/targets/contract";
+
+export type { CallbackResult, ConnectionStatus, ImportKind, WearableProvider } from "../../../src/wearables/contract";
 
 export type { Activity, Workout } from "../../../src/workouts/contract";
 
@@ -169,6 +175,25 @@ export async function getPhotoImage(token: string, id: string): Promise<Blob> {
   if (!response.ok) throw new Error(`Could not load photo (${response.status}).`);
 
   return response.blob();
+}
+
+export async function getConnection(token: string, provider: WearableProvider): Promise<ConnectionStatus> {
+  return request(token, `/v1/integrations/${provider}`, connectionStatusSchema);
+}
+
+// The server keeps the provider's tokens; the page only learns where to send the browser.
+export async function startConnection(token: string, provider: WearableProvider): Promise<string> {
+  const { authorizationUrl } = await request(token, `/v1/integrations/${provider}/authorizations`, authorizationSchema, { method: "POST" });
+
+  return authorizationUrl;
+}
+
+export async function syncConnection(token: string, provider: WearableProvider): Promise<SyncResult> {
+  return request(token, `/v1/integrations/${provider}/syncs`, syncResultSchema, { method: "POST" });
+}
+
+export async function disconnectConnection(token: string, provider: WearableProvider): Promise<DisconnectResult> {
+  return request(token, `/v1/integrations/${provider}`, disconnectResultSchema, { method: "DELETE" });
 }
 
 export async function getDashboard(token: string): Promise<Dashboard> {

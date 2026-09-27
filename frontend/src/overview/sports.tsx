@@ -9,6 +9,7 @@ import { styles } from "../overview-styles";
 import { colors } from "../theme.stylex";
 import { Caption, DeleteButton, Empty, Section, Stat, Tile, Value, duration } from "./shared";
 import { clock } from "../lib/time";
+import { providerDetails } from "../lib/wearables";
 
 const activityIcons: Record<Activity, ReactNode> = {
   strength: <Dumbbell size={16} />,
@@ -19,7 +20,21 @@ const activityIcons: Record<Activity, ReactNode> = {
   other: <ActivityIcon size={16} />,
 };
 
-type SportsProps = { sports: OverviewData["sports"]; busy: boolean; onLog: () => void; onDelete: (entry: OverviewData["sports"]["entries"][number]) => void };
+type Entry = OverviewData["sports"]["entries"][number];
+
+type SportsProps = { sports: OverviewData["sports"]; busy: boolean; onLog: () => void; onDelete: (entry: Entry) => void };
+
+// Imported workouts keep their provider's name, such as "Evening Run", and say where they came from.
+function title(entry: Entry): string {
+  return (entry.source.kind === "wearable" && entry.source.title) || activityLabels[entry.activity];
+}
+
+function origin(entry: Entry): string | null {
+  if (entry.source.kind === "manual") return null;
+  const service = providerDetails[entry.source.provider].name;
+
+  return entry.source.device ? `${entry.source.device} · ${service}` : service;
+}
 
 export function SportsSection({ sports, busy, onLog, onDelete }: SportsProps) {
   const distances = sports.entries.flatMap((entry) => (entry.distanceM === null ? [] : [entry.distanceM]));
@@ -50,9 +65,9 @@ export function SportsSection({ sports, busy, onLog, onDelete }: SportsProps) {
               <li key={entry.id} {...stylex.props(styles.listRow)}>
                 <span {...stylex.props(styles.listIcon(colors.activity))}>{activityIcons[entry.activity]}</span>
                 <span {...stylex.props(styles.listText)}>
-                  <strong {...stylex.props(styles.listName)}>{activityLabels[entry.activity]}</strong>
+                  <strong {...stylex.props(styles.listName)}>{title(entry)}</strong>
                   <small {...stylex.props(styles.listMeta)}>
-                    {[clock.format(new Date(entry.occurredAt)), duration(entry.durationMinutes), entry.distanceM === null ? null : `${format(entry.distanceM / 1000, 2)} km`, entry.energyKcal === null ? null : `${format(entry.energyKcal)} kcal`].filter(Boolean).join(" · ")}
+                    {[clock.format(new Date(entry.occurredAt)), duration(entry.durationMinutes), entry.distanceM === null ? null : `${format(entry.distanceM / 1000, 2)} km`, entry.energyKcal === null ? null : `${format(entry.energyKcal)} kcal`, origin(entry)].filter(Boolean).join(" · ")}
                   </small>
                   {entry.strengthExercises?.map((exercise, index) => (
                     <small key={index} {...stylex.props(styles.listMeta)}>
@@ -60,7 +75,7 @@ export function SportsSection({ sports, busy, onLog, onDelete }: SportsProps) {
                     </small>
                   ))}
                 </span>
-                <DeleteButton label={`Delete ${activityLabels[entry.activity].toLowerCase()} at ${clock.format(new Date(entry.occurredAt))}`} disabled={busy} onClick={() => onDelete(entry)} />
+                {entry.source.kind !== "manual" ? <Badge variant="outline">Imported</Badge> : <DeleteButton label={`Delete ${activityLabels[entry.activity].toLowerCase()} at ${clock.format(new Date(entry.occurredAt))}`} disabled={busy} onClick={() => onDelete(entry)} />}
               </li>
             ))}
           </ul>
