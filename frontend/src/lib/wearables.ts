@@ -1,8 +1,16 @@
-import type { CallbackResult, ImportKind, WearableProvider } from "./api";
+import type { CallbackResult, ConnectionStatus, ImportKind, WearableProvider } from "./api";
 
 // What the page calls each provider and where its data can be edited. Add an entry with each new provider.
 export const providerDetails: Record<WearableProvider, { name: string; description: string; revokeHelp: string }> = {
   "google-health": { name: "Google Health", description: "Imports sleep and workouts from Fitbit devices, such as Fitbit Air, through your Google account.", revokeHelp: "Google did not confirm the revocation, so remove Nouri in your Google Account settings too." },
+};
+
+// The badge each connection state shows, in the Wearables dialog and on the Overview tiles.
+export const connectionBadges: Record<ConnectionStatus["connection"], { label: string; variant: "secondary" | "outline" | "destructive" }> = {
+  "not-configured": { label: "Not set up", variant: "outline" },
+  "not-connected": { label: "Not connected", variant: "outline" },
+  connected: { label: "Connected", variant: "secondary" },
+  reauthorize: { label: "Sign in again", variant: "destructive" },
 };
 
 export const callbackMessages: Record<CallbackResult, string> = {
@@ -27,4 +35,10 @@ export function noun(kind: ImportKind, count: number): string {
 
 export function countOf(kind: ImportKind, count: number): string {
   return `${count} ${noun(kind, count)}`;
+}
+
+const when = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
+
+export function lastSync(lastSyncedAt: string | null): string {
+  return lastSyncedAt ? when.format(new Date(lastSyncedAt)) : "Never";
 }

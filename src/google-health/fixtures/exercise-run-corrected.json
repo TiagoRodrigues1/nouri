@@ -3,11 +3,10 @@
   "dataSource": {
     "recordingMethod": "ACTIVELY_MEASURED",
     "device": {
-      "manufacturer": "Google",
-      "model": "Fitbit Air",
-      "formFactor": "WRIST_WORN"
+      "formFactor": "FITNESS_BAND",
+      "displayName": "Google Fitbit Air"
     },
-    "platform": "IOS"
+    "platform": "FITBIT"
   },
   "exercise": {
     "interval": {

@@ -17,6 +17,7 @@ export type DashboardPageContext = {
   journal: ReturnType<typeof useJournal>;
   water: ReturnType<typeof useWater>;
   onManageSupplements: () => void;
+  onManageWearables: () => void;
   customizingCards: boolean;
   onCustomizingCardsChange: (open: boolean) => void;
 };

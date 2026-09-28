@@ -10,7 +10,6 @@ import { NutritionSection } from "./overview/nutrition";
 import { SportsSection } from "./overview/sports";
 import { MeasurementsSection } from "./overview/measurements";
 import { SleepSection } from "./overview/sleep";
-import { ConnectionTile } from "./overview/connection";
 import { SupplementsSection } from "./overview/supplements";
 import { styles } from "./overview-styles";
 import { maxPhotoBytes } from "../../src/photos/contract";
@@ -79,7 +78,7 @@ export function Overview() {
         onDeletePhoto={remove("/v1/progress-photos", "Photo")}
       />
     ),
-    sleep: <SleepSection connection={<ConnectionTile token={token} provider="google-health" />} sleep={data.sleep} goalMinutes={targets.targets?.sleepMinutes} busy={busy} onLog={onLogSleep} onDelete={remove("/v1/sleep-sessions", "Sleep session")} />,
+    sleep: <SleepSection sleep={data.sleep} goalMinutes={targets.targets?.sleepMinutes} busy={busy} onLog={onLogSleep} onDelete={remove("/v1/sleep-sessions", "Sleep session")} />,
     supplements: <SupplementsSection day={data.supplements} />,
   } : { nutrition: null, sports: null, measurements: null, sleep: null, supplements: null };
 

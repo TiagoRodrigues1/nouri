@@ -179,10 +179,10 @@ void test("Google Health sleep and workouts", async (t) => {
       assert.equal(filter("exercise"), 'exercise.interval.civil_start_time >= "2026-08-28"');
 
       day = await sleepOn("2026-09-24");
-      const found = day.sessions.find((item) => item.source.kind === "wearable" && item.source.device === "Fitbit Air");
+      const found = day.sessions.find((item) => item.source.kind === "wearable" && item.source.device === "Google Fitbit Air");
       assert.ok(found);
       imported = found;
-      assert.deepEqual(imported.source, { kind: "wearable", provider: "google-health", device: "Fitbit Air" });
+      assert.deepEqual(imported.source, { kind: "wearable", provider: "google-health", device: "Google Fitbit Air" });
       assert.equal(imported.timeZone, "-04:00");
       assert.equal(imported.localDate, "2026-09-24");
       assert.equal(imported.startedAt, "2026-09-24T02:40:00.000Z");
@@ -195,7 +195,7 @@ void test("Google Health sleep and workouts", async (t) => {
       // Both workouts start on the evening of 2026-09-24 at -04:00; the weights begin after midnight UTC.
       const sports = await sportsOn("2026-09-24");
       assert.deepEqual(sports.entries.map((entry) => [entry.activity, entry.source]), [
-        ["run", { kind: "wearable", provider: "google-health", device: "Fitbit Air", title: "Evening Run" }],
+        ["run", { kind: "wearable", provider: "google-health", device: "Google Fitbit Air", title: "Evening Run" }],
         ["strength", { kind: "wearable", provider: "google-health", device: "Fitbit Air", title: "Weights" }],
       ]);
       const [first] = sports.entries;

@@ -28,5 +28,22 @@ export default defineConfig(({ mode }) => ({
       "/oauth": "http://localhost:3000",
     },
   },
-  build: { outDir: "../web/dist", emptyOutDir: true },
+  build: {
+    outDir: "../web/dist",
+    emptyOutDir: true,
+    rolldownOptions: {
+      output: {
+        // Libraries change less often than the app, so each gets its own long-lived chunk.
+        codeSplitting: {
+          groups: [
+            { name: "react", test: /node_modules[\\/](react|react-dom|scheduler)[\\/]/ },
+            { name: "tanstack", test: /node_modules[\\/]@tanstack[\\/]/ },
+            { name: "ui", test: /node_modules[\\/](@radix-ui|radix-ui|@floating-ui|react-remove-scroll|sonner|lucide-react|tailwind-merge)/ },
+            { name: "zod", test: /node_modules[\\/]zod[\\/]/ },
+            { name: "vendor", test: /node_modules[\\/]/ },
+          ],
+        },
+      },
+    },
+  },
 }));

@@ -2,8 +2,8 @@
   "name": "users/4f7c2a/dataTypes/exercise/dataPoints/9200000000000000001",
   "dataSource": {
     "recordingMethod": "ACTIVELY_MEASURED",
-    "device": { "manufacturer": "Google", "model": "Fitbit Air", "formFactor": "WRIST_WORN" },
-    "platform": "IOS"
+    "device": { "formFactor": "FITNESS_BAND", "displayName": "Google Fitbit Air" },
+    "platform": "FITBIT"
   },
   "exercise": {
     "interval": {

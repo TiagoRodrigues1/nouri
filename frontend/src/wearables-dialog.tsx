@@ -1,23 +1,22 @@
 import * as stylex from "@stylexjs/stylex";
 import { useState, type ReactNode } from "react";
 import { Link2, RefreshCw, Unplug } from "lucide-react";
-import { Badge } from "../components/ui/badge";
-import { Button } from "../components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog";
-import type { ConnectionStatus, ImportKind, WearableProvider } from "../lib/api";
-import { useConnection } from "../lib/use-connection";
-import { countOf, importNouns, providerDetails } from "../lib/wearables";
-import { styles } from "../overview-styles";
-import { Stat, Tile } from "./shared";
-
-const when = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
+import { Badge } from "./components/ui/badge";
+import { Button } from "./components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./components/ui/dialog";
+import type { ConnectionStatus, ImportKind } from "./lib/api";
+import type { useConnection } from "./lib/use-connection";
+import { connectionBadges, countOf, importNouns, lastSync, providerDetails } from "./lib/wearables";
+import { styles as formStyles } from "./form-styles";
+import { styles as overviewStyles } from "./overview-styles";
+import { Stat } from "./overview/shared";
+import { colors } from "./theme.stylex";
 
 const kinds: ImportKind[] = ["sleep", "workouts"];
 
 type Action = "connect" | "reconnect" | "sync" | "disconnect";
 
 type ConnectionView = {
-  badge: { label: string; variant: "secondary" | "outline" | "destructive" };
   actions: Action[];
   showStats: boolean;
   note?: (name: string, windowDays: number | null) => ReactNode;
@@ -25,44 +24,71 @@ type ConnectionView = {
 
 const views: Record<ConnectionStatus["connection"], ConnectionView> = {
   "not-configured": {
-    badge: { label: "Not set up", variant: "outline" }, actions: [], showStats: false,
+    actions: [], showStats: false,
     note: (name) => <>This server has no {name} settings. Add them to <code>.env</code> and restart Nouri; the README lists them.</>,
   },
-  "not-connected": { badge: { label: "Not connected", variant: "outline" }, actions: ["connect"], showStats: true },
+  "not-connected": { actions: ["connect"], showStats: true },
   connected: {
-    badge: { label: "Connected", variant: "secondary" }, actions: ["sync", "disconnect"], showStats: true,
+    actions: ["sync", "disconnect"], showStats: true,
     note: (name, windowDays) => <>Each sync rereads the last {windowDays} days, so edits and deletions in {name} reach Nouri.</>,
   },
-  reauthorize: { badge: { label: "Sign in again", variant: "destructive" }, actions: ["reconnect", "disconnect"], showStats: true },
+  reauthorize: { actions: ["reconnect", "disconnect"], showStats: true },
 };
 
-// Connect, Sync, and Disconnect for one cloud provider, with what it imported, the last successful sync, and the last error.
-export function ConnectionTile({ token, provider }: { token: string; provider: WearableProvider }) {
-  const { status, connect, sync, disconnect } = useConnection(token, provider);
+const styles = stylex.create({
+  provider: { display: "grid", gap: 12, padding: 16, borderWidth: 1, borderStyle: "solid", borderColor: colors.border, borderRadius: 12 },
+  providerHeader: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 },
+  providerName: { display: "flex", alignItems: "center", gap: 7, margin: 0, fontSize: 14, fontWeight: 600 },
+});
+
+type WearablesDialogProps = { open: boolean; onOpenChange: (open: boolean) => void; connection: ReturnType<typeof useConnection> };
+
+// Connect, Sync, and Disconnect for Google Health, with what it imported, the last successful sync, and the last error.
+export function WearablesDialog({ open, onOpenChange, connection }: WearablesDialogProps) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogTitle {...stylex.props(formStyles.dialogTitle)}>Wearables</DialogTitle>
+        <DialogDescription {...stylex.props(formStyles.dialogDescription)}>
+          Imported sleep and workouts appear on the Overview next to what you log by hand. They change only at their source, so edit or delete them there, then sync.
+        </DialogDescription>
+        <ProviderPanel connection={connection} />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ProviderPanel({ connection }: { connection: ReturnType<typeof useConnection> }) {
+  const { provider, status, connect, sync, disconnect } = connection;
   const [confirming, setConfirming] = useState(false);
   const { name, description } = providerDetails[provider];
   const data = status.data;
   const busy = connect.isPending || sync.isPending || disconnect.isPending;
   const view = data && views[data.connection];
+  const badge = data && connectionBadges[data.connection];
   // A grant from before workouts, or one with a box unticked, imports only some kinds until the person connects again.
   const missing = data?.connection === "connected" ? kinds.filter((kind) => !data.granted.includes(kind)) : [];
   const actions = view && missing.length > 0 ? ["reconnect" as const, ...view.actions] : view?.actions;
 
   return (
-    <Tile title={name} icon={<Link2 size={16} />} aside={view && <Badge variant={view.badge.variant}>{view.badge.label}</Badge>}>
-      <p {...stylex.props(styles.note)}>{description}</p>
-      {status.isError && <p role="alert" {...stylex.props(styles.alert)}>{status.error.message}</p>}
-      {data && view?.note && <p {...stylex.props(styles.note)}>{view.note(name, data.windowDays)}</p>}
-      {missing.length > 0 && <p {...stylex.props(styles.note)}>Nouri cannot read {missing.map((kind) => importNouns[kind][1]).join(" or ")} with this sign-in. Choose Connect again and allow it to import them too.</p>}
+    <section {...stylex.props(styles.provider)} aria-label={name}>
+      <div {...stylex.props(styles.providerHeader)}>
+        <h3 {...stylex.props(styles.providerName)}><Link2 size={16} /> {name}</h3>
+        {badge && <Badge variant={badge.variant}>{badge.label}</Badge>}
+      </div>
+      <p {...stylex.props(overviewStyles.note)}>{description}</p>
+      {status.isError && <p role="alert" {...stylex.props(overviewStyles.alert)}>{status.error.message}</p>}
+      {data && view?.note && <p {...stylex.props(overviewStyles.note)}>{view.note(name, data.windowDays)}</p>}
+      {missing.length > 0 && <p {...stylex.props(overviewStyles.note)}>Nouri cannot read {missing.map((kind) => importNouns[kind][1]).join(" or ")} with this sign-in. Choose Connect again and allow it to import them too.</p>}
       {data && view?.showStats && (
-        <div {...stylex.props(styles.rows)}>
-          <Stat label="Last successful sync" value={data.lastSyncedAt ? when.format(new Date(data.lastSyncedAt)) : "Never"} />
+        <div {...stylex.props(overviewStyles.rows)}>
+          <Stat label="Last successful sync" value={lastSync(data.lastSyncedAt)} />
           <Stat label="Imported sleep" value={countOf("sleep", data.imported.sleep)} />
           <Stat label="Imported workouts" value={countOf("workouts", data.imported.workouts)} />
         </div>
       )}
-      {data?.lastError && <p role="alert" {...stylex.props(styles.alert)}>{data.lastError}</p>}
-      <div {...stylex.props(styles.actions)}>
+      {data?.lastError && <p role="alert" {...stylex.props(overviewStyles.alert)}>{data.lastError}</p>}
+      <div {...stylex.props(overviewStyles.actions)}>
         {actions?.map((action) => {
           switch (action) {
             case "connect":
@@ -100,6 +126,6 @@ export function ConnectionTile({ token, provider }: { token: string; provider: W
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </Tile>
+    </section>
   );
 }
