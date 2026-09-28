@@ -32,10 +32,7 @@ import { ConnectionDialog } from "./connection-dialog";
 import { TargetsDialog } from "./targets-dialog";
 import { SupplementsDialog } from "./supplements-dialog";
 import { WearablesDialog } from "./wearables-dialog";
-import { TodayPage } from "./today-page";
 import { dashboardPageContext } from "./dashboard-page-context";
-import { FoodPage } from "./food-page";
-import { Overview } from "./overview";
 import { MeasurementDialog, SleepDialog, WorkoutDialog } from "./overview-dialogs";
 import { useJournal } from "./overview/use-journal";
 import { Popover, PopoverContent, PopoverTrigger } from "./components/ui/popover";
@@ -43,8 +40,6 @@ import type { FoodEntry, RecordCommand } from "./lib/api";
 import { recordPaths } from "../../src/journal/paths";
 
 const tokenKey = "nouri.apiToken";
-
-export { useDashboardPage } from "./dashboard-page-context";
 
 const disconnectedKey = "nouri.disconnected";
 
@@ -344,16 +339,4 @@ export function Dashboard() {
     </div>
     </dashboardPageContext.Provider>
   );
-}
-
-export function TodayRoute() {
-  return <TodayPage />;
-}
-
-export function FoodRoute() {
-  return <FoodPage />;
-}
-
-export function OverviewRoute() {
-  return <Overview />;
 }
