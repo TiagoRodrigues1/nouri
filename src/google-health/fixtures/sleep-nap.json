@@ -1,9 +1,9 @@
 {
   "name": "users/4f7c2a/dataTypes/sleep/dataPoints/9100000000000000002",
   "dataSource": {
-    "recordingMethod": "PASSIVELY_RECORDED",
-    "device": { "manufacturer": "Google", "model": "Fitbit Air", "formFactor": "WRIST_WORN" },
-    "platform": "IOS"
+    "recordingMethod": "DERIVED",
+    "device": { "displayName": "Google Fitbit Air" },
+    "platform": "FITBIT"
   },
   "sleep": {
     "interval": {

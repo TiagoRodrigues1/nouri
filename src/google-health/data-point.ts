@@ -18,8 +18,11 @@ export function offsetZone(offset: string | undefined): string {
   return `${sign}${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
 }
 
-export function deviceName(dataSource: { device?: { manufacturer?: string | undefined; model?: string | undefined } | undefined } | undefined): string | null {
+type DeviceSource = { device?: { displayName?: string | undefined; manufacturer?: string | undefined; model?: string | undefined } | undefined } | undefined;
+
+// A Fitbit Air reports only a display name, like "Google Fitbit Air"; model and manufacturer are fallbacks for other sources.
+export function deviceName(dataSource: DeviceSource): string | null {
   const device = dataSource?.device;
 
-  return device?.model?.trim() || device?.manufacturer?.trim() || null;
+  return device?.displayName?.trim() || device?.model?.trim() || device?.manufacturer?.trim() || null;
 }

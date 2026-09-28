@@ -47,7 +47,7 @@ void test("exercise points map onto Nouri workouts", () => {
   const imported = workoutRecord(run);
   assert.deepEqual({ ...imported, fingerprint: undefined }, {
     externalId: run.name, fingerprint: undefined, occurredAt: new Date("2026-09-24T21:30:00Z"), timeZone: "-04:00", localDate: "2026-09-24",
-    activity: "run", title: "Evening Run", durationMinutes: 40, distanceM: 8020, energyKcal: 512, device: "Fitbit Air",
+    activity: "run", title: "Evening Run", durationMinutes: 40, distanceM: 8020, energyKcal: 512, device: "Google Fitbit Air",
   });
 
   const exercise = (patch: Partial<typeof run.exercise>) => workoutRecord({ ...run, exercise: { ...run.exercise, ...patch } });

@@ -34,7 +34,7 @@ const durationSchema = z.string().regex(/^-?\d+(\.\d+)?s$/);
 const timestampSchema = z.iso.datetime({ offset: true });
 
 const deviceSourceSchema = z.object({
-  device: z.object({ manufacturer: z.string().optional(), model: z.string().optional() }).optional(),
+  device: z.object({ displayName: z.string().optional(), manufacturer: z.string().optional(), model: z.string().optional() }).optional(),
 }).optional();
 
 // Enum fields stay strings, so a stage type Google adds later is ignored instead of rejecting the night.
