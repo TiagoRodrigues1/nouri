@@ -25,7 +25,7 @@ This index is the maintained list of Nouri's user paths. Read the relevant file 
 - [Edit a food](edit.md): pencil on Food page and timeline rows, catalog amount, manual fields and time, revision conflict.
 - [Log water](water.md): preset and custom amounts, daily total, remove a drink.
 - [Overview](overview.md): sidebar link, category tabs, measurements, workouts, sleep, progress photos, deletion. The Supplements tab is covered in [Supplements](supplements.md).
-- [Wearable import](wearables.md): Google Health tile in Overview Sleep, not-set-up state, fixture-backed Connect, imported sleep and workouts, repeat sync, disconnect, forged callback.
+- [Wearable import](wearables.md): Wearables dialog in the sidebar and the Wearables tiles in Overview Sleep and Sports, not-set-up state, fixture-backed Connect, imported sleep and workouts, repeat sync, disconnect, forged callback.
 - [Customize My Day cards](cards.md): show, hide, reorder, save, reload, and restore defaults.
 - [Food page](food-page.md): intake against targets, meals by time of day, top foods, log again, delete.
 - [Supplements](supplements.md): sidebar dialog edits the list from today, My Day checklist and Overview `Take` buttons tick and untick intakes, earlier days keep their list.

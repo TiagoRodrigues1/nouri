@@ -15,6 +15,7 @@ import {
   SlidersHorizontal,
   Target,
   UtensilsCrossed,
+  Watch,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "./components/ui/button";
@@ -23,12 +24,14 @@ import { createFood, deleteFood, getDay } from "./lib/api";
 import { dateLabel, localDate, occurredAt, shiftDate, timeZone as zone } from "./lib/time";
 import { useIdempotentWrite, useIdempotentDelete } from "./lib/use-idempotent";
 import { useWater } from "./lib/use-water";
+import { useConnection } from "./lib/use-connection";
 import { submissionSchema, type FoodSubmission } from "../../src/food/contract";
 import { LogFoodDialog } from "./log-food-dialog";
 import { EditFoodDialog } from "./edit-food-dialog";
 import { ConnectionDialog } from "./connection-dialog";
 import { TargetsDialog } from "./targets-dialog";
 import { SupplementsDialog } from "./supplements-dialog";
+import { WearablesDialog } from "./wearables-dialog";
 import { TodayPage } from "./today-page";
 import { dashboardPageContext } from "./dashboard-page-context";
 import { FoodPage } from "./food-page";
@@ -81,9 +84,11 @@ export function Dashboard() {
   const [customizingCards, setCustomizingCards] = useState(false);
   const [targetsOpen, setTargetsOpen] = useState(false);
   const [supplementsOpen, setSupplementsOpen] = useState(false);
+  const [wearablesOpen, setWearablesOpen] = useState(false);
 
   const journal = useJournal(token);
   const water = useWater(token, date, () => setConnectionOpen(true));
+  const googleHealth = useConnection(token, "google-health");
 
   const foodDelete = useIdempotentDelete<FoodEntry>(token, (entry, key) => deleteFood(token, entry, key), {
     refresh: ["day", "overview"], success: () => "Food removed from your log.",
@@ -125,6 +130,11 @@ export function Dashboard() {
 
   function manageSupplements() {
     if (token) setSupplementsOpen(true);
+    else setConnectionOpen(true);
+  }
+
+  function manageWearables() {
+    if (token) setWearablesOpen(true);
     else setConnectionOpen(true);
   }
 
@@ -199,7 +209,7 @@ export function Dashboard() {
   }[view];
 
   return (
-    <dashboardPageContext.Provider value={{ token, date, isToday, onLogFood: () => setLogOpen(true), onEditFood: (entry) => setEditingId(entry.id), onLogWorkout: () => setRecordDialog("workout"), onLogSleep: () => setRecordDialog("sleep"), onLogMeasurement: () => setRecordDialog("measurement"), foodDelete, journal, water, onManageSupplements: manageSupplements, customizingCards, onCustomizingCardsChange: setCustomizingCards }}>
+    <dashboardPageContext.Provider value={{ token, date, isToday, onLogFood: () => setLogOpen(true), onEditFood: (entry) => setEditingId(entry.id), onLogWorkout: () => setRecordDialog("workout"), onLogSleep: () => setRecordDialog("sleep"), onLogMeasurement: () => setRecordDialog("measurement"), foodDelete, journal, water, onManageSupplements: manageSupplements, onManageWearables: manageWearables, customizingCards, onCustomizingCardsChange: setCustomizingCards }}>
     <div {...stylex.props(styles.appShell)}>
       <aside {...stylex.props(styles.sidebar)}>
         <Link to="/" {...stylex.props(styles.brand)}>
@@ -260,6 +270,14 @@ export function Dashboard() {
             <Pill size={17} {...stylex.props(supplementsOpen && styles.iconAccent)} />
             Supplements
           </button>
+          <button
+            type="button"
+            {...stylex.props(styles.navItem, wearablesOpen && styles.navItemActive)}
+            onClick={manageWearables}
+          >
+            <Watch size={17} {...stylex.props(wearablesOpen && styles.iconAccent)} />
+            Wearables
+          </button>
         </nav>
         <div {...stylex.props(styles.sidebarBottom)}>
           <div {...stylex.props(styles.profile)}>
@@ -316,6 +334,7 @@ export function Dashboard() {
       </main>
       <TargetsDialog open={targetsOpen} onOpenChange={setTargetsOpen} token={token} />
       <SupplementsDialog open={supplementsOpen} onOpenChange={setSupplementsOpen} token={token} />
+      <WearablesDialog open={wearablesOpen} onOpenChange={setWearablesOpen} connection={googleHealth} />
       <ConnectionDialog open={connectionOpen} onOpenChange={setConnectionOpen} token={token} onConnect={connect} onDisconnect={disconnect} />
       <LogFoodDialog open={logOpen} onOpenChange={setLogOpen} token={token} date={date} isToday={isToday} pending={createMutation.isPending} onSave={saveFood} onConnect={() => { setLogOpen(false); setConnectionOpen(true); }} />
       <EditFoodDialog token={token} date={date} entryId={editingId} onClose={() => setEditingId(null)} />

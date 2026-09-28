@@ -13,17 +13,21 @@ function listCounts(counts: Record<ImportKind, number>): string {
   return parts.length ? parts.join(" and ") : "nothing";
 }
 
-// Connect, Sync, and Disconnect for one cloud provider. Imported sleep and workouts show up through the overview query.
-export function useConnection(token: string, provider: WearableProvider) {
-  const client = useQueryClient();
-  const { name, revokeHelp } = providerDetails[provider];
-  const refresh = () => Promise.all([client.invalidateQueries({ queryKey: ["connection", token, provider] }), client.invalidateQueries({ queryKey: ["overview", token] })]);
-
-  const status = useQuery({
+export function useConnectionStatus(token: string, provider: WearableProvider) {
+  return useQuery({
     queryKey: ["connection", token, provider],
     queryFn: () => getConnection(token, provider),
     enabled: Boolean(token),
   });
+}
+
+// Connect, Sync, and Disconnect for one cloud provider. Imported sleep and workouts show up through the overview query.
+// The page shell mounts it once, so the OAuth callback is handled whichever page it lands on.
+export function useConnection(token: string, provider: WearableProvider) {
+  const client = useQueryClient();
+  const { name, revokeHelp } = providerDetails[provider];
+  const refresh = () => Promise.all([client.invalidateQueries({ queryKey: ["connection", token, provider] }), client.invalidateQueries({ queryKey: ["overview", token] })]);
+  const status = useConnectionStatus(token, provider);
 
   const connect = useMutation({
     mutationFn: () => startConnection(token, provider),
@@ -84,5 +88,5 @@ export function useConnection(token: string, provider: WearableProvider) {
     }
   }, [token, provider, startSync]);
 
-  return { status, connect, sync, disconnect };
+  return { provider, status, connect, sync, disconnect };
 }

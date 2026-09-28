@@ -1,15 +1,16 @@
 import * as stylex from "@stylexjs/stylex";
 import type { ReactNode } from "react";
-import { Activity as ActivityIcon, Bike, Dumbbell, Flame, Footprints, HeartPulse, PersonStanding, Plus, Watch, Waves } from "lucide-react";
+import { Activity as ActivityIcon, Bike, Dumbbell, Footprints, PersonStanding, Plus, Waves } from "lucide-react";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { activityLabels } from "../overview-dialogs";
 import { format, type Activity, type Overview as OverviewData } from "../lib/api";
 import { styles } from "../overview-styles";
 import { colors } from "../theme.stylex";
-import { Caption, DeleteButton, Empty, Section, Stat, Tile, Value, duration } from "./shared";
+import { DeleteButton, Empty, Section, Stat, Tile, Value, duration } from "./shared";
 import { clock } from "../lib/time";
 import { providerDetails } from "../lib/wearables";
+import { WearablesTile } from "./wearables-tile";
 
 const activityIcons: Record<Activity, ReactNode> = {
   strength: <Dumbbell size={16} />,
@@ -81,14 +82,7 @@ export function SportsSection({ sports, busy, onLog, onDelete }: SportsProps) {
           </ul>
         )}
       </Tile>
-      <Tile title="Wearables" icon={<Watch size={16} />} aside={<Badge variant="outline">Not connected</Badge>}>
-        <div {...stylex.props(styles.rows)}>
-          <Stat icon={<Footprints size={14} />} label="Steps" value="—" />
-          <Stat icon={<HeartPulse size={14} />} label="Resting heart rate" value="—" />
-          <Stat icon={<Flame size={14} />} label="Active energy" value="—" />
-        </div>
-        <Caption>Apple Health and Health Connect data will appear here once the mobile app syncs it.</Caption>
-      </Tile>
+      <WearablesTile kind="workouts" imported={sports.entries.filter((entry) => entry.source.kind === "wearable").length} />
     </Section>
   );
 }
