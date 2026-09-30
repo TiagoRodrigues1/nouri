@@ -1,8 +1,7 @@
 import * as stylex from "@stylexjs/stylex";
 import type { ReactNode } from "react";
-import { Activity as ActivityIcon, Bike, Dumbbell, Footprints, PersonStanding, Plus, Waves } from "lucide-react";
+import { Activity as ActivityIcon, Bike, Dumbbell, Footprints, PersonStanding, Waves } from "lucide-react";
 import { Badge } from "../components/ui/badge";
-import { Button } from "../components/ui/button";
 import { activityLabels } from "../overview-dialogs";
 import { format, type Activity, type Overview as OverviewData } from "../lib/api";
 import { styles } from "../overview-styles";
@@ -23,7 +22,7 @@ const activityIcons: Record<Activity, ReactNode> = {
 
 type Entry = OverviewData["sports"]["entries"][number];
 
-type SportsProps = { sports: OverviewData["sports"]; busy: boolean; onLog: () => void; onDelete: (entry: Entry) => void };
+type SportsProps = { sports: OverviewData["sports"]; busy: boolean; onDelete: (entry: Entry) => void };
 
 // Imported workouts keep their provider's name, such as "Evening Run", and say where they came from.
 function title(entry: Entry): string {
@@ -37,7 +36,7 @@ function origin(entry: Entry): string | null {
   return entry.source.device ? `${entry.source.device} · ${service}` : service;
 }
 
-export function SportsSection({ sports, busy, onLog, onDelete }: SportsProps) {
+export function SportsSection({ sports, busy, onDelete }: SportsProps) {
   const distances = sports.entries.flatMap((entry) => (entry.distanceM === null ? [] : [entry.distanceM]));
   const distanceKm = distances.reduce((sum, meters) => sum + meters, 0) / 1000;
 
@@ -47,7 +46,6 @@ export function SportsSection({ sports, busy, onLog, onDelete }: SportsProps) {
       description="Workouts, activities, and data from your wearables."
       icon={<Dumbbell size={18} />}
       color={colors.activity}
-      action={<Button variant="outline" size="sm" onClick={onLog}><Plus size={15} /> Log workout</Button>}
     >
       <Tile title="Activity" icon={<ActivityIcon size={16} />}>
         <Value value={sports.totalMinutes === null ? "—" : duration(sports.totalMinutes)} />

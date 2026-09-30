@@ -9,9 +9,11 @@ import {
   ChevronRight,
   LayoutDashboard,
   ChartColumn,
+  Droplet,
   Dumbbell,
   Moon,
   Pill,
+  Ruler,
   SlidersHorizontal,
   Target,
   UtensilsCrossed,
@@ -28,12 +30,13 @@ import { useConnection } from "./lib/use-connection";
 import { submissionSchema, type FoodSubmission } from "../../src/food/contract";
 import { LogFoodDialog } from "./log-food-dialog";
 import { EditFoodDialog } from "./edit-food-dialog";
+import { SaveMealDialog, type MealSelection } from "./save-meal-dialog";
 import { ConnectionDialog } from "./connection-dialog";
 import { TargetsDialog } from "./targets-dialog";
 import { SupplementsDialog } from "./supplements-dialog";
 import { WearablesDialog } from "./wearables-dialog";
 import { dashboardPageContext } from "./dashboard-page-context";
-import { MeasurementDialog, SleepDialog, WorkoutDialog } from "./overview-dialogs";
+import { MeasurementDialog, SleepDialog, WaterDialog, WorkoutDialog } from "./overview-dialogs";
 import { useJournal } from "./overview/use-journal";
 import { Popover, PopoverContent, PopoverTrigger } from "./components/ui/popover";
 import type { FoodEntry, RecordCommand } from "./lib/api";
@@ -55,6 +58,8 @@ type View = "today" | "overview" | "food";
 
 type PendingFood = { input: FoodSubmission; signature: string };
 
+type RecordKind = "water" | "workout" | "sleep" | "measurement";
+
 export function Dashboard() {
   const queryClient = useQueryClient();
   const path = useLocation({ select: (location) => location.pathname });
@@ -73,8 +78,9 @@ export function Dashboard() {
 
   const [logOpen, setLogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [mealSelection, setMealSelection] = useState<MealSelection | null>(null);
   const [logMenuOpen, setLogMenuOpen] = useState(false);
-  const [recordDialog, setRecordDialog] = useState<"workout" | "sleep" | "measurement" | null>(null);
+  const [recordDialog, setRecordDialog] = useState<RecordKind | null>(null);
   const [connectionOpen, setConnectionOpen] = useState(false);
   const [customizingCards, setCustomizingCards] = useState(false);
   const [targetsOpen, setTargetsOpen] = useState(false);
@@ -82,7 +88,12 @@ export function Dashboard() {
   const [wearablesOpen, setWearablesOpen] = useState(false);
 
   const journal = useJournal(token);
-  const water = useWater(token, date, () => setConnectionOpen(true));
+
+  const water = useWater(token, () => {
+    setRecordDialog(null);
+    setConnectionOpen(true);
+  });
+
   const googleHealth = useConnection(token, "google-health");
 
   const foodDelete = useIdempotentDelete<FoodEntry>(token, (entry, key) => deleteFood(token, entry, key), {
@@ -149,7 +160,7 @@ export function Dashboard() {
     });
   }
 
-  function openLog(kind: "food" | "workout" | "sleep") {
+  function openLog(kind: "food" | RecordKind) {
     setLogMenuOpen(false);
 
     if (kind === "food") setLogOpen(true);
@@ -204,7 +215,7 @@ export function Dashboard() {
   }[view];
 
   return (
-    <dashboardPageContext.Provider value={{ token, date, isToday, onLogFood: () => setLogOpen(true), onEditFood: (entry) => setEditingId(entry.id), onLogWorkout: () => setRecordDialog("workout"), onLogSleep: () => setRecordDialog("sleep"), onLogMeasurement: () => setRecordDialog("measurement"), foodDelete, journal, water, onManageSupplements: manageSupplements, onManageWearables: manageWearables, customizingCards, onCustomizingCardsChange: setCustomizingCards }}>
+    <dashboardPageContext.Provider value={{ token, date, isToday, onEditFood: (entry) => setEditingId(entry.id), onSaveMeal: setMealSelection, foodDelete, journal, water, onManageSupplements: manageSupplements, onManageWearables: manageWearables, customizingCards, onCustomizingCardsChange: setCustomizingCards }}>
     <div {...stylex.props(styles.appShell)}>
       <aside {...stylex.props(styles.sidebar)}>
         <Link to="/" {...stylex.props(styles.brand)}>
@@ -221,8 +232,10 @@ export function Dashboard() {
           </PopoverTrigger>
           <PopoverContent {...stylex.props(styles.logMenu)} align="start" sideOffset={8}>
             <button type="button" {...stylex.props(styles.logMenuItem)} onClick={() => openLog("food")}><UtensilsCrossed size={17} /> Food</button>
+            <button type="button" {...stylex.props(styles.logMenuItem)} onClick={() => openLog("water")}><Droplet size={17} /> Water</button>
             <button type="button" {...stylex.props(styles.logMenuItem)} onClick={() => openLog("sleep")}><Moon size={17} /> Sleep</button>
             <button type="button" {...stylex.props(styles.logMenuItem)} onClick={() => openLog("workout")}><Dumbbell size={17} /> Exercise</button>
+            <button type="button" {...stylex.props(styles.logMenuItem)} onClick={() => openLog("measurement")}><Ruler size={17} /> Measurement</button>
           </PopoverContent>
         </Popover>
         <nav {...stylex.props(styles.sidebarNav)} aria-label="Main navigation">
@@ -333,6 +346,8 @@ export function Dashboard() {
       <ConnectionDialog open={connectionOpen} onOpenChange={setConnectionOpen} token={token} onConnect={connect} onDisconnect={disconnect} />
       <LogFoodDialog open={logOpen} onOpenChange={setLogOpen} token={token} date={date} isToday={isToday} pending={createMutation.isPending} onSave={saveFood} onConnect={() => { setLogOpen(false); setConnectionOpen(true); }} />
       <EditFoodDialog token={token} date={date} entryId={editingId} onClose={() => setEditingId(null)} />
+      <SaveMealDialog token={token} date={date} selection={mealSelection} onClose={() => setMealSelection(null)} />
+      <WaterDialog open={recordDialog === "water"} onOpenChange={(open) => setRecordDialog(open ? "water" : null)} date={date} pending={water.pending} onSave={(input) => water.add(input, () => setRecordDialog(null))} />
       <WorkoutDialog open={recordDialog === "workout"} onOpenChange={(open) => setRecordDialog(open ? "workout" : null)} date={date} pending={journal.create.isPending} onSave={(input) => saveRecord({ path: recordPaths.workout, input }, "Workout")} />
       <SleepDialog open={recordDialog === "sleep"} onOpenChange={(open) => setRecordDialog(open ? "sleep" : null)} date={date} pending={journal.create.isPending} onSave={(input) => saveRecord({ path: recordPaths.sleep, input }, "Sleep")} />
       <MeasurementDialog open={recordDialog === "measurement"} onOpenChange={(open) => setRecordDialog(open ? "measurement" : null)} date={date} pending={journal.create.isPending} onSave={(input) => saveRecord({ path: recordPaths.measurement, input }, "Measurement")} />

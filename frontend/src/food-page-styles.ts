@@ -44,6 +44,7 @@ export const styles = stylex.create({
     borderBottomColor: colors.border,
   },
   mealName: { fontSize: 11, fontWeight: 800, letterSpacing: ".12em", color: colors.mutedForeground },
+  mealHeadEnd: { display: "flex", alignItems: "center", gap: 4 },
   mealTotal: { fontSize: 12, fontWeight: 700, fontVariantNumeric: "tabular-nums" },
   list: { listStyle: "none", margin: 0, padding: 0 },
   entry: { display: "flex", alignItems: "center", gap: 10, padding: "8px 0" },

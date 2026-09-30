@@ -1,7 +1,6 @@
 import * as stylex from "@stylexjs/stylex";
-import { BedDouble, Moon, Plus } from "lucide-react";
+import { BedDouble, Moon } from "lucide-react";
 import { Badge } from "../components/ui/badge";
-import { Button } from "../components/ui/button";
 import { Progress } from "../components/ui/progress";
 import { type Overview as OverviewData } from "../lib/api";
 import { styles } from "../overview-styles";
@@ -13,7 +12,7 @@ import { WearablesTile } from "./wearables-tile";
 
 type Session = OverviewData["sleep"]["sessions"][number];
 
-type SleepProps = { sleep: OverviewData["sleep"]; goalMinutes: number | undefined; busy: boolean; onLog: () => void; onDelete: (session: Session) => void };
+type SleepProps = { sleep: OverviewData["sleep"]; goalMinutes: number | undefined; busy: boolean; onDelete: (session: Session) => void };
 
 // Imported sleep names its device and service; it changes only at its source, so it has no delete button.
 function origin(session: Session) {
@@ -24,7 +23,7 @@ function origin(session: Session) {
   return `${duration(session.durationMinutes)} · ${source}`;
 }
 
-export function SleepSection({ sleep, goalMinutes, busy, onLog, onDelete }: SleepProps) {
+export function SleepSection({ sleep, goalMinutes, busy, onDelete }: SleepProps) {
   const stages = sleep.stages;
   const stageTotal = stages ? stages.awake + stages.light + stages.deep + stages.rem : 0;
 
@@ -41,7 +40,6 @@ export function SleepSection({ sleep, goalMinutes, busy, onLog, onDelete }: Slee
       description="Nights count toward the day they end on."
       icon={<Moon size={18} />}
       color={colors.sleep}
-      action={<Button variant="outline" size="sm" onClick={onLog}><Plus size={15} /> Log sleep</Button>}
     >
       <Tile title="Time asleep" icon={<BedDouble size={16} />} aside={goalMinutes !== undefined && `${duration(goalMinutes)} goal`}>
         <Value value={sleep.totalMinutes === null ? "—" : duration(sleep.totalMinutes)} />

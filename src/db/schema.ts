@@ -1,5 +1,6 @@
 import { bigint, customType, date, integer, jsonb, pgTable, primaryKey, text, timestamp, uuid, index, uniqueIndex } from "drizzle-orm/pg-core";
 import type { FoodQuantity } from "../contracts.js";
+import type { SavedMealItem } from "../meals/contract.js";
 import type { MeasurementKind } from "../measurements/contract.js";
 import type { PhotoType } from "../photos/contract.js";
 import type { Dose, Supplement, SupplementKind } from "../supplements/contract.js";
@@ -36,6 +37,17 @@ export const foodEntries = pgTable("food_entries", {
   fatMilli: bigint("fat_milli", { mode: "number" }),
   catalogRef: jsonb("catalog_ref").$type<{ provider: "ciqual" | "usda-fdc" | "portfir" | "open-food-facts"; id: string; version?: string | undefined } | null>(),
 }, (table) => [activeDayIndex("food_entries", table)]);
+
+export const savedMeals = pgTable("saved_meals", {
+  id: uuid("id").primaryKey(),
+  userId: uuid("user_id").notNull(),
+  name: text("name").notNull(),
+  items: jsonb("items").$type<SavedMealItem[]>().notNull(),
+  revision: integer("revision").notNull().default(1),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [index("saved_meals_user_active_idx").on(table.userId, table.createdAt).where(sql`deleted_at IS NULL`)]);
 
 export const waterEntries = pgTable("water_entries", {
   ...journalColumns,

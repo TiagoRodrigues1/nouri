@@ -28,5 +28,6 @@ This index is the maintained list of Nouri's user paths. Read the relevant file 
 - [Wearable import](wearables.md): Wearables dialog in the sidebar and the Wearables tiles in Overview Sleep and Sports, not-set-up state, fixture-backed Connect, imported sleep and workouts, repeat sync, disconnect, forged callback.
 - [Customize My Day cards](cards.md): show, hide, reorder, save, reload, and restore defaults.
 - [Food page](food-page.md): intake against targets, meals by time of day, top foods, log again, delete.
+- [Saved meals](saved-meals.md): save a time-of-day group as a meal with adjusted amounts, log it from the Saved meals tab of `+ Log` > `Food`, delete it.
 - [Supplements](supplements.md): sidebar dialog edits the list from today, My Day checklist and Overview `Take` buttons tick and untick intakes, earlier days keep their list.
 - [Targets](targets.md): sidebar dialog, save, pages reflect new targets, earlier days keep old ones.

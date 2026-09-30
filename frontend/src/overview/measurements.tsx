@@ -1,7 +1,6 @@
 import * as stylex from "@stylexjs/stylex";
-import { Activity as ActivityIcon, Plus, Ruler, Scale } from "lucide-react";
+import { Activity as ActivityIcon, Ruler, Scale } from "lucide-react";
 import { Badge } from "../components/ui/badge";
-import { Button } from "../components/ui/button";
 import { measurementLabels } from "../overview-dialogs";
 import { format, type Overview as OverviewData, type Photo } from "../lib/api";
 import { styles } from "../overview-styles";
@@ -17,7 +16,6 @@ type MeasurementsProps = {
   weightGoalKg: number | null;
   photos: Photo[];
   busy: boolean;
-  onLog: () => void;
   onDelete: (entry: OverviewData["measurements"]["entries"][number]) => void;
   onUpload: (file: File) => void;
   onDeletePhoto: (photo: Photo) => void;
@@ -41,7 +39,7 @@ function goalProgress(weight: number | undefined, goal: number): string {
   return gap < 0.05 ? `At your ${format(goal, 1)} kg goal` : `${format(gap, 1)} kg from your ${format(goal, 1)} kg goal`;
 }
 
-export function MeasurementsSection({ token, date, measurements, weightGoalKg, photos, busy, onLog, onDelete, onUpload, onDeletePhoto }: MeasurementsProps) {
+export function MeasurementsSection({ token, date, measurements, weightGoalKg, photos, busy, onDelete, onUpload, onDeletePhoto }: MeasurementsProps) {
   const { latest, bmi, weightChange } = measurements;
   const asOf = (recorded: { localDate: string } | null) => (recorded && recorded.localDate !== date ? `Recorded ${dateLabel(recorded.localDate)}` : "Recorded this day");
 
@@ -51,7 +49,6 @@ export function MeasurementsSection({ token, date, measurements, weightGoalKg, p
       description="Body measurements carry forward until you record a new value."
       icon={<Ruler size={18} />}
       color={colors.measurements}
-      action={<Button variant="outline" size="sm" onClick={onLog}><Plus size={15} /> Log measurement</Button>}
     >
       <Tile
         title="Weight"
