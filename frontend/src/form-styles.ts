@@ -172,5 +172,5 @@ export const styles = stylex.create({
     borderRadius: "8px",
   },
   mealListItem: { display: "flex", alignItems: "center", paddingRight: "6px" },
-  mealDelete: { color: colors.mutedForeground },
+  mealAction: { color: colors.mutedForeground },
 });

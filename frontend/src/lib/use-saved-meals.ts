@@ -1,9 +1,11 @@
 import { queryOptions, useQuery } from "@tanstack/react-query";
-import { createSavedMeal, deleteSavedMeal, getSavedMeals, logSavedMeal, type SavedMeal } from "./api";
+import { createSavedMeal, deleteSavedMeal, getSavedMeals, logSavedMeal, updateSavedMeal, type SavedMeal } from "./api";
 import { useIdempotentDelete, useIdempotentWrite } from "./use-idempotent";
-import type { MealInput, MealLogInput } from "../../../src/meals/contract";
+import type { MealEdit, MealInput, MealLogInput } from "../../../src/meals/contract";
 
 type PendingLog = { meal: SavedMeal; input: MealLogInput };
+
+type PendingEdit = { meal: SavedMeal; input: MealEdit };
 
 function savedMealsQueryOptions(token: string) {
   return queryOptions({ queryKey: ["saved-meals", token], queryFn: () => getSavedMeals(token), enabled: Boolean(token) });
@@ -16,6 +18,14 @@ export function useSavedMeals(token: string) {
 export function useSaveMeal(token: string, onSaved: () => void) {
   return useIdempotentWrite<MealInput>(token, (input, key) => createSavedMeal(token, key, input), {
     refresh: ["saved-meals"], success: (input) => `${input.name} saved.`, onSuccess: onSaved,
+  });
+}
+
+// The revision is part of the request, so an edit made after another one gets its own key.
+export function useEditMeal(token: string, onSaved: () => void) {
+  return useIdempotentWrite<PendingEdit>(token, (pending, key) => updateSavedMeal(token, key, pending.meal, pending.input), {
+    refresh: ["saved-meals"], success: (pending) => `${pending.input.name} saved.`, onSuccess: onSaved,
+    signature: (pending) => JSON.stringify([pending.meal.id, pending.meal.revision, pending.input]),
   });
 }
 

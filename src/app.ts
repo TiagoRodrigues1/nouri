@@ -13,7 +13,7 @@ import { mutateFood } from "./food/food.js";
 import type { AppDatabase } from "./db/database.js";
 import { getDated, saveDated, type DatedKind, type DatedTable } from "./effective-dated.js";
 import type { FoodMutationResult } from "./food/food.js";
-import { mealInputSchema, mealLogInputSchema, mealLogSchema, savedMealListSchema, savedMealSchema } from "./meals/contract.js";
+import { mealEditSchema, mealInputSchema, mealLogInputSchema, mealLogSchema, savedMealListSchema, savedMealSchema } from "./meals/contract.js";
 import { listMeals, logMeal, mutateMeal } from "./meals/meals.js";
 import type { MealLogResult, MealMutationResult } from "./meals/meals.js";
 import { integrationRoutes } from "./wearables/routes.js";
@@ -79,11 +79,12 @@ function recordResponse<Entry>(result: RecordMutationResult<Entry>, label: strin
   }
 }
 
-// A missing meal is the saved meal on delete or log, and a chosen food entry when saving one.
+// A missing meal is the saved meal on edit, delete or log, and a chosen food entry when saving one.
 function mealResponse(result: MealMutationResult | MealLogResult, missing: string): Response {
   switch (result.outcome) {
     case "created":
-      return new Response(JSON.stringify(result.entry), { status: 201, headers: { "Content-Type": "application/json" } });
+    case "updated":
+      return new Response(JSON.stringify(result.entry), { status: result.outcome === "created" ? 201 : 200, headers: { "Content-Type": "application/json" } });
     case "deleted":
       return new Response(null, { status: 204 });
     case "missing":
@@ -237,6 +238,16 @@ export function createApp(db: AppDatabase, auth: { token: string; userId: string
     if (!id.success || !input.success) return error(400, "Invalid saved meal log");
 
     return mealResponse(await logMeal(db, context.get("userId"), context.get("idempotencyKey"), id.data, input.data), "Saved meal not found");
+  });
+
+  app.patch("/v1/saved-meals/:id", async (context) => {
+    const id = z.uuid().safeParse(context.req.param("id"));
+    const revision = revisionHeader(context.req.header("If-Match"));
+    const input = mealEditSchema.safeParse(await context.req.json().catch(() => null));
+
+    if (!id.success || revision === null || !input.success) return error(400, "Invalid saved meal edit");
+
+    return mealResponse(await mutateMeal(db, context.get("userId"), context.get("idempotencyKey"), { kind: "edit", id: id.data, revision, input: input.data }), "Saved meal not found");
   });
 
   app.delete("/v1/saved-meals/:id", async (context) => {
@@ -401,6 +412,7 @@ export function createApp(db: AppDatabase, auth: { token: string; userId: string
   app.openAPIRegistry.registerPath({ method: "get", path: "/v1/saved-meals", responses: { 200: { description: "Saved meals, newest first", content: { "application/json": { schema: savedMealListSchema } } } } });
   app.openAPIRegistry.registerPath({ method: "post", path: "/v1/saved-meals", request: { headers: mutationHeaders, body: { content: { "application/json": { schema: mealInputSchema } } } }, responses: { 201: { description: "A saved meal copying the chosen entries' foods at the given amounts", content: { "application/json": { schema: savedMealSchema } } }, 400: { description: "Invalid request or an amount outside the journal's limits", content: { "application/json": { schema: errorSchema } } }, 404: { description: "Food entry not found", content: { "application/json": { schema: errorSchema } } }, 409: { description: "Idempotency conflict", content: { "application/json": { schema: errorSchema } } } } });
   app.openAPIRegistry.registerPath({ method: "post", path: "/v1/saved-meals/{id}/logs", request: { params: z.object({ id: z.uuid() }), headers: mutationHeaders, body: { content: { "application/json": { schema: mealLogInputSchema } } } }, responses: { 201: { description: "One food entry per chosen item, scaled to its amount, all logged at one time", content: { "application/json": { schema: mealLogSchema } } }, 400: { description: "Invalid request, an item the meal lacks, or an amount outside the journal's limits", content: { "application/json": { schema: errorSchema } } }, 404: { description: "Saved meal not found", content: { "application/json": { schema: errorSchema } } }, 409: { description: "Idempotency conflict", content: { "application/json": { schema: errorSchema } } } } });
+  app.openAPIRegistry.registerPath({ method: "patch", path: "/v1/saved-meals/{id}", request: { params: z.object({ id: z.uuid() }), headers: editHeaders, body: { content: { "application/json": { schema: mealEditSchema } } } }, responses: { 200: { description: "The renamed meal with the listed items at their new amounts; items left out are removed", content: { "application/json": { schema: savedMealSchema } } }, 400: { description: "Invalid request, an item the meal lacks, or an amount outside the journal's limits", content: { "application/json": { schema: errorSchema } } }, 404: { description: "Saved meal not found", content: { "application/json": { schema: errorSchema } } }, 409: { description: "Revision or idempotency conflict", content: { "application/json": { schema: errorSchema } } } } });
   app.openAPIRegistry.registerPath({ method: "delete", path: "/v1/saved-meals/{id}", request: { params: z.object({ id: z.uuid() }), headers: editHeaders }, responses: { 204: { description: "Deleted saved meal; foods already logged from it stay" }, 404: { description: "Saved meal not found", content: { "application/json": { schema: errorSchema } } }, 409: { description: "Revision or idempotency conflict", content: { "application/json": { schema: errorSchema } } } } });
   app.openAPIRegistry.registerPath({ method: "get", path: "/v1/days/{date}", request: { params: z.object({ date: z.iso.date() }) }, responses: { 200: { description: "Food and water entries and totals for the recorded local day", content: { "application/json": { schema: daySchema } } } } });
   app.openAPIRegistry.registerPath({ method: "get", path: "/v1/dashboard", responses: { 200: { description: "Cards shown on the My Day page, in display order; defaults until the user saves a layout", content: { "application/json": { schema: dashboardSchema } } } } });

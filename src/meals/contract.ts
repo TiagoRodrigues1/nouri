@@ -18,9 +18,15 @@ export const savedMealListSchema = z.object({ meals: z.array(savedMealSchema) })
 
 const unique = (ids: string[]) => new Set(ids).size === ids.length;
 
+const mealNameSchema = z.string().trim().min(1).max(80);
+
+// Saved items by id, each with an amount. Logging and editing both name items this way.
+const itemAmountsSchema = z.array(z.object({ id: z.uuid(), amount: positiveAmount.max(10_000) }).strict())
+  .min(1).max(maxMealItems).refine((items) => unique(items.map((item) => item.id)), "Items must be unique");
+
 // A meal is saved from logged entries, so the server copies the foods and the client never sends nutrients.
 export const mealInputSchema = z.object({
-  name: z.string().trim().min(1).max(80),
+  name: mealNameSchema,
   items: z.array(z.object({ entryId: z.uuid(), amount: positiveAmount.max(10_000) }).strict())
     .min(1).max(maxMealItems).refine((items) => unique(items.map((item) => item.entryId)), "Entries must be unique"),
 }).strict();
@@ -29,9 +35,11 @@ export const mealInputSchema = z.object({
 export const mealLogInputSchema = z.object({
   occurredAt: occurredAtSchema,
   timeZone: timeZoneSchema,
-  items: z.array(z.object({ id: z.uuid(), amount: positiveAmount.max(10_000) }).strict())
-    .min(1).max(maxMealItems).refine((items) => unique(items.map((item) => item.id)), "Items must be unique"),
+  items: itemAmountsSchema,
 }).strict();
+
+// A new name and the items to keep at their new usual amounts; a saved item left out is removed.
+export const mealEditSchema = z.object({ name: mealNameSchema, items: itemAmountsSchema }).strict();
 
 export const mealLogSchema = z.object({ entries: z.array(entrySchema) });
 
@@ -46,6 +54,12 @@ export type SavedMealList = z.infer<typeof savedMealListSchema>;
 export type MealInput = z.infer<typeof mealInputSchema>;
 
 export type MealLogInput = z.infer<typeof mealLogInputSchema>;
+
+export type MealEdit = z.infer<typeof mealEditSchema>;
+
+// A saved item as stored. The basis is the food as recorded when the meal was saved, so every amount scales
+// from it and edits never compound rounding. It stays on the server; meals saved before editing lack it.
+export type StoredMealItem = SavedMealItem & { basis?: MealFood | undefined };
 
 export type MealLog = z.infer<typeof mealLogSchema>;
 

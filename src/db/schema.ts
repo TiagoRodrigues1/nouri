@@ -1,6 +1,6 @@
 import { bigint, customType, date, integer, jsonb, pgTable, primaryKey, text, timestamp, uuid, index, uniqueIndex } from "drizzle-orm/pg-core";
 import type { FoodQuantity } from "../contracts.js";
-import type { SavedMealItem } from "../meals/contract.js";
+import type { StoredMealItem } from "../meals/contract.js";
 import type { MeasurementKind } from "../measurements/contract.js";
 import type { PhotoType } from "../photos/contract.js";
 import type { Dose, Supplement, SupplementKind } from "../supplements/contract.js";
@@ -42,7 +42,7 @@ export const savedMeals = pgTable("saved_meals", {
   id: uuid("id").primaryKey(),
   userId: uuid("user_id").notNull(),
   name: text("name").notNull(),
-  items: jsonb("items").$type<SavedMealItem[]>().notNull(),
+  items: jsonb("items").$type<StoredMealItem[]>().notNull(),
   revision: integer("revision").notNull().default(1),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
