@@ -140,61 +140,10 @@ export const styles = stylex.create({
   mainArea: {
     minWidth: "0",
   },
-  topbar: {
-    height: { default: "65px", "@media (max-width: 680px)": "48px" },
-    margin: { default: "0 40px", "@media (max-width: 680px)": "0 18px" },
-    borderBottomWidth: 1, borderBottomStyle: "solid", borderBottomColor: colors.border,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    color: colors.topbarForeground,
-    letterSpacing: ".12em",
-    fontSize: "11px",
-    fontWeight: "800",
-  },
-  slash: {
-    margin: "0 9px",
-    color: "#adb7bb",
-  },
   pageContent: {
     maxWidth: "1270px",
     margin: "0 auto",
     padding: { default: "42px 40px 80px", "@media (max-width: 680px)": "26px 18px 60px" },
-  },
-  pageHeader: {
-    display: "flex",
-    alignItems: { default: "end", "@media (max-width: 680px)": "start" },
-    justifyContent: "space-between",
-    gap: "24px",
-    marginBottom: "30px",
-  },
-  eyebrow: {
-    margin: "0 0 8px",
-    color: colors.primary,
-    fontSize: "10px",
-    letterSpacing: ".17em",
-    fontWeight: "800",
-  },
-  subtitle: {
-    margin: "10px 0 0",
-    color: colors.mutedForeground,
-    fontSize: "14px",
-  },
-  dateToolbar: {
-    display: "flex",
-    flexWrap: { default: "nowrap", "@media (max-width: 680px)": "wrap" },
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: "12px",
-    margin: "0 0 19px",
-  },
-  dateLabel: {
-    display: "flex",
-    alignItems: "center",
-    gap: "9px",
-    color: colors.foreground,
-    fontSize: "13px",
-    fontWeight: "700",
   },
   dateActions: {
     display: "flex",
@@ -215,14 +164,6 @@ export const styles = stylex.create({
   profileSubtext: {
     color: colors.mutedForeground,
     marginTop: "2px",
-  },
-  headline: {
-    margin: "0",
-    fontFamily: "Georgia, \"Times New Roman\", serif",
-    fontSize: "clamp(34px, 3.1vw, 49px)",
-    fontWeight: "400",
-    letterSpacing: "-.035em",
-    lineHeight: "1.12",
   },
   dateInput: {
     width: "148px",

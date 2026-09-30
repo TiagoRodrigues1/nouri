@@ -1,12 +1,13 @@
 import * as stylex from "@stylexjs/stylex";
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { Beef, Droplet, Flame, Pencil, Trash2, Wheat } from "lucide-react";
+import { Beef, BookmarkPlus, Droplet, Flame, Pencil, RotateCcw, Trash2, Wheat } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { colors } from "./theme.stylex";
 import { styles } from "./my-day-styles";
 import { DashboardCardsDialog, useDashboardCards } from "./dashboard-cards";
 import { clock, entryHour, entryTime } from "./lib/time";
 import { useTargets } from "./lib/use-targets";
+import { useLogAgain } from "./lib/use-log-again";
 import { TargetsNotice } from "./targets-notice";
 import { useSupplements } from "./lib/use-supplements";
 import { useDashboardPage } from "./dashboard-page-context";
@@ -22,9 +23,10 @@ type Row =
 type MyDayProps = { day: Day | undefined; status: ReactNode };
 
 export function MyDay({ day, status }: MyDayProps) {
-  const { token, date, isToday, onEditFood: onEdit, foodDelete, water, onManageSupplements, customizingCards, onCustomizingCardsChange } = useDashboardPage();
+  const { token, date, isToday, onEditFood: onEdit, onSaveMeal, foodDelete, water, onManageSupplements, customizingCards, onCustomizingCardsChange } = useDashboardPage();
   const supplements = useSupplements(token, date);
-  const busy = foodDelete.isPending;
+  const logAgain = useLogAgain(token, date);
+  const busy = foodDelete.isPending || logAgain.pending;
   const onDelete = (entry: FoodEntry) => foodDelete.mutate(entry);
   const now = useNow();
   const entries = day?.food.entries ?? [];
@@ -88,11 +90,14 @@ export function MyDay({ day, status }: MyDayProps) {
       <Timeline
         entries={entries}
         now={isToday ? now : null}
+        logAgainWhen={isToday ? "now" : "today"}
         summary={connected ? `${entries.length} ${entries.length === 1 ? "food" : "foods"} · ${format(totals?.kcal)} kcal` : ""}
         status={status}
         busy={busy}
+        onLogAgain={logAgain.logAgain}
         onEdit={onEdit}
         onDelete={onDelete}
+        onSaveMeal={() => onSaveMeal({ entryIds: entries.map((entry) => entry.id), name: "" })}
       />
       <div {...stylex.props(styles.side)}>
         {!targets ? (
@@ -166,14 +171,18 @@ function timelineRows(entries: FoodEntry[], now: Date | null): Row[] {
 type TimelineProps = {
   entries: FoodEntry[];
   now: Date | null;
+  // Logging again always lands today, so a past day says so rather than implying it adds to this one.
+  logAgainWhen: "now" | "today";
   summary: string;
   status: ReactNode;
   busy: boolean;
+  onLogAgain: (entry: FoodEntry) => void;
   onEdit: (entry: FoodEntry) => void;
   onDelete: (entry: FoodEntry) => void;
+  onSaveMeal: () => void;
 };
 
-function Timeline({ entries, now, summary, status, busy, onEdit, onDelete }: TimelineProps) {
+function Timeline({ entries, now, logAgainWhen, summary, status, busy, onLogAgain, onEdit, onDelete, onSaveMeal }: TimelineProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const focusRef = useRef<HTMLLIElement>(null);
   const hasNow = now !== null;
@@ -192,7 +201,14 @@ function Timeline({ entries, now, summary, status, busy, onEdit, onDelete }: Tim
     <section {...stylex.props(styles.timelinePanel)} aria-label="Day timeline">
       <header {...stylex.props(styles.timelineHeader)}>
         <h2 {...stylex.props(styles.timelineTitle)}>Timeline</h2>
-        <span {...stylex.props(styles.timelineSummary)}>{summary}</span>
+        <span {...stylex.props(styles.timelineSummary)}>
+          {summary}
+          {entries.length > 0 && (
+            <Button variant="ghost" size="icon" {...stylex.props(styles.entryAction)} aria-label="Save foods as a meal" title="Save as meal" disabled={busy} onClick={onSaveMeal}>
+              <BookmarkPlus size={14} />
+            </Button>
+          )}
+        </span>
       </header>
       <div {...stylex.props(styles.timelineBody)}>
         <div ref={scrollRef} {...stylex.props(styles.timelineScroll)}>
@@ -228,6 +244,17 @@ function Timeline({ entries, now, summary, status, busy, onEdit, onDelete }: Tim
                     </span>
                   </span>
                   <time dateTime={entry.occurredAt} {...stylex.props(styles.entryTime)}>{entryTime(entry)}</time>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    {...stylex.props(styles.entryAction)}
+                    aria-label={`Log ${entry.food.name} again ${logAgainWhen}`}
+                    title={`Log again ${logAgainWhen}`}
+                    disabled={busy}
+                    onClick={() => onLogAgain(entry)}
+                  >
+                    <RotateCcw size={14} />
+                  </Button>
                   <Button
                     variant="ghost"
                     size="icon"

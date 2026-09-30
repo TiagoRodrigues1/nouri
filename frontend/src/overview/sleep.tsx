@@ -7,8 +7,7 @@ import { styles } from "../overview-styles";
 import { colors } from "../theme.stylex";
 import { clock } from "../lib/time";
 import { providerDetails } from "../lib/wearables";
-import { Caption, DeleteButton, Empty, Section, Tile, Value, duration } from "./shared";
-import { WearablesTile } from "./wearables-tile";
+import { DeleteButton, Empty, Section, Tile, Value, duration } from "./shared";
 
 type Session = OverviewData["sleep"]["sessions"][number];
 
@@ -26,6 +25,8 @@ function origin(session: Session) {
 export function SleepSection({ sleep, goalMinutes, busy, onDelete }: SleepProps) {
   const stages = sleep.stages;
   const stageTotal = stages ? stages.awake + stages.light + stages.deep + stages.rem : 0;
+  // Stages show only when the night recorded them; the tile keeps one shape either way.
+  const hasStages = stageTotal > 0;
 
   const parts = stages ? [
     { label: "Deep", minutes: stages.deep, color: colors.sleepDeep },
@@ -41,32 +42,25 @@ export function SleepSection({ sleep, goalMinutes, busy, onDelete }: SleepProps)
       icon={<Moon size={18} />}
       color={colors.sleep}
     >
-      <Tile title="Time asleep" icon={<BedDouble size={16} />} aside={goalMinutes !== undefined && `${duration(goalMinutes)} goal`}>
+      <Tile title="Time asleep" icon={<BedDouble size={16} />} aside={goalMinutes !== undefined && `${duration(goalMinutes)} goal`} wide>
         <Value value={sleep.totalMinutes === null ? "—" : duration(sleep.totalMinutes)} />
         {goalMinutes !== undefined && <Progress value={sleep.totalMinutes ?? 0} max={goalMinutes} color={colors.sleep} aria-label="Sleep against your goal" />}
-        <Caption>{sleep.sessions.length === 0 ? "No sleep logged" : `${sleep.sessions.length} ${sleep.sessions.length === 1 ? "session" : "sessions"}`}</Caption>
-      </Tile>
-      <Tile title="Sleep stages" icon={<Moon size={16} />}>
-        {stages && stageTotal > 0 ? (
+        {hasStages && (
           <>
             <div {...stylex.props(styles.stageBar)} role="img" aria-label={parts.map((part) => `${part.label} ${duration(part.minutes)}`).join(", ")}>
               {parts.map((part) => <span key={part.label} {...stylex.props(styles.stageSegment(`${(part.minutes / stageTotal) * 100}%`, part.color))} />)}
             </div>
-            <div {...stylex.props(styles.rows)}>
+            <div {...stylex.props(styles.legend)}>
               {parts.map((part) => (
-                <div key={part.label} {...stylex.props(styles.row)}>
+                <span key={part.label} {...stylex.props(styles.row)}>
                   <span {...stylex.props(styles.swatch(part.color))} />
-                  <span {...stylex.props(styles.rowLabel, styles.grow)}>{part.label}</span>
+                  <span {...stylex.props(styles.rowLabel)}>{part.label}</span>
                   <span {...stylex.props(styles.rowValue)}>{duration(part.minutes)} · {Math.round((part.minutes / stageTotal) * 100)}%</span>
-                </div>
+                </span>
               ))}
             </div>
           </>
-        ) : (
-          <Empty>{sleep.sessions.length ? "Add stage minutes when you log sleep to see REM, deep, and light sleep." : "No sleep logged for this day."}</Empty>
         )}
-      </Tile>
-      <Tile title="Sessions" icon={<BedDouble size={16} />}>
         {sleep.sessions.length === 0 ? (
           <Empty>No sleep logged for this day.</Empty>
         ) : (
@@ -87,7 +81,6 @@ export function SleepSection({ sleep, goalMinutes, busy, onDelete }: SleepProps)
           </ul>
         )}
       </Tile>
-      <WearablesTile kind="sleep" imported={sleep.sessions.filter((session) => session.source.kind === "wearable").length} />
     </Section>
   );
 }

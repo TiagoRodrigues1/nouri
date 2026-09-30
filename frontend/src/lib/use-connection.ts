@@ -13,7 +13,7 @@ function listCounts(counts: Record<ImportKind, number>): string {
   return parts.length ? parts.join(" and ") : "nothing";
 }
 
-export function useConnectionStatus(token: string, provider: WearableProvider) {
+function useConnectionStatus(token: string, provider: WearableProvider) {
   return useQuery({
     queryKey: ["connection", token, provider],
     queryFn: () => getConnection(token, provider),

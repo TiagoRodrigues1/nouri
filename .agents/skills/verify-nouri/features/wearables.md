@@ -1,8 +1,8 @@
 # Wearable import (Google Health)
 
-The sidebar's `Wearables` item opens a dialog with a `Google Health` panel. Its state badge reads `Not set up`, `Not connected`, `Connected`, or `Sign in again`. `Not set up` shows setup guidance without import counts or action buttons. The other states show `Last successful sync`, `Imported sleep`, and `Imported workouts`, plus an error line after a failed attempt. `Not connected` offers `Connect`; `Connected` offers `Sync now` and `Disconnect`; `Sign in again` offers `Connect again` and `Disconnect`. The Overview Sleep and Sports sections each have a `Wearables` tile with the same badge. Once connected it shows `Imported this day` (that day's imported nights or workouts) and `Last sync`, plus a `Manage` button (`Set up` before connecting) that opens the dialog.
+The sidebar's `Wearables` item opens a dialog with a `Google Health` panel. Its state badge reads `Not set up`, `Not connected`, `Connected`, or `Sign in again`. `Not set up` shows setup guidance without import counts or action buttons. The other states show `Last successful sync`, `Imported sleep`, and `Imported workouts`, plus an error line after a failed attempt. `Not connected` offers `Connect`; `Connected` offers `Sync now` and `Disconnect`; `Sign in again` offers `Connect again` and `Disconnect`.
 
-The default `control-nouri launch` run has no Google settings. There, check that the dialog and both tiles read `Not set up` and explains that settings go in `.env`.
+The default `control-nouri launch` run has no Google settings. There, check that the dialog reads `Not set up` and explains that settings go in `.env`.
 
 To drive Connect without a Google account, start the fixture-backed app on the run's database. This replaces only Google's HTTP boundary:
 
