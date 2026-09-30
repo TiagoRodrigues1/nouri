@@ -6,11 +6,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs";
 import { useTargets } from "./lib/use-targets";
 import { queryStatus } from "./query-status";
 import { TargetsNotice } from "./targets-notice";
-import { NutritionSection } from "./overview/nutrition";
 import { SportsSection } from "./overview/sports";
 import { MeasurementsSection } from "./overview/measurements";
 import { SleepSection } from "./overview/sleep";
-import { SupplementsSection } from "./overview/supplements";
 import { styles } from "./overview-styles";
 import { maxPhotoBytes } from "../../src/photos/contract";
 import { getOverview, type RecordPath } from "./lib/api";
@@ -18,12 +16,11 @@ import { occurredAt, timeZone } from "./lib/time";
 import { useDashboardPage } from "./dashboard-page-context";
 import { recordPaths } from "../../src/journal/paths";
 
+// Food, water, and supplements live on Today, so the Overview covers the rest of the day.
 const categories = [
-  { id: "nutrition", name: "Nutrition" },
   { id: "sports", name: "Sports" },
   { id: "measurements", name: "Measurements" },
   { id: "sleep", name: "Sleep" },
-  { id: "supplements", name: "Supplements" },
 ] as const;
 
 type Category = (typeof categories)[number]["id"];
@@ -62,7 +59,6 @@ export function Overview() {
   const busy = journal.create.isPending || journal.remove.isPending;
 
   const sections: Record<Category, ReactNode> = data ? {
-    nutrition: <NutritionSection nutrition={data.nutrition} targets={targets.targets} />,
     sports: <SportsSection sports={data.sports} busy={busy} onDelete={remove("/v1/workouts", "Workout")} />,
     measurements: (
       <MeasurementsSection
@@ -78,8 +74,7 @@ export function Overview() {
       />
     ),
     sleep: <SleepSection sleep={data.sleep} goalMinutes={targets.targets?.sleepMinutes} busy={busy} onDelete={remove("/v1/sleep-sessions", "Sleep session")} />,
-    supplements: <SupplementsSection day={data.supplements} />,
-  } : { nutrition: null, sports: null, measurements: null, sleep: null, supplements: null };
+  } : { sports: null, measurements: null, sleep: null };
 
   const status = queryStatus(token, query, { disconnected: "Connect your log to see your overview.", loading: "Loading your overview…" });
 

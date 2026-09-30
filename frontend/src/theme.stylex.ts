@@ -20,7 +20,6 @@ export const colors = stylex.defineVars({
   featureForeground: "#ffffff",
   featureMuted: "#cbdcff",
   navForeground: "#667882",
-  topbarForeground: "#6d818b",
   destructive: "#a43f4d",
   food: "#22a55b",
   protein: "#a855f7",

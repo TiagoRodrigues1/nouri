@@ -6,10 +6,9 @@ import { activityLabels } from "../overview-dialogs";
 import { format, type Activity, type Overview as OverviewData } from "../lib/api";
 import { styles } from "../overview-styles";
 import { colors } from "../theme.stylex";
-import { DeleteButton, Empty, Section, Stat, Tile, Value, duration } from "./shared";
+import { DeleteButton, Empty, Section, Tile, Value, duration } from "./shared";
 import { clock } from "../lib/time";
 import { providerDetails } from "../lib/wearables";
-import { WearablesTile } from "./wearables-tile";
 
 const activityIcons: Record<Activity, ReactNode> = {
   strength: <Dumbbell size={16} />,
@@ -39,23 +38,17 @@ function origin(entry: Entry): string | null {
 export function SportsSection({ sports, busy, onDelete }: SportsProps) {
   const distances = sports.entries.flatMap((entry) => (entry.distanceM === null ? [] : [entry.distanceM]));
   const distanceKm = distances.reduce((sum, meters) => sum + meters, 0) / 1000;
+  const summary = [`${sports.entryCount} logged`, sports.energyKcal === null ? null : `${format(sports.energyKcal)} kcal`, distances.length ? `${format(distanceKm, 2)} km` : null].filter(Boolean).join(" · ");
 
   return (
     <Section
       title="Sports"
-      description="Workouts, activities, and data from your wearables."
+      description="Workouts you log or import from your wearables."
       icon={<Dumbbell size={18} />}
       color={colors.activity}
     >
-      <Tile title="Activity" icon={<ActivityIcon size={16} />}>
+      <Tile title="Workouts" icon={<Dumbbell size={16} />} aside={summary} wide>
         <Value value={sports.totalMinutes === null ? "—" : duration(sports.totalMinutes)} />
-        <div {...stylex.props(styles.rows, styles.spaced)}>
-          <Stat label="Workouts" value={String(sports.entryCount)} />
-          <Stat label="Energy" value={sports.energyKcal === null ? "—" : `${format(sports.energyKcal)} kcal`} />
-          <Stat label="Distance" value={distances.length ? `${format(distanceKm, 2)} km` : "—"} />
-        </div>
-      </Tile>
-      <Tile title="Workouts" icon={<Dumbbell size={16} />} aside={`${sports.entryCount} logged`} wide>
         {sports.entries.length === 0 ? (
           <Empty>No workouts logged for this day.</Empty>
         ) : (
@@ -80,7 +73,6 @@ export function SportsSection({ sports, busy, onDelete }: SportsProps) {
           </ul>
         )}
       </Tile>
-      <WearablesTile kind="workouts" imported={sports.entries.filter((entry) => entry.source.kind === "wearable").length} />
     </Section>
   );
 }

@@ -3,6 +3,7 @@ import {
   createRoute,
   createRouter,
   lazyRouteComponent,
+  redirect,
 } from "@tanstack/react-router";
 import { Dashboard } from "./views";
 
@@ -14,10 +15,13 @@ const todayRoute = createRoute({
   component: lazyRouteComponent(() => import("./today-page"), "TodayPage"),
 });
 
+// The food journal now lives on Today, so old links land there.
 const foodRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/food",
-  component: lazyRouteComponent(() => import("./food-page"), "FoodPage"),
+  beforeLoad: () => {
+    throw redirect({ to: "/" });
+  },
 });
 
 const overviewRoute = createRoute({

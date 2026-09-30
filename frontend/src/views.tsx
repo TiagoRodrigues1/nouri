@@ -4,7 +4,6 @@ import { useState, type FormEvent } from "react";
 import { Link, Outlet, useLocation } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  CalendarDays,
   ChevronLeft,
   ChevronRight,
   LayoutDashboard,
@@ -54,7 +53,7 @@ const now = () => localDate(new Date());
 
 type FoodInput = FoodSubmission["food"];
 
-type View = "today" | "overview" | "food";
+type View = "today" | "overview";
 
 type PendingFood = { input: FoodSubmission; signature: string };
 
@@ -63,7 +62,7 @@ type RecordKind = "water" | "workout" | "sleep" | "measurement";
 export function Dashboard() {
   const queryClient = useQueryClient();
   const path = useLocation({ select: (location) => location.pathname });
-  const view: View = path === "/food" ? "food" : path === "/overview" ? "overview" : "today";
+  const view: View = path === "/overview" ? "overview" : "today";
 
   const [token, setToken] = useState(
     () => sessionStorage.getItem(disconnectedKey) === "true"
@@ -178,44 +177,8 @@ export function Dashboard() {
     journal.create.mutate({ ...command, label, signature: `${command.path} ${JSON.stringify(command.input)}` }, { onSuccess: () => setRecordDialog(null) });
   }
 
-  const dateActions = (
-    <>
-      <Button
-        variant="outline"
-        size="icon"
-        aria-label="Previous day"
-        onClick={() => selectDate(shiftDate(date, -1))}
-      >
-        <ChevronLeft size={17} />
-      </Button>
-      <Input
-        {...stylex.props(styles.dateInput)}
-        aria-label="Choose log date"
-        type="date"
-        value={date}
-        onChange={(event) => {
-          if (event.target.value) selectDate(event.target.value);
-        }}
-      />
-      <Button
-        variant="outline"
-        size="icon"
-        aria-label="Next day"
-        onClick={() => selectDate(shiftDate(date, 1))}
-      >
-        <ChevronRight size={17} />
-      </Button>
-    </>
-  );
-
-  const pageText = {
-    today: { eyebrow: "MY DAY", crumb: "TODAY" },
-    overview: { eyebrow: "OVERVIEW", crumb: "OVERVIEW" },
-    food: { eyebrow: "YOUR FOOD JOURNAL", crumb: "FOOD" },
-  }[view];
-
   return (
-    <dashboardPageContext.Provider value={{ token, date, isToday, onEditFood: (entry) => setEditingId(entry.id), onSaveMeal: setMealSelection, foodDelete, journal, water, onManageSupplements: manageSupplements, onManageWearables: manageWearables, customizingCards, onCustomizingCardsChange: setCustomizingCards }}>
+    <dashboardPageContext.Provider value={{ token, date, isToday, onEditFood: (entry) => setEditingId(entry.id), onSaveMeal: setMealSelection, foodDelete, journal, water, onManageSupplements: manageSupplements, customizingCards, onCustomizingCardsChange: setCustomizingCards }}>
     <div {...stylex.props(styles.appShell)}>
       <aside {...stylex.props(styles.sidebar)}>
         <Link to="/" {...stylex.props(styles.brand)}>
@@ -239,7 +202,6 @@ export function Dashboard() {
           </PopoverContent>
         </Popover>
         <nav {...stylex.props(styles.sidebarNav)} aria-label="Main navigation">
-          <p {...stylex.props(styles.navCaption)}>WORKSPACE</p>
           <Link
             to="/"
             {...stylex.props(styles.navItem, view === "today" && styles.navItemActive)}
@@ -254,14 +216,7 @@ export function Dashboard() {
             <ChartColumn size={17} {...stylex.props(view === "overview" && styles.iconAccent)} />
             Overview
           </Link>
-          <p {...stylex.props(styles.navCaption, styles.navCaptionData)}>YOUR DATA</p>
-          <Link
-            to="/food"
-            {...stylex.props(styles.navItem, view === "food" && styles.navItemActive)}
-          >
-            <UtensilsCrossed size={17} {...stylex.props(view === "food" && styles.iconAccent)} />
-            Food
-          </Link>
+          <p {...stylex.props(styles.navCaption, styles.navCaptionData)}>SETTINGS</p>
           <button
             type="button"
             {...stylex.props(styles.navItem, targetsOpen && styles.navItemActive)}
@@ -298,45 +253,32 @@ export function Dashboard() {
         </div>
       </aside>
       <main {...stylex.props(styles.mainArea)}>
-        <div {...stylex.props(styles.topbar)}>
-          <span>
-            YOUR SPACE <span {...stylex.props(styles.slash)}>/</span>{" "}
-            {pageText.crumb}
-          </span>
-        </div>
         <div {...stylex.props(styles.pageContent)}>
-          {view !== "food" ? (
-            <header {...stylex.props(styles.dayHeader)}>
-              <div>
-                <p {...stylex.props(styles.eyebrow)}>{pageText.eyebrow}</p>
-                <h1 {...stylex.props(styles.dayHeadline)}>{isToday ? "Today" : dateLabel(date)}</h1>
-              </div>
-              <div {...stylex.props(styles.dateActions)}>
-                {view === "today" && (
-                  <Button variant="outline" size="icon" aria-label="Customize cards" title="Customize cards" disabled={!token} onClick={() => setCustomizingCards(true)}>
-                    <SlidersHorizontal size={16} />
-                  </Button>
-                )}
-                {dateActions}
-              </div>
-            </header>
-          ) : (
-            <>
-              <header {...stylex.props(styles.pageHeader)}>
-                <div>
-                  <p {...stylex.props(styles.eyebrow)}>YOUR FOOD JOURNAL</p>
-                  <h1 {...stylex.props(styles.headline)}>Food journal</h1>
-                  <p {...stylex.props(styles.subtitle)}>Search, log, and review the foods in your day.</p>
-                </div>
-              </header>
-              <div {...stylex.props(styles.dateToolbar)}>
-                <span {...stylex.props(styles.dateLabel)}>
-                  <CalendarDays size={16} {...stylex.props(styles.iconAccent)} /> {isToday ? "Today" : dateLabel(date)}
-                </span>
-                <div {...stylex.props(styles.dateActions)}>{dateActions}</div>
-              </div>
-            </>
-          )}
+          <header {...stylex.props(styles.dayHeader)}>
+            <h1 {...stylex.props(styles.dayHeadline)}>{isToday ? "Today" : dateLabel(date)}</h1>
+            <div {...stylex.props(styles.dateActions)}>
+              {view === "today" && (
+                <Button variant="outline" size="icon" aria-label="Customize cards" title="Customize cards" disabled={!token} onClick={() => setCustomizingCards(true)}>
+                  <SlidersHorizontal size={16} />
+                </Button>
+              )}
+              <Button variant="outline" size="icon" aria-label="Previous day" onClick={() => selectDate(shiftDate(date, -1))}>
+                <ChevronLeft size={17} />
+              </Button>
+              <Input
+                {...stylex.props(styles.dateInput)}
+                aria-label="Choose log date"
+                type="date"
+                value={date}
+                onChange={(event) => {
+                  if (event.target.value) selectDate(event.target.value);
+                }}
+              />
+              <Button variant="outline" size="icon" aria-label="Next day" onClick={() => selectDate(shiftDate(date, 1))}>
+                <ChevronRight size={17} />
+              </Button>
+            </div>
+          </header>
           <Outlet />
         </div>
       </main>
