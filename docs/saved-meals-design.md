@@ -66,7 +66,7 @@ Two candidates were compared. The base is a server-owned saved-meal resource tha
 
 ## Tradeoffs accepted
 
-- A meal cannot be renamed or re-amounted in place. Deleting it and saving it again replaces it. In exchange, logging never meets a changed meal.
+- A meal cannot be renamed or re-amounted in place. Deleting it and saving it again replaces it. In exchange, logging never meets a changed meal. [Editing saved meals](saved-meal-editing-design.md) later lifted this while keeping logging race-free.
 - Amounts adjusted while logging apply to that time only. The saved amounts stay the defaults.
 - Logged entries do not link back to their meal. Each one edits and deletes like any other food, and there is no undo for the whole meal.
 - Catalog foods scale linearly from the saved snapshot and keep their reference, as log again does. They are not recalculated from the current catalog.
@@ -84,4 +84,4 @@ Two candidates were compared. The base is a server-owned saved-meal resource tha
 
 - Should the Saved meals tab rank meals by how recently they were logged, or by the time of day in the picker? Today the newest saved meal comes first.
 - Is a whole-meal undo worth adding a nullable `meal_log_id` to `food_entries`?
-- Should editing a meal in place come later, with `If-Match` on logging if it does?
+- Should editing a meal in place come later, with `If-Match` on logging if it does? It came later without `If-Match`; see [saved-meal-editing-design.md](saved-meal-editing-design.md).

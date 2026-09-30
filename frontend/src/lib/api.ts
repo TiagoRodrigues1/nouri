@@ -14,7 +14,7 @@ import { entrySchema, searchResultSchema } from "../../../src/food/contract";
 import type { FoodEntry, SearchResult } from "../../../src/food/contract";
 import { overviewSchema } from "../../../src/overview/contract";
 import { mealLogSchema, savedMealListSchema, savedMealSchema } from "../../../src/meals/contract";
-import type { MealInput, MealLogInput, SavedMeal } from "../../../src/meals/contract";
+import type { MealEdit, MealInput, MealLogInput, SavedMeal } from "../../../src/meals/contract";
 import { authorizationSchema, callbackResults, connectionStatusSchema, disconnectResultSchema, syncResultSchema } from "../../../src/wearables/contract";
 import type { ConnectionStatus, DisconnectResult, SyncResult, WearableProvider } from "../../../src/wearables/contract";
 import type { Overview } from "../../../src/overview/contract";
@@ -149,6 +149,14 @@ export async function createSavedMeal(token: string, key: string, input: MealInp
   return request(token, "/v1/saved-meals", savedMealSchema, {
     method: "POST",
     headers: { "Content-Type": "application/json", "Idempotency-Key": key },
+    body: JSON.stringify(input),
+  });
+}
+
+export async function updateSavedMeal(token: string, key: string, meal: SavedMeal, input: MealEdit): Promise<SavedMeal> {
+  return request(token, `/v1/saved-meals/${encodeURIComponent(meal.id)}`, savedMealSchema, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", "Idempotency-Key": key, "If-Match": `"${meal.revision}"` },
     body: JSON.stringify(input),
   });
 }
