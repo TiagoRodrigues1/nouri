@@ -1,12 +1,10 @@
 import * as stylex from "@stylexjs/stylex";
-import { useState, type FormEvent, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Activity, Clock3, Droplet, GlassWater, Milk, PieChart, Timer, Trash2, Trophy, Utensils } from "lucide-react";
+import { Activity, Clock3, Droplet, PieChart, Timer, Trash2, Trophy, Utensils } from "lucide-react";
 import { Button } from "../components/ui/button";
-import { Input } from "../components/ui/input";
 import { colors } from "../theme.stylex";
 import { styles } from "../my-day-styles";
-import { waterPresets } from "../lib/goals";
 import { kcalPerGram } from "../lib/nutrition";
 import { clock, entryHour } from "../lib/time";
 import { getWorkoutSummary, format, type FoodEntry, type Targets, type WaterEntry } from "../lib/api";
@@ -257,22 +255,10 @@ type WaterCardProps = {
   entries: WaterEntry[];
   totalMl: number | null | undefined;
   pending: boolean;
-  onAdd: (volumeMl: number) => void;
   onDelete: (entry: WaterEntry) => void;
 };
 
-export function WaterCard({ connected, goalMl, entries, totalMl, pending, onAdd, onDelete }: WaterCardProps) {
-  const [custom, setCustom] = useState("");
-
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const volumeMl = Number(custom);
-
-    if (!Number.isInteger(volumeMl) || volumeMl < 1 || volumeMl > 5000) return;
-    onAdd(volumeMl);
-    setCustom("");
-  }
-
+export function WaterCard({ connected, goalMl, entries, totalMl, pending, onDelete }: WaterCardProps) {
   return (
     <section {...stylex.props(styles.card, styles.wide)} aria-label="Water">
       <div {...stylex.props(styles.cardHead)}>
@@ -289,44 +275,6 @@ export function WaterCard({ connected, goalMl, entries, totalMl, pending, onAdd,
             <span {...stylex.props(styles.bigUnit)}>ml</span>
             <p {...stylex.props(styles.caption, styles.waterCaption)}>{waterProgress(connected, totalMl ?? 0, goalMl)}</p>
           </div>
-          <div {...stylex.props(styles.waterPresets)}>
-            {waterPresets.map((preset) => (
-              <Button
-                key={preset.volumeMl}
-                type="button"
-                variant="outline"
-                {...stylex.props(styles.waterPreset)}
-                aria-label={`Add ${preset.label.toLowerCase()} of water, ${preset.volumeMl} ml`}
-                disabled={!connected || pending}
-                onClick={() => onAdd(preset.volumeMl)}
-              >
-                <span {...stylex.props(styles.waterPresetIcon)}>{preset.volumeMl === 250 ? <GlassWater size={18} /> : <Milk size={18} />}</span>
-                <span {...stylex.props(styles.waterPresetText)}>
-                  <strong {...stylex.props(styles.waterPresetAmount)}>+{preset.volumeMl} ml</strong>
-                  <small {...stylex.props(styles.waterPresetLabel)}>{preset.label}</small>
-                </span>
-              </Button>
-            ))}
-          </div>
-          <form {...stylex.props(styles.waterForm)} onSubmit={submit}>
-            <Input
-              id="water-ml"
-              type="number"
-              inputMode="numeric"
-              min={1}
-              max={5000}
-              step={1}
-              placeholder="Other amount, ml"
-              aria-label="Water amount in millilitres"
-              value={custom}
-              onChange={(event) => setCustom(event.target.value)}
-              {...stylex.props(styles.waterInput)}
-              required
-            />
-            <Button type="submit" size="sm" disabled={!connected || pending}>
-              Add
-            </Button>
-          </form>
           {/* The list keeps a fixed height and scrolls, so logging drinks never resizes the card. */}
           <ul {...stylex.props(styles.waterList)} aria-label="Logged water">
             {entries.length === 0 && <li {...stylex.props(styles.waterEmpty)}>No drinks logged yet</li>}

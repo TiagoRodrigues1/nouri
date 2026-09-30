@@ -9,9 +9,11 @@ import { TimePicker } from "./components/ui/time-picker";
 import { styles as formStyles } from "./form-styles";
 import { useExitingRows } from "./lib/use-exiting-rows";
 import { selectValue } from "./lib/select-value";
+import { waterPresets } from "./lib/goals";
 import type { MeasurementInput } from "../../src/measurements/contract";
 import type { StrengthExercise, WorkoutInput } from "../../src/workouts/contract";
 import type { SleepInput } from "../../src/sleep/contract";
+import type { WaterInput } from "../../src/water/contract";
 import { activities } from "../../src/workouts/contract";
 import { measurementKinds, measurementLimits } from "../../src/measurements/contract";
 import type { Activity, MeasurementKind } from "./lib/api";
@@ -115,6 +117,47 @@ function MeasurementForm({ date, pending, onSave }: FormProps<MeasurementInput>)
       </div>
       <div {...stylex.props(formStyles.dialogActions)}>
         <Button type="submit" disabled={pending}>{pending ? "Saving…" : "Save measurement"}</Button>
+      </div>
+    </form>
+  );
+}
+
+export function WaterDialog({ open, onOpenChange, ...props }: RecordDialogProps<WaterInput>) {
+  return (
+    <RecordDialog open={open} onOpenChange={onOpenChange} title="Log water" description={`Add a drink to ${dateLabel(props.date)}.`}>
+      <WaterForm {...props} />
+    </RecordDialog>
+  );
+}
+
+function WaterForm({ date, pending, onSave }: FormProps<WaterInput>) {
+  const [volume, setVolume] = useState("250");
+  const [time, setTime] = useState(currentTime);
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    onSave({ occurredAt: occurredAt(date, time), timeZone, volumeMl: Number(volume) });
+  }
+
+  return (
+    <form {...stylex.props(formStyles.formStack)} onSubmit={submit}>
+      <div>
+        <Label htmlFor="water-ml" {...stylex.props(formStyles.formLabel)}>Amount (ml)</Label>
+        <div {...stylex.props(styles.presets)}>
+          <Input id="water-ml" type="number" inputMode="numeric" min={1} max={5000} step={1} value={volume} onChange={(event) => setVolume(event.target.value)} required />
+          {waterPresets.map((preset) => (
+            <Button key={preset.volumeMl} type="button" variant={volume === String(preset.volumeMl) ? "secondary" : "outline"} aria-pressed={volume === String(preset.volumeMl)} onClick={() => setVolume(String(preset.volumeMl))}>
+              {preset.label}, {preset.volumeMl} ml
+            </Button>
+          ))}
+        </div>
+      </div>
+      <div {...stylex.props(formStyles.timeField)}>
+        <Label htmlFor="water-time" {...stylex.props(formStyles.formLabel, formStyles.timeLabel)}>Time</Label>
+        <TimePicker id="water-time" value={time} onChange={setTime} onNow={() => setTime(currentTime())} />
+      </div>
+      <div {...stylex.props(formStyles.dialogActions)}>
+        <Button type="submit" disabled={pending}>{pending ? "Saving…" : "Save water"}</Button>
       </div>
     </form>
   );
@@ -328,6 +371,7 @@ const styles = stylex.create({
   exerciseCard: { display: "grid", gap: 12, padding: 14, borderWidth: 1, borderStyle: "solid", borderColor: "#e1e4e5", borderRadius: 8 },
   exerciseHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13 },
   exerciseFields: { display: "grid", gridTemplateColumns: { default: "repeat(3, minmax(0, 1fr))", "@media (max-width: 520px)": "1fr 1fr" }, gap: 10 },
+  presets: { display: "grid", gridTemplateColumns: { default: "minmax(0, 1fr) auto auto", "@media (max-width: 520px)": "1fr 1fr" }, gap: 8 },
   times: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: "12px 20px" },
   timeField: { marginBottom: 0 },
   length: { marginLeft: "auto", fontSize: 13, fontWeight: 600 },

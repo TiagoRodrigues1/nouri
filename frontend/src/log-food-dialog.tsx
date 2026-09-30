@@ -11,6 +11,7 @@ import { TimePicker } from "./components/ui/time-picker";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs";
 import { format, searchFoods, type Candidate } from "./lib/api";
 import { currentTime, dateLabel } from "./lib/time";
+import { SavedMealsTab } from "./saved-meals-tab";
 import type { FoodSubmission } from "../../src/food/contract";
 
 type FoodInput = FoodSubmission["food"];
@@ -55,7 +56,7 @@ export function LogFoodDialog({ open, onOpenChange, token, date, isToday, pendin
         <DialogContent>
           <DialogTitle {...stylex.props(styles.dialogTitle)}>Log a food</DialogTitle>
           <DialogDescription {...stylex.props(styles.dialogDescription)}>
-            Choose a food from the catalog or enter one manually. It will be
+            Choose a food from the catalog, a saved meal, or enter one manually. It will be
             added to {isToday ? "today" : dateLabel(date)}.
           </DialogDescription>
           <div {...stylex.props(styles.timeField)}>
@@ -66,6 +67,9 @@ export function LogFoodDialog({ open, onOpenChange, token, date, isToday, pendin
             <TabsList {...stylex.props(styles.widthFull)}>
               <TabsTrigger value="search" {...stylex.props(styles.flexOne)}>
                 Search foods
+              </TabsTrigger>
+              <TabsTrigger value="meals" {...stylex.props(styles.flexOne)}>
+                Saved meals
               </TabsTrigger>
               <TabsTrigger value="manual" {...stylex.props(styles.flexOne)}>
                 Add manually
@@ -178,6 +182,9 @@ export function LogFoodDialog({ open, onOpenChange, token, date, isToday, pendin
                   Source: {source.label}
                 </a>
               ))}
+            </TabsContent>
+            <TabsContent value="meals">
+              <SavedMealsTab token={token} date={date} time={time} onLogged={() => onOpenChange(false)} />
             </TabsContent>
             <TabsContent value="manual">
               <ManualForm

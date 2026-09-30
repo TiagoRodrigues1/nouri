@@ -1,7 +1,7 @@
 import * as stylex from "@stylexjs/stylex";
 import { useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Flame, ListOrdered, Pencil, Plus, RotateCcw, Trash2, Utensils, UtensilsCrossed } from "lucide-react";
+import { BookmarkPlus, Flame, ListOrdered, Pencil, RotateCcw, Trash2, Utensils, UtensilsCrossed } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
 import { Progress } from "./components/ui/progress";
@@ -17,19 +17,21 @@ import { useTargets, type TargetsState } from "./lib/use-targets";
 import { queryStatus } from "./query-status";
 import { useDashboardPage } from "./dashboard-page-context";
 import { TargetsNotice } from "./targets-notice";
+import type { MealSelection } from "./save-meal-dialog";
 
 // Grouped by the hour eaten rather than by a meal label the log does not record.
+// Each period suggests a name for the meal saved from it.
 const periods = [
-  { name: "MORNING", until: 11 },
-  { name: "MIDDAY", until: 15 },
-  { name: "AFTERNOON", until: 18 },
-  { name: "EVENING", until: 24 },
+  { name: "MORNING", until: 11, meal: "Breakfast" },
+  { name: "MIDDAY", until: 15, meal: "Lunch" },
+  { name: "AFTERNOON", until: 18, meal: "Snack" },
+  { name: "EVENING", until: 24, meal: "Dinner" },
 ] as const;
 
 type Totals = Day["food"]["totals"];
 
 export function FoodPage() {
-  const { token, date, isToday, onLogFood, onEditFood, foodDelete } = useDashboardPage();
+  const { token, date, isToday, onEditFood, onSaveMeal, foodDelete } = useDashboardPage();
   const dayQuery = useQuery(dayQueryOptions(token, date));
   const targets = useTargets(token, date);
   const logAgain = useLogAgain(token, date);
@@ -46,9 +48,9 @@ export function FoodPage() {
           entries={entries}
           isToday={isToday}
           busy={foodDelete.isPending || logAgain.pending}
-          onLogFood={onLogFood}
           onLogAgain={logAgain.logAgain}
           onEdit={onEditFood}
+          onSaveMeal={onSaveMeal}
           onDelete={(entry) => foodDelete.mutate(entry)}
         />
       </div>
@@ -129,7 +131,7 @@ function IntakeCard({ totals, entries, targets: state, isToday }: { totals: Tota
   );
 }
 
-function MealsCard({ entries, isToday, busy, onLogFood, onLogAgain, onEdit, onDelete }: { entries: FoodEntry[]; isToday: boolean; busy: boolean; onLogFood: () => void; onLogAgain: (entry: FoodEntry) => void; onEdit: (entry: FoodEntry) => void; onDelete: (entry: FoodEntry) => void }) {
+function MealsCard({ entries, isToday, busy, onLogAgain, onEdit, onSaveMeal, onDelete }: { entries: FoodEntry[]; isToday: boolean; busy: boolean; onLogAgain: (entry: FoodEntry) => void; onEdit: (entry: FoodEntry) => void; onSaveMeal: (selection: MealSelection) => void; onDelete: (entry: FoodEntry) => void }) {
 
   const groups = periods.flatMap((period, index) => {
     const eaten = entries.filter((entry) => {
@@ -138,23 +140,19 @@ function MealsCard({ entries, isToday, busy, onLogFood, onLogAgain, onEdit, onDe
       return hour < period.until && hour >= (periods[index - 1]?.until ?? 0);
     });
 
-    return eaten.length > 0 ? [{ name: period.name, entries: eaten }] : [];
+    return eaten.length > 0 ? [{ name: period.name, meal: period.meal, entries: eaten }] : [];
   });
 
   // Logging again always lands today, so a past day says so rather than implying it adds to this one.
   const logAgainWhen = isToday ? "now" : "today";
 
   return (
-    <Panel
-      title="Meals"
-      icon={<Utensils size={16} />}
-      aside={<Button variant="outline" size="sm" onClick={onLogFood}><Plus size={15} /> Add food</Button>}
-    >
+    <Panel title="Meals" icon={<Utensils size={16} />}>
       {groups.length === 0 ? (
         <div {...stylex.props(styles.empty)}>
           <UtensilsCrossed size={20} />
           <strong {...stylex.props(styles.emptyTitle)}>No foods logged</strong>
-          <span>Search the catalog or enter a food yourself.</span>
+          <span>Use + Log to search the catalog or enter a food yourself.</span>
         </div>
       ) : (
         <div {...stylex.props(styles.meals)}>
@@ -162,7 +160,12 @@ function MealsCard({ entries, isToday, busy, onLogFood, onLogAgain, onEdit, onDe
             <section key={group.name} {...stylex.props(styles.meal)} aria-label={group.name.toLowerCase()}>
               <div {...stylex.props(styles.mealHead)}>
                 <span {...stylex.props(styles.mealName)}>{group.name}</span>
-                <span {...stylex.props(styles.mealTotal)}>{format(sum(group.entries, "kcal"))} kcal</span>
+                <span {...stylex.props(styles.mealHeadEnd)}>
+                  <span {...stylex.props(styles.mealTotal)}>{format(sum(group.entries, "kcal"))} kcal</span>
+                  <Button variant="ghost" size="icon" {...stylex.props(styles.entryAction)} aria-label={`Save ${group.name.toLowerCase()} foods as a meal`} title="Save as meal" disabled={busy} onClick={() => onSaveMeal({ entryIds: group.entries.map((entry) => entry.id), name: group.meal })}>
+                    <BookmarkPlus size={15} />
+                  </Button>
+                </span>
               </div>
               <ul {...stylex.props(styles.list)}>
                 {group.entries.map((entry) => {

@@ -13,6 +13,8 @@ import type { Day } from "../../../src/days/contract";
 import { entrySchema, searchResultSchema } from "../../../src/food/contract";
 import type { FoodEntry, SearchResult } from "../../../src/food/contract";
 import { overviewSchema } from "../../../src/overview/contract";
+import { mealLogSchema, savedMealListSchema, savedMealSchema } from "../../../src/meals/contract";
+import type { MealInput, MealLogInput, SavedMeal } from "../../../src/meals/contract";
 import { authorizationSchema, callbackResults, connectionStatusSchema, disconnectResultSchema, syncResultSchema } from "../../../src/wearables/contract";
 import type { ConnectionStatus, DisconnectResult, SyncResult, WearableProvider } from "../../../src/wearables/contract";
 import type { Overview } from "../../../src/overview/contract";
@@ -24,6 +26,8 @@ export type { CardId, Dashboard } from "../../../src/dashboard/contract";
 export type { Day } from "../../../src/days/contract";
 
 export type { FoodEntry, SearchResult } from "../../../src/food/contract";
+
+export type { SavedMeal } from "../../../src/meals/contract";
 
 export type { WaterEntry } from "../../../src/water/contract";
 
@@ -134,6 +138,35 @@ export async function deleteFood(token: string, entry: FoodEntry, key: string): 
   await request(token, `/v1/food-entries/${encodeURIComponent(entry.id)}`, z.null(), {
     method: "DELETE",
     headers: { "Idempotency-Key": key, "If-Match": `"${entry.revision}"` },
+  });
+}
+
+export async function getSavedMeals(token: string): Promise<SavedMeal[]> {
+  return (await request(token, "/v1/saved-meals", savedMealListSchema)).meals;
+}
+
+export async function createSavedMeal(token: string, key: string, input: MealInput): Promise<SavedMeal> {
+  return request(token, "/v1/saved-meals", savedMealSchema, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Idempotency-Key": key },
+    body: JSON.stringify(input),
+  });
+}
+
+export async function logSavedMeal(token: string, key: string, meal: SavedMeal, input: MealLogInput): Promise<FoodEntry[]> {
+  const { entries } = await request(token, `/v1/saved-meals/${encodeURIComponent(meal.id)}/logs`, mealLogSchema, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Idempotency-Key": key },
+    body: JSON.stringify(input),
+  });
+
+  return entries;
+}
+
+export async function deleteSavedMeal(token: string, meal: SavedMeal, key: string): Promise<void> {
+  await request(token, `/v1/saved-meals/${encodeURIComponent(meal.id)}`, z.null(), {
+    method: "DELETE",
+    headers: { "Idempotency-Key": key, "If-Match": `"${meal.revision}"` },
   });
 }
 

@@ -63,7 +63,6 @@ export function MyDay({ day, status }: MyDayProps) {
         entries={day?.water.entries ?? []}
         totalMl={day?.water.totalMl}
         pending={water.pending}
-        onAdd={water.add}
         onDelete={water.remove}
       />
     ),

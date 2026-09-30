@@ -31,7 +31,7 @@ type Category = (typeof categories)[number]["id"];
 type Tab = "all" | Category;
 
 export function Overview() {
-  const { token, date, onLogFood, onLogWorkout, onLogSleep, onLogMeasurement, journal, water } = useDashboardPage();
+  const { token, date, journal } = useDashboardPage();
   const [tab, setTab] = useState<Tab>("all");
 
   const query = useQuery({
@@ -62,8 +62,8 @@ export function Overview() {
   const busy = journal.create.isPending || journal.remove.isPending;
 
   const sections: Record<Category, ReactNode> = data ? {
-    nutrition: <NutritionSection nutrition={data.nutrition} targets={targets.targets} onLogFood={onLogFood} waterPending={water.pending} onAddWater={water.add} />,
-    sports: <SportsSection sports={data.sports} busy={busy} onLog={onLogWorkout} onDelete={remove("/v1/workouts", "Workout")} />,
+    nutrition: <NutritionSection nutrition={data.nutrition} targets={targets.targets} />,
+    sports: <SportsSection sports={data.sports} busy={busy} onDelete={remove("/v1/workouts", "Workout")} />,
     measurements: (
       <MeasurementsSection
         token={token}
@@ -72,13 +72,12 @@ export function Overview() {
         weightGoalKg={targets.targets?.weightKg ?? null}
         photos={data.photos}
         busy={busy}
-        onLog={onLogMeasurement}
         onDelete={remove("/v1/measurements", "Measurement")}
         onUpload={upload}
         onDeletePhoto={remove("/v1/progress-photos", "Photo")}
       />
     ),
-    sleep: <SleepSection sleep={data.sleep} goalMinutes={targets.targets?.sleepMinutes} busy={busy} onLog={onLogSleep} onDelete={remove("/v1/sleep-sessions", "Sleep session")} />,
+    sleep: <SleepSection sleep={data.sleep} goalMinutes={targets.targets?.sleepMinutes} busy={busy} onDelete={remove("/v1/sleep-sessions", "Sleep session")} />,
     supplements: <SupplementsSection day={data.supplements} />,
   } : { nutrition: null, sports: null, measurements: null, sleep: null, supplements: null };
 

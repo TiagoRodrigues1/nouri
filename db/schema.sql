@@ -34,6 +34,20 @@ CREATE TABLE IF NOT EXISTS mutation_receipts (
   )
 );
 
+-- A named group of foods copied from logged entries. Items are read and written whole, so they stay one document.
+CREATE TABLE IF NOT EXISTS saved_meals (
+  id uuid PRIMARY KEY,
+  user_id uuid NOT NULL,
+  name text NOT NULL CHECK (length(name) BETWEEN 1 AND 80),
+  items jsonb NOT NULL CHECK (jsonb_typeof(items) = 'array' AND jsonb_array_length(items) BETWEEN 1 AND 20),
+  revision integer NOT NULL DEFAULT 1 CHECK (revision >= 1),
+  deleted_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS saved_meals_user_active_idx ON saved_meals (user_id, created_at) WHERE deleted_at IS NULL;
+
 CREATE TABLE IF NOT EXISTS water_entries (
   id uuid PRIMARY KEY,
   user_id uuid NOT NULL,

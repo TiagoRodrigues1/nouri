@@ -13,6 +13,9 @@ import { mutateFood } from "./food/food.js";
 import type { AppDatabase } from "./db/database.js";
 import { getDated, saveDated, type DatedKind, type DatedTable } from "./effective-dated.js";
 import type { FoodMutationResult } from "./food/food.js";
+import { mealInputSchema, mealLogInputSchema, mealLogSchema, savedMealListSchema, savedMealSchema } from "./meals/contract.js";
+import { listMeals, logMeal, mutateMeal } from "./meals/meals.js";
+import type { MealLogResult, MealMutationResult } from "./meals/meals.js";
 import { integrationRoutes } from "./wearables/routes.js";
 import { sameSecret } from "./crypto.js";
 import { error, errorSchema } from "./http-error.js";
@@ -69,6 +72,24 @@ function recordResponse<Entry>(result: RecordMutationResult<Entry>, label: strin
       return error(404, `${label} not found`);
     case "unknown-reference":
       return error(404, result.message);
+    case "stale":
+      return error(409, "Revision conflict");
+    case "key-reuse":
+      return error(409, "Idempotency key reused for another request");
+  }
+}
+
+// A missing meal is the saved meal on delete or log, and a chosen food entry when saving one.
+function mealResponse(result: MealMutationResult | MealLogResult, missing: string): Response {
+  switch (result.outcome) {
+    case "created":
+      return new Response(JSON.stringify(result.entry), { status: 201, headers: { "Content-Type": "application/json" } });
+    case "deleted":
+      return new Response(null, { status: 204 });
+    case "missing":
+      return error(404, missing);
+    case "invalid-item":
+      return error(400, "Invalid saved meal item");
     case "stale":
       return error(409, "Revision conflict");
     case "key-reuse":
@@ -197,6 +218,34 @@ export function createApp(db: AppDatabase, auth: { token: string; userId: string
     if (!id.success || revision === null) return error(400, "Invalid food deletion");
 
     return response(await mutateFood(db, context.get("userId"), key, { kind: "delete", id: id.data, revision }));
+  });
+
+  app.get("/v1/saved-meals", async (context) => context.json(await listMeals(db, context.get("userId"))));
+
+  app.post("/v1/saved-meals", async (context) => {
+    const input = mealInputSchema.safeParse(await context.req.json().catch(() => null));
+
+    if (!input.success) return error(400, "Invalid saved meal");
+
+    return mealResponse(await mutateMeal(db, context.get("userId"), context.get("idempotencyKey"), { kind: "create", input: input.data }), "Food entry not found");
+  });
+
+  app.post("/v1/saved-meals/:id/logs", async (context) => {
+    const id = z.uuid().safeParse(context.req.param("id"));
+    const input = mealLogInputSchema.safeParse(await context.req.json().catch(() => null));
+
+    if (!id.success || !input.success) return error(400, "Invalid saved meal log");
+
+    return mealResponse(await logMeal(db, context.get("userId"), context.get("idempotencyKey"), id.data, input.data), "Saved meal not found");
+  });
+
+  app.delete("/v1/saved-meals/:id", async (context) => {
+    const id = z.uuid().safeParse(context.req.param("id"));
+    const revision = revisionHeader(context.req.header("If-Match"));
+
+    if (!id.success || revision === null) return error(400, "Invalid saved meal deletion");
+
+    return mealResponse(await mutateMeal(db, context.get("userId"), context.get("idempotencyKey"), { kind: "delete", id: id.data, revision }), "Saved meal not found");
   });
 
   app.get("/v1/days/:date", async (context) => {
@@ -349,6 +398,10 @@ export function createApp(db: AppDatabase, auth: { token: string; userId: string
   app.openAPIRegistry.registerPath({ method: "get", path: "/v1/foods/search", request: { query: z.object({ q: z.string().min(2).max(80), locale: z.string().optional() }) }, responses: { 200: { description: "Ciqual food matches and attribution", content: { "application/json": { schema: searchResultSchema } } }, 400: { description: "Invalid query", content: { "application/json": { schema: errorSchema } } } } });
   app.openAPIRegistry.registerPath({ method: "patch", path: "/v1/food-entries/{id}", request: { params: z.object({ id: z.uuid() }), headers: editHeaders, body: { content: { "application/json": { schema: submissionSchema } } } }, responses: { 200: { description: "Updated food entry", content: { "application/json": { schema: entrySchema } } }, 404: { description: "Entry or catalog food not found", content: { "application/json": { schema: errorSchema } } }, 409: { description: "Revision or idempotency conflict", content: { "application/json": { schema: errorSchema } } } } });
   app.openAPIRegistry.registerPath({ method: "delete", path: "/v1/food-entries/{id}", request: { params: z.object({ id: z.uuid() }), headers: editHeaders }, responses: { 204: { description: "Deleted food entry" }, 404: { description: "Entry not found", content: { "application/json": { schema: errorSchema } } }, 409: { description: "Revision or idempotency conflict", content: { "application/json": { schema: errorSchema } } } } });
+  app.openAPIRegistry.registerPath({ method: "get", path: "/v1/saved-meals", responses: { 200: { description: "Saved meals, newest first", content: { "application/json": { schema: savedMealListSchema } } } } });
+  app.openAPIRegistry.registerPath({ method: "post", path: "/v1/saved-meals", request: { headers: mutationHeaders, body: { content: { "application/json": { schema: mealInputSchema } } } }, responses: { 201: { description: "A saved meal copying the chosen entries' foods at the given amounts", content: { "application/json": { schema: savedMealSchema } } }, 400: { description: "Invalid request or an amount outside the journal's limits", content: { "application/json": { schema: errorSchema } } }, 404: { description: "Food entry not found", content: { "application/json": { schema: errorSchema } } }, 409: { description: "Idempotency conflict", content: { "application/json": { schema: errorSchema } } } } });
+  app.openAPIRegistry.registerPath({ method: "post", path: "/v1/saved-meals/{id}/logs", request: { params: z.object({ id: z.uuid() }), headers: mutationHeaders, body: { content: { "application/json": { schema: mealLogInputSchema } } } }, responses: { 201: { description: "One food entry per chosen item, scaled to its amount, all logged at one time", content: { "application/json": { schema: mealLogSchema } } }, 400: { description: "Invalid request, an item the meal lacks, or an amount outside the journal's limits", content: { "application/json": { schema: errorSchema } } }, 404: { description: "Saved meal not found", content: { "application/json": { schema: errorSchema } } }, 409: { description: "Idempotency conflict", content: { "application/json": { schema: errorSchema } } } } });
+  app.openAPIRegistry.registerPath({ method: "delete", path: "/v1/saved-meals/{id}", request: { params: z.object({ id: z.uuid() }), headers: editHeaders }, responses: { 204: { description: "Deleted saved meal; foods already logged from it stay" }, 404: { description: "Saved meal not found", content: { "application/json": { schema: errorSchema } } }, 409: { description: "Revision or idempotency conflict", content: { "application/json": { schema: errorSchema } } } } });
   app.openAPIRegistry.registerPath({ method: "get", path: "/v1/days/{date}", request: { params: z.object({ date: z.iso.date() }) }, responses: { 200: { description: "Food and water entries and totals for the recorded local day", content: { "application/json": { schema: daySchema } } } } });
   app.openAPIRegistry.registerPath({ method: "get", path: "/v1/dashboard", responses: { 200: { description: "Cards shown on the My Day page, in display order; defaults until the user saves a layout", content: { "application/json": { schema: dashboardSchema } } } } });
   app.openAPIRegistry.registerPath({ method: "put", path: "/v1/dashboard", request: { body: { content: { "application/json": { schema: dashboardSchema } } } }, responses: { 200: { description: "Saved dashboard layout", content: { "application/json": { schema: dashboardSchema } } }, 400: { description: "Unknown or repeated card", content: { "application/json": { schema: errorSchema } } } } });

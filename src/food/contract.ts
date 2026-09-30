@@ -5,7 +5,7 @@ import { occurredAtSchema, timeZoneSchema } from "../time.js";
 const amount = z.number().nonnegative().max(1_000_000)
   .refine((value) => Math.abs(value * 1000 - Math.round(value * 1000)) < 1e-7);
 
-const positiveAmount = amount.positive();
+export const positiveAmount = amount.positive();
 
 export const nutrientsSchema = z.object({
   kcal: amount.nullable(),

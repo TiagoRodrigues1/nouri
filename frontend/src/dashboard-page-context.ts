@@ -1,5 +1,6 @@
 import { createContext, useContext } from "react";
 import type { FoodEntry } from "./lib/api";
+import type { MealSelection } from "./save-meal-dialog";
 import type { useIdempotentDelete } from "./lib/use-idempotent";
 import type { useWater } from "./lib/use-water";
 import type { useJournal } from "./overview/use-journal";
@@ -8,11 +9,8 @@ export type DashboardPageContext = {
   token: string;
   date: string;
   isToday: boolean;
-  onLogFood: () => void;
   onEditFood: (entry: FoodEntry) => void;
-  onLogWorkout: () => void;
-  onLogSleep: () => void;
-  onLogMeasurement: () => void;
+  onSaveMeal: (selection: MealSelection) => void;
   foodDelete: ReturnType<typeof useIdempotentDelete<FoodEntry>>;
   journal: ReturnType<typeof useJournal>;
   water: ReturnType<typeof useWater>;

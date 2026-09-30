@@ -1,15 +1,13 @@
 import * as stylex from "@stylexjs/stylex";
-import { Apple, Droplet, Flame, PieChart, Plus, Utensils } from "lucide-react";
-import { Button } from "../components/ui/button";
+import { Apple, Droplet, Flame, PieChart, Utensils } from "lucide-react";
 import { Progress } from "../components/ui/progress";
-import { waterPresets } from "../lib/goals";
 import { format, type Overview as OverviewData, type Targets } from "../lib/api";
 import { clock } from "../lib/time";
 import { styles } from "../overview-styles";
 import { colors } from "../theme.stylex";
 import { Caption, Section, Tile, Value } from "./shared";
 
-export function NutritionSection({ nutrition, targets, onLogFood, waterPending, onAddWater }: { nutrition: OverviewData["nutrition"]; targets: Targets | undefined; onLogFood: () => void; waterPending: boolean; onAddWater: (volumeMl: number) => void }) {
+export function NutritionSection({ nutrition, targets }: { nutrition: OverviewData["nutrition"]; targets: Targets | undefined }) {
   const { totals, entries } = nutrition.food;
   const waterMl = nutrition.water.totalMl ?? 0;
   const times = entries.map((entry) => new Date(entry.occurredAt));
@@ -28,7 +26,6 @@ export function NutritionSection({ nutrition, targets, onLogFood, waterPending, 
       description="Energy, macros, and water from your food log."
       icon={<Apple size={18} />}
       color={colors.food}
-      action={<Button variant="outline" size="sm" onClick={onLogFood}><Plus size={15} /> Log food</Button>}
     >
       <Tile title="Energy" icon={<Flame size={16} />} aside={targets && `${format(targets.kcal)} kcal target`}>
         <Value value={format(totals.kcal)} unit="kcal" />
@@ -55,13 +52,6 @@ export function NutritionSection({ nutrition, targets, onLogFood, waterPending, 
       <Tile title="Water" icon={<Droplet size={16} />} aside={targets && `${format(targets.waterMl)} ml goal`}>
         <Value value={format(waterMl)} unit="ml" />
         {targets && <Progress value={waterMl} max={targets.waterMl} color={colors.water} aria-label="Water against the daily goal" />}
-        <div {...stylex.props(styles.actions)}>
-          {waterPresets.map(({ volumeMl }) => (
-            <Button key={volumeMl} variant="outline" size="sm" disabled={waterPending} aria-label={`Add ${volumeMl} ml of water`} onClick={() => onAddWater(volumeMl)}>
-              +{volumeMl} ml
-            </Button>
-          ))}
-        </div>
       </Tile>
       <Tile title="Foods" icon={<Utensils size={16} />}>
         <Value value={String(entries.length)} unit={entries.length === 1 ? "food logged" : "foods logged"} />

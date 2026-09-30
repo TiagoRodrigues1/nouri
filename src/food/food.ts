@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { AppDatabase, Transaction } from "../db/database.js";
 import { softDelete } from "../journal/records.js";
 import { withReceipt } from "../journal/receipt.js";
@@ -98,23 +98,36 @@ async function missingOrStale(tx: Transaction, userId: string, id: string): Prom
   return { outcome: row ? "stale" : "missing" };
 }
 
+// Logs recorded foods at one time, in the order given. Copies the saved name, amount, nutrients and
+// catalog reference, never the catalog's current values, so it keeps working after the catalog changes.
+export async function insertFoods(tx: Transaction, userId: string, when: RepeatInput, foods: FoodEntry["food"][]): Promise<FoodEntry[]> {
+  const rows = foods.map(({ catalogRef, ...food }) => ({ id: randomUUID(), userId, ...values({ ...when, food: catalogRef ? { ...food, catalogRef } : food }) }));
+  const inserted = await tx.insert(foodEntries).values(rows).returning();
+  const byId = new Map(inserted.map((row) => [row.id, entry(row)]));
+
+  return rows.map(({ id }) => {
+    const created = byId.get(id);
+
+    if (!created) throw new Error("Food insert returned no row");
+
+    return created;
+  });
+}
+
+// The person's current foods among these entries, by entry id. Deleted and unknown ids are absent.
+export async function recordedFoods(tx: Transaction, userId: string, ids: string[]): Promise<Map<string, FoodEntry["food"]>> {
+  const rows = await tx.select().from(foodEntries)
+    .where(and(eq(foodEntries.userId, userId), inArray(foodEntries.id, ids), isNull(foodEntries.deletedAt)));
+
+  return new Map(rows.map((row) => [row.id, entry(row).food]));
+}
+
 async function insert(tx: Transaction, userId: string, input: FoodInput): Promise<{ outcome: "created"; entry: FoodEntry }> {
   const [row] = await tx.insert(foodEntries).values({ id: randomUUID(), userId, ...values(input) }).returning();
 
   if (!row) throw new Error("Food insert returned no row");
 
   return { outcome: "created", entry: entry(row) };
-}
-
-// Copies the saved name, amount, nutrients and catalog reference, never the catalog's current values.
-async function sourceInput(tx: Transaction, userId: string, sourceId: string, input: RepeatInput): Promise<FoodInput | null> {
-  const [source] = await tx.select().from(foodEntries)
-    .where(and(eq(foodEntries.userId, userId), eq(foodEntries.id, sourceId), isNull(foodEntries.deletedAt)));
-
-  if (!source) return null;
-  const { catalogRef, ...food } = entry(source).food;
-
-  return { ...input, food: catalogRef ? { ...food, catalogRef } : food };
 }
 
 export async function mutateFood(db: AppDatabase, userId: string, key: string, command: FoodCommand): Promise<FoodMutationResult> {
@@ -134,9 +147,10 @@ export async function mutateFood(db: AppDatabase, userId: string, key: string, c
     if (command.kind === "delete") {
       result = await softDelete(tx, foodEntries, userId, command.id, command.revision);
     } else if (command.kind === "repeat") {
-      const input = await sourceInput(tx, userId, command.sourceId, command.input);
+      const food = (await recordedFoods(tx, userId, [command.sourceId])).get(command.sourceId);
+      const [repeated] = food ? await insertFoods(tx, userId, command.input, [food]) : [];
 
-      result = input ? await insert(tx, userId, input) : { outcome: "missing" };
+      result = repeated ? { outcome: "created", entry: repeated } : { outcome: "missing" };
     } else {
       const input = resolveInput(command.input);
 
