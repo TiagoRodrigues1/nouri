@@ -44,7 +44,18 @@ void test("food CRUD, stable retries, day totals, and concurrent writes", async 
     assert.ok(scriptPath);
     const script = await app.request(scriptPath);
     assert.equal(script.status, 200);
-    assert.match(await script.text(), /\/v1\/food-entries/);
+    // Routes load lazily, so the API client lives in a chunk the entry references rather than in the entry itself.
+    const chunkPaths = new Set([...(await script.text()).matchAll(/["`](?:\.\/|assets\/)([^"`/]+\.js)["`]/g)].map((match) => `/assets/${match[1]}`));
+    assert.ok(chunkPaths.size > 0);
+
+    const chunks = await Promise.all([...chunkPaths].map(async (path) => {
+      const chunk = await app.request(path);
+      assert.equal(chunk.status, 200, path);
+
+      return chunk.text();
+    }));
+
+    assert.ok(chunks.some((chunk) => chunk.includes("/v1/food-entries")));
 
     const stylePath = pageHtml.match(/href="(\/assets\/[^" ]+\.css)"/)?.[1];
     assert.ok(stylePath);
