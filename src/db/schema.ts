@@ -1,5 +1,5 @@
 import { bigint, customType, date, integer, jsonb, pgTable, primaryKey, text, timestamp, uuid, index, uniqueIndex } from "drizzle-orm/pg-core";
-import type { FoodQuantity } from "../contracts.js";
+import type { FoodQuantity } from "../food/contract.js";
 import type { StoredMealItem } from "../meals/contract.js";
 import type { MeasurementKind } from "../measurements/contract.js";
 import type { PhotoType } from "../photos/contract.js";

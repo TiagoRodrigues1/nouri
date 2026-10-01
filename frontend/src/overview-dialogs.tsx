@@ -9,7 +9,6 @@ import { TimePicker } from "./components/ui/time-picker";
 import { styles as formStyles } from "./form-styles";
 import { useExitingRows } from "./lib/use-exiting-rows";
 import { selectValue } from "./lib/select-value";
-import { waterPresets } from "./lib/goals";
 import type { MeasurementInput } from "../../src/measurements/contract";
 import type { StrengthExercise, WorkoutInput } from "../../src/workouts/contract";
 import type { SleepInput } from "../../src/sleep/contract";
@@ -18,6 +17,11 @@ import { activities } from "../../src/workouts/contract";
 import { measurementKinds, measurementLimits } from "../../src/measurements/contract";
 import type { Activity, MeasurementKind } from "./lib/api";
 import { currentTime, dateLabel, occurredAt, shiftDate, timeZone } from "./lib/time";
+
+const waterPresets = [
+  { volumeMl: 250, label: "Glass" },
+  { volumeMl: 500, label: "Bottle" },
+] as const;
 
 export const measurementLabels: Record<MeasurementKind, { name: string; unit: string; step: number }> = {
   weight: { name: "Weight", unit: "kg", step: 0.1 },

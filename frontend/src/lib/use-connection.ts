@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { callbackResults, disconnectConnection, getConnection, startConnection, syncConnection, type ImportKind, type WearableProvider } from "./api";
 import { callbackMessages, countOf, noun, providerDetails } from "./wearables";
+import { queryRefresh } from "./query-refresh";
 
 const kinds: ImportKind[] = ["sleep", "workouts"];
 
@@ -26,7 +27,10 @@ function useConnectionStatus(token: string, provider: WearableProvider) {
 export function useConnection(token: string, provider: WearableProvider) {
   const client = useQueryClient();
   const { name, revokeHelp } = providerDetails[provider];
-  const refresh = () => Promise.all([client.invalidateQueries({ queryKey: ["connection", token, provider] }), client.invalidateQueries({ queryKey: ["overview", token] })]);
+
+  const refresh = () => Promise.all(["connection", ...new Set([...queryRefresh.sleep, ...queryRefresh.workout])]
+    .map((name) => client.invalidateQueries({ queryKey: [name, token] })));
+
   const status = useConnectionStatus(token, provider);
 
   const connect = useMutation({

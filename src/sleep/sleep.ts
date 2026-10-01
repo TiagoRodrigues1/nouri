@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, between, eq, isNull } from "drizzle-orm";
 import { sleepSessions } from "../db/schema.js";
 import type { AppDatabase } from "../db/database.js";
 import type { RecordKind } from "../journal/records.js";
@@ -27,6 +27,10 @@ function source(row: SleepRow): SleepSession["source"] {
   };
 }
 
+function minutes(row: Pick<SleepRow, "startedAt" | "endedAt">): number {
+  return Math.round((row.endedAt.getTime() - row.startedAt.getTime()) / 60_000);
+}
+
 function session(row: SleepRow): SleepSession {
   return {
     id: row.id,
@@ -35,7 +39,7 @@ function session(row: SleepRow): SleepSession {
     endedAt: row.endedAt.toISOString(),
     timeZone: row.timeZone,
     localDate: row.localDate,
-    durationMinutes: Math.round((row.endedAt.getTime() - row.startedAt.getTime()) / 60_000),
+    durationMinutes: minutes(row),
     stages: stages(row),
     source: source(row),
   };
@@ -97,4 +101,25 @@ export async function getSleepDay(db: AppDatabase, userId: string, date: string)
     totalMinutes: sessions.length === 0 ? null : sessions.reduce((sum, item) => sum + item.durationMinutes, 0),
     stages: sumStages(sessions),
   };
+}
+
+export type SleepRangeDay = { sessionCount: number; totalMinutes: number };
+
+// Days from `from` to `to` that have sleep, by the local date each night ends on.
+export async function getSleepRange(db: AppDatabase, userId: string, from: string, to: string): Promise<Map<string, SleepRangeDay>> {
+  const rows = await db.select({ localDate: sleepSessions.localDate, startedAt: sleepSessions.startedAt, endedAt: sleepSessions.endedAt }).from(sleepSessions).where(and(
+    eq(sleepSessions.userId, userId), between(sleepSessions.localDate, from, to), isNull(sleepSessions.deletedAt),
+  ));
+
+  const days = new Map<string, SleepRangeDay>();
+
+  for (const row of rows) {
+    const day = days.get(row.localDate) ?? { sessionCount: 0, totalMinutes: 0 };
+
+    day.sessionCount += 1;
+    day.totalMinutes += minutes(row);
+    days.set(row.localDate, day);
+  }
+
+  return days;
 }

@@ -27,7 +27,7 @@ export function SavedMealsTab({ token, date, time, onLogged }: { token: string; 
   if (status || !meals) return <p {...stylex.props(styles.searchMessage)}>{status}</p>;
 
   if (meals.length === 0) {
-    return <p {...stylex.props(styles.searchMessage)}>No saved meals yet. On the Food page, choose Save as meal next to a meal you logged.</p>;
+    return <p {...stylex.props(styles.searchMessage)}>No saved meals yet. Log a food on Today, then choose Save as meal in the Timeline header.</p>;
   }
 
   const selected = meals.find((meal) => meal.id === selectedId) ?? null;

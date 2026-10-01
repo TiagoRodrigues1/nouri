@@ -11,7 +11,8 @@ import { MeasurementsSection } from "./overview/measurements";
 import { SleepSection } from "./overview/sleep";
 import { styles } from "./overview-styles";
 import { maxPhotoBytes } from "../../src/photos/contract";
-import { getOverview, type RecordPath } from "./lib/api";
+import type { RecordPath } from "./lib/api";
+import { overviewQueryOptions } from "./lib/day-query";
 import { occurredAt, timeZone } from "./lib/time";
 import { useDashboardPage } from "./dashboard-page-context";
 import { recordPaths } from "../../src/journal/paths";
@@ -31,11 +32,7 @@ export function Overview() {
   const { token, date, journal } = useDashboardPage();
   const [tab, setTab] = useState<Tab>("all");
 
-  const query = useQuery({
-    queryKey: ["overview", token, date],
-    queryFn: () => getOverview(token, date),
-    enabled: Boolean(token),
-  });
+  const query = useQuery(overviewQueryOptions(token, date));
 
   async function upload(file: File) {
     if (file.size > maxPhotoBytes) {

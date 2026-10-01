@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, gte, isNull, lte } from "drizzle-orm";
+import { and, between, desc, eq, gte, isNull, lte } from "drizzle-orm";
 import { bodyMeasurements } from "../db/schema.js";
 import type { AppDatabase } from "../db/database.js";
 import type { RecordKind } from "../journal/records.js";
@@ -86,4 +86,13 @@ export async function getMeasurementSummary(db: AppDatabase, userId: string, dat
     weightHistory: [...history].map(([day, value]) => ({ localDate: day, value })),
     bmi: weight && heightM ? Math.round((weight / (heightM * heightM)) * 10) / 10 : null,
   };
+}
+
+// Days from `from` to `to` with a weight, by local date: the last weight recorded that day.
+export async function getWeightRange(db: AppDatabase, userId: string, from: string, to: string): Promise<Map<string, number>> {
+  const rows = await db.selectDistinctOn([bodyMeasurements.localDate]).from(bodyMeasurements).where(and(
+    eq(bodyMeasurements.userId, userId), eq(bodyMeasurements.kind, "weight"), between(bodyMeasurements.localDate, from, to), isNull(bodyMeasurements.deletedAt),
+  )).orderBy(bodyMeasurements.localDate, desc(bodyMeasurements.occurredAt), desc(bodyMeasurements.id));
+
+  return new Map(rows.map((row) => [row.localDate, row.valueMilli / 1000]));
 }

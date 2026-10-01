@@ -63,7 +63,7 @@ These modules own full operations. They do not split into generic controller, se
 
 The following is a design sketch. It is the contract to implement, not runnable code.
 
-The [TypeScript contract sketch](../src/contracts.ts) defines the broader product data shapes and operation signatures. The runnable manual-food slice has its own [design rationale](food-slice-design.md) and exposes the food routes above.
+Each feature's `contract.ts` under `src/` defines its data shapes with Zod. The runnable manual-food slice has its own [design rationale](food-slice-design.md) and exposes the food routes above.
 
 The public interface hides source deduplication, revisions, SQL, model prompts, and job scheduling. Callers provide a domain command and receive a stored result. Branded identifiers and discriminated unions prevent mixing users, entries, and record kinds. Zod validates JSON and converts strings into these types at the HTTP boundary. Database constraints repeat the critical ownership and uniqueness checks.
 

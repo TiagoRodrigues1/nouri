@@ -28,4 +28,3 @@ export function useDashboardPage() {
 
   return context;
 }
-

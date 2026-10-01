@@ -12,6 +12,7 @@ import { dayQueryOptions } from "./lib/day-query";
 import { currentTime, dateLabel } from "./lib/time";
 import { draftFor, editableRef, editedSubmission, nutrientFields, scaleNutrients, type NutrientText } from "./lib/food-edit";
 import { useIdempotentWrite } from "./lib/use-idempotent";
+import { queryRefresh } from "./lib/query-refresh";
 import type { FoodSubmission } from "../../src/food/contract";
 
 type PendingEdit = { entry: FoodEntry; input: FoodSubmission };
@@ -27,7 +28,7 @@ export function EditFoodDialog({ token, date, entryId, onClose }: { token: strin
   // Lives outside the keyed form, so a save survives the form restarting on a new revision.
   // The signature names the revision edited, so a retry reuses its key and a later edit gets a new one.
   const save = useIdempotentWrite<PendingEdit>(token, (pending, key) => updateFood(token, key, pending.entry, pending.input), {
-    refresh: ["day", "overview"], success: () => "Food updated.", onSuccess: onClose,
+    refresh: () => queryRefresh.food, success: () => "Food updated.", onSuccess: onClose,
     signature: (pending) => JSON.stringify([pending.entry.id, pending.entry.revision, pending.input]),
   });
 

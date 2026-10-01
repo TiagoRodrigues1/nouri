@@ -1,6 +1,6 @@
 # Saved meals
 
-Open `/` and fill `input[aria-label="Choose log date"]` with `2026-09-25`. Log the catalog apple at 150 g and a manual `Oats` of 80 g at 300 kcal, both at 08:15 (see [catalog-log.md](catalog-log.md) and [manual-log.md](manual-log.md)).
+Open `/` and choose `2026-09-25` with the `Choose log date` picker. Log the catalog apple at 150 g and a manual `Oats` of 80 g at 300 kcal, both at 08:15 (see [catalog-log.md](catalog-log.md) and [manual-log.md](manual-log.md)).
 
 Choose `Save foods as a meal` in the Timeline header. The `Save as meal` dialog lists every food of the day, all ticked, with an empty `Meal name`. Fill `Breakfast` and set `Amount of Oats in g` to `60`. The oats row previews 225 kcal and the summary reads `2 of 2 foods` and `306 kcal`. Choose `Save meal`. The toast reads `Breakfast saved.`, and `GET /v1/saved-meals` returns the meal with oats at 60 g and the apple with its Ciqual `catalogRef`. Deleting the oats entry from the day afterwards leaves the meal unchanged.
 

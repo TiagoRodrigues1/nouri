@@ -165,12 +165,6 @@ export const styles = stylex.create({
     color: colors.mutedForeground,
     marginTop: "2px",
   },
-  dateInput: {
-    width: "148px",
-    height: "40px",
-    fontSize: "12px",
-    color: colors.foreground,
-  },
   emptyTitle: {
     color: colors.foreground,
     fontSize: "13px",

@@ -7,11 +7,11 @@ import { PendingWrites } from "./pending-writes";
 // One key per distinct request, reused while it is retried. Serves creates and edits alike.
 export function useIdempotentWrite<Input>(
   token: string, send: (input: Input, key: string) => Promise<object | void>,
-  options: { refresh: string[]; success?: (input: Input) => string; onSuccess?: () => void; signature?: (input: Input) => string },
+  options: { refresh: (input: Input) => readonly string[]; success?: (input: Input) => string; onSuccess?: () => void; signature?: (input: Input) => string },
 ) {
   const client = useQueryClient();
   const pending = useRef(new PendingWrites<Input, object | void>());
-  const refresh = () => Promise.all(options.refresh.map((name) => client.invalidateQueries({ queryKey: [name, token] })));
+  const refresh = (input: Input) => Promise.all(options.refresh(input).map((name) => client.invalidateQueries({ queryKey: [name, token] })));
 
   return useMutation({
     mutationFn: (input: Input) => {
@@ -24,17 +24,17 @@ export function useIdempotentWrite<Input>(
 
       pending.current.complete(signature, key);
 
-      await refresh();
+      await refresh(input);
 
       if (options.success) toast.success(options.success(input));
       options.onSuccess?.();
     },
-    onError: (error) => {
+    onError: (error, input) => {
       toast.error(error.message);
 
       // The record changed or went away, so show what is there now.
       if (error instanceof ApiError && (error.status === 404 || error.status === 409)) {
-        void refresh();
+        void refresh(input);
       }
     },
   });
@@ -42,7 +42,7 @@ export function useIdempotentWrite<Input>(
 
 export function useIdempotentDelete<Entry extends { id: string; revision: number }>(
   token: string, send: (entry: Entry, key: string) => Promise<object | void>,
-  options: { refresh: string[]; success?: (entry: Entry) => string },
+  options: { refresh: (entry: Entry) => readonly string[]; success?: (entry: Entry) => string },
 ) {
   return useIdempotentWrite(token, send, {
     ...options,

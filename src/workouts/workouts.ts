@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { and, count, eq, isNull, sum } from "drizzle-orm";
+import { and, between, count, eq, isNull, sum } from "drizzle-orm";
 import { workouts } from "../db/schema.js";
 import type { AppDatabase } from "../db/database.js";
 import type { RecordKind } from "../journal/records.js";
 import { localDate } from "../time.js";
 import { workoutSchema } from "./contract.js";
-import type { Workout, WorkoutDay, WorkoutInput, WorkoutSummary } from "./contract.js";
+import type { Workout, WorkoutDay, WorkoutInput } from "./contract.js";
 
 type WorkoutRow = typeof workouts.$inferSelect;
 
@@ -68,14 +68,13 @@ export async function getWorkoutDay(db: AppDatabase, userId: string, date: strin
   };
 }
 
-export async function getWorkoutSummary(db: AppDatabase, userId: string, date: string): Promise<WorkoutSummary> {
-  const [row] = await db.select({ entryCount: count(), totalMinutes: sum(workouts.durationMinutes), burnedKcal: sum(workouts.energyKcal) }).from(workouts).where(and(
-    eq(workouts.userId, userId), eq(workouts.localDate, date), isNull(workouts.deletedAt),
-  ));
+export type WorkoutRangeDay = { entryCount: number; totalMinutes: number };
 
-  return {
-    entryCount: row?.entryCount ?? 0,
-    totalMinutes: row?.totalMinutes == null ? null : Number(row.totalMinutes),
-    burnedKcal: row?.burnedKcal == null ? null : Number(row.burnedKcal),
-  };
+// Days from `from` to `to` that have workouts, by local date.
+export async function getWorkoutRange(db: AppDatabase, userId: string, from: string, to: string): Promise<Map<string, WorkoutRangeDay>> {
+  const rows = await db.select({ localDate: workouts.localDate, entryCount: count(), totalMinutes: sum(workouts.durationMinutes) }).from(workouts).where(and(
+    eq(workouts.userId, userId), between(workouts.localDate, from, to), isNull(workouts.deletedAt),
+  )).groupBy(workouts.localDate);
+
+  return new Map(rows.map((row) => [row.localDate, { entryCount: row.entryCount, totalMinutes: Number(row.totalMinutes) }]));
 }

@@ -12,21 +12,21 @@ import { searchFoods } from "./food/catalog.js";
 import { mutateFood } from "./food/food.js";
 import type { AppDatabase } from "./db/database.js";
 import { getDated, saveDated, type DatedKind, type DatedTable } from "./effective-dated.js";
-import type { FoodMutationResult } from "./food/food.js";
 import { mealEditSchema, mealInputSchema, mealLogInputSchema, mealLogSchema, savedMealListSchema, savedMealSchema } from "./meals/contract.js";
 import { listMeals, logMeal, mutateMeal } from "./meals/meals.js";
-import type { MealLogResult, MealMutationResult } from "./meals/meals.js";
 import { integrationRoutes } from "./wearables/routes.js";
 import { sameSecret } from "./crypto.js";
 import { error, errorSchema } from "./http-error.js";
 import type { WearableRuntime } from "./wearables/provider.js";
 import { recordPaths } from "./journal/paths.js";
 import { mutateRecord } from "./journal/records.js";
-import type { RecordKind, RecordMutationResult } from "./journal/records.js";
+import type { RecordKind } from "./journal/records.js";
 import { measurementInputSchema } from "./measurements/contract.js";
 import { measurementRecords } from "./measurements/measurements.js";
 import { overviewSchema } from "./overview/contract.js";
 import { getOverview } from "./overview/overview.js";
+import { reviewSchema } from "./review/contract.js";
+import { getReview } from "./review/review.js";
 import { maxPhotoBytes, photoSchema, photoUploadSchema } from "./photos/contract.js";
 import { detectPhotoType, getPhotoImage, photoRecords } from "./photos/photos.js";
 import { sleepInputSchema } from "./sleep/contract.js";
@@ -37,50 +37,16 @@ import { targetsKind } from "./targets/targets.js";
 import { occurredAtSchema, timeZoneSchema } from "./time.js";
 import { waterInputSchema } from "./water/contract.js";
 import { waterRecords } from "./water/water.js";
-import { workoutInputSchema, workoutSummarySchema } from "./workouts/contract.js";
-import { getWorkoutSummary, workoutRecords } from "./workouts/workouts.js";
+import { workoutInputSchema } from "./workouts/contract.js";
+import { workoutRecords } from "./workouts/workouts.js";
 
-function response(result: FoodMutationResult): Response {
-  switch (result.outcome) {
-    case "created":
-    case "updated":
-      return new Response(JSON.stringify(result.entry), {
-        status: result.outcome === "created" ? 201 : 200,
-        headers: { "Content-Type": "application/json" },
-      });
-    case "deleted":
-      return new Response(null, { status: 204 });
-    case "missing":
-      return error(404, "Food entry not found");
-    case "catalog-missing":
-      return error(404, "Catalog food not found");
-    case "stale":
-      return error(409, "Revision conflict");
-    case "key-reuse":
-      return error(409, "Idempotency key reused for another request");
-  }
-}
+type MutationResult<Entry> =
+  | { outcome: "created" | "updated"; entry: Entry }
+  | { outcome: "deleted" | "missing" | "stale" | "key-reuse" | "catalog-missing" | "invalid-item" }
+  | { outcome: "unknown-reference"; message: string };
 
-// Water and the other journal records are created and removed, never edited in place.
-function recordResponse<Entry>(result: RecordMutationResult<Entry>, label: string): Response {
-  switch (result.outcome) {
-    case "created":
-      return new Response(JSON.stringify(result.entry), { status: 201, headers: { "Content-Type": "application/json" } });
-    case "deleted":
-      return new Response(null, { status: 204 });
-    case "missing":
-      return error(404, `${label} not found`);
-    case "unknown-reference":
-      return error(404, result.message);
-    case "stale":
-      return error(409, "Revision conflict");
-    case "key-reuse":
-      return error(409, "Idempotency key reused for another request");
-  }
-}
-
-// A missing meal is the saved meal on edit, delete or log, and a chosen food entry when saving one.
-function mealResponse(result: MealMutationResult | MealLogResult, missing: string): Response {
+// Every write answers the same way; routes differ only in what a missing record is called.
+function mutationResponse<Entry>(result: MutationResult<Entry>, missing: string): Response {
   switch (result.outcome) {
     case "created":
     case "updated":
@@ -89,6 +55,10 @@ function mealResponse(result: MealMutationResult | MealLogResult, missing: strin
       return new Response(null, { status: 204 });
     case "missing":
       return error(404, missing);
+    case "catalog-missing":
+      return error(404, "Catalog food not found");
+    case "unknown-reference":
+      return error(404, result.message);
     case "invalid-item":
       return error(400, "Invalid saved meal item");
     case "stale":
@@ -120,7 +90,7 @@ export function createApp(db: AppDatabase, auth: { token: string; userId: string
   // The page carries the configured token so the browser connects without asking for it.
   const tokenMeta = `<meta name="nouri-api-token" content="${escapeHtml(auth.token)}" />`;
 
-  for (const path of ["/", "/food", "/overview"]) {
+  for (const path of ["/", "/food", "/overview", "/review"]) {
     app.get(path, async () => new Response((await readFile(new URL("../web/dist/index.html", import.meta.url), "utf8")).replace("</head>", `${tokenMeta}</head>`), {
       headers: { ...pageHeaders, "Content-Type": "text/html; charset=utf-8" },
     }));
@@ -152,6 +122,8 @@ export function createApp(db: AppDatabase, auth: { token: string; userId: string
   const keyParameter = z.string().min(1).max(200);
   const mutationHeaders = z.object({ "Idempotency-Key": keyParameter });
   const editHeaders = z.object({ "Idempotency-Key": keyParameter, "If-Match": z.string() });
+  const json = (schema: z.ZodType) => ({ content: { "application/json": { schema } } });
+  const failure = (description: string) => ({ description, ...json(errorSchema) });
 
   app.use("/v1/*", async (context, next) => {
     if (!sameToken(context.req.header("Authorization"), auth.token)) return error(401, "Unauthorized");
@@ -178,8 +150,9 @@ export function createApp(db: AppDatabase, auth: { token: string; userId: string
 
     if (!input.success) return error(400, "Invalid food entry");
 
-    return response(await mutateFood(db, context.get("userId"), key, { kind: "create", input: input.data }));
+    return mutationResponse(await mutateFood(db, context.get("userId"), key, { kind: "create", input: input.data }), "Food entry not found");
   });
+  app.openAPIRegistry.registerPath({ method: "post", path: "/v1/food-entries", request: { headers: mutationHeaders, body: json(submissionSchema) }, responses: { 201: { description: "Created food entry", ...json(entrySchema) }, 400: failure("Invalid request"), 404: failure("Catalog food not found"), 409: failure("Idempotency conflict") } });
 
   app.post("/v1/food-entries/:id/repeats", async (context) => {
     const key = context.get("idempotencyKey");
@@ -188,8 +161,9 @@ export function createApp(db: AppDatabase, auth: { token: string; userId: string
 
     if (!id.success || !input.success) return error(400, "Invalid food repeat");
 
-    return response(await mutateFood(db, context.get("userId"), key, { kind: "repeat", sourceId: id.data, input: input.data }));
+    return mutationResponse(await mutateFood(db, context.get("userId"), key, { kind: "repeat", sourceId: id.data, input: input.data }), "Food entry not found");
   });
+  app.openAPIRegistry.registerPath({ method: "post", path: "/v1/food-entries/{id}/repeats", request: { params: z.object({ id: z.uuid() }), headers: mutationHeaders, body: json(repeatInputSchema) }, responses: { 201: { description: "A new entry copying the saved food, amount and nutrients", ...json(entrySchema) }, 400: failure("Invalid request"), 404: failure("Entry not found"), 409: failure("Idempotency conflict") } });
 
   app.get("/v1/foods/search", (context) => {
     const query = z.string().trim().min(2).max(80).safeParse(context.req.query("q"));
@@ -199,6 +173,7 @@ export function createApp(db: AppDatabase, auth: { token: string; userId: string
 
     return context.json(searchFoods(query.data, locale.data));
   });
+  app.openAPIRegistry.registerPath({ method: "get", path: "/v1/foods/search", request: { query: z.object({ q: z.string().min(2).max(80), locale: z.string().optional() }) }, responses: { 200: { description: "Ciqual food matches and attribution", ...json(searchResultSchema) }, 400: failure("Invalid query") } });
 
   app.patch("/v1/food-entries/:id", async (context) => {
     const key = context.get("idempotencyKey");
@@ -208,8 +183,9 @@ export function createApp(db: AppDatabase, auth: { token: string; userId: string
 
     if (!id.success || revision === null || !input.success) return error(400, "Invalid food edit");
 
-    return response(await mutateFood(db, context.get("userId"), key, { kind: "edit", id: id.data, revision, input: input.data }));
+    return mutationResponse(await mutateFood(db, context.get("userId"), key, { kind: "edit", id: id.data, revision, input: input.data }), "Food entry not found");
   });
+  app.openAPIRegistry.registerPath({ method: "patch", path: "/v1/food-entries/{id}", request: { params: z.object({ id: z.uuid() }), headers: editHeaders, body: json(submissionSchema) }, responses: { 200: { description: "Updated food entry", ...json(entrySchema) }, 404: failure("Entry or catalog food not found"), 409: failure("Revision or idempotency conflict") } });
 
   app.delete("/v1/food-entries/:id", async (context) => {
     const key = context.get("idempotencyKey");
@@ -218,18 +194,22 @@ export function createApp(db: AppDatabase, auth: { token: string; userId: string
 
     if (!id.success || revision === null) return error(400, "Invalid food deletion");
 
-    return response(await mutateFood(db, context.get("userId"), key, { kind: "delete", id: id.data, revision }));
+    return mutationResponse(await mutateFood(db, context.get("userId"), key, { kind: "delete", id: id.data, revision }), "Food entry not found");
   });
+  app.openAPIRegistry.registerPath({ method: "delete", path: "/v1/food-entries/{id}", request: { params: z.object({ id: z.uuid() }), headers: editHeaders }, responses: { 204: { description: "Deleted food entry" }, 404: failure("Entry not found"), 409: failure("Revision or idempotency conflict") } });
 
   app.get("/v1/saved-meals", async (context) => context.json(await listMeals(db, context.get("userId"))));
+  app.openAPIRegistry.registerPath({ method: "get", path: "/v1/saved-meals", responses: { 200: { description: "Saved meals, newest first", ...json(savedMealListSchema) } } });
 
+  // Saving a meal is missing a chosen food entry; the other meal routes are missing the saved meal.
   app.post("/v1/saved-meals", async (context) => {
     const input = mealInputSchema.safeParse(await context.req.json().catch(() => null));
 
     if (!input.success) return error(400, "Invalid saved meal");
 
-    return mealResponse(await mutateMeal(db, context.get("userId"), context.get("idempotencyKey"), { kind: "create", input: input.data }), "Food entry not found");
+    return mutationResponse(await mutateMeal(db, context.get("userId"), context.get("idempotencyKey"), { kind: "create", input: input.data }), "Food entry not found");
   });
+  app.openAPIRegistry.registerPath({ method: "post", path: "/v1/saved-meals", request: { headers: mutationHeaders, body: json(mealInputSchema) }, responses: { 201: { description: "A saved meal copying the chosen entries' foods at the given amounts", ...json(savedMealSchema) }, 400: failure("Invalid request or an amount outside the journal's limits"), 404: failure("Food entry not found"), 409: failure("Idempotency conflict") } });
 
   app.post("/v1/saved-meals/:id/logs", async (context) => {
     const id = z.uuid().safeParse(context.req.param("id"));
@@ -237,8 +217,9 @@ export function createApp(db: AppDatabase, auth: { token: string; userId: string
 
     if (!id.success || !input.success) return error(400, "Invalid saved meal log");
 
-    return mealResponse(await logMeal(db, context.get("userId"), context.get("idempotencyKey"), id.data, input.data), "Saved meal not found");
+    return mutationResponse(await logMeal(db, context.get("userId"), context.get("idempotencyKey"), id.data, input.data), "Saved meal not found");
   });
+  app.openAPIRegistry.registerPath({ method: "post", path: "/v1/saved-meals/{id}/logs", request: { params: z.object({ id: z.uuid() }), headers: mutationHeaders, body: json(mealLogInputSchema) }, responses: { 201: { description: "One food entry per chosen item, scaled to its amount, all logged at one time", ...json(mealLogSchema) }, 400: failure("Invalid request, an item the meal lacks, or an amount outside the journal's limits"), 404: failure("Saved meal not found"), 409: failure("Idempotency conflict") } });
 
   app.patch("/v1/saved-meals/:id", async (context) => {
     const id = z.uuid().safeParse(context.req.param("id"));
@@ -247,8 +228,9 @@ export function createApp(db: AppDatabase, auth: { token: string; userId: string
 
     if (!id.success || revision === null || !input.success) return error(400, "Invalid saved meal edit");
 
-    return mealResponse(await mutateMeal(db, context.get("userId"), context.get("idempotencyKey"), { kind: "edit", id: id.data, revision, input: input.data }), "Saved meal not found");
+    return mutationResponse(await mutateMeal(db, context.get("userId"), context.get("idempotencyKey"), { kind: "edit", id: id.data, revision, input: input.data }), "Saved meal not found");
   });
+  app.openAPIRegistry.registerPath({ method: "patch", path: "/v1/saved-meals/{id}", request: { params: z.object({ id: z.uuid() }), headers: editHeaders, body: json(mealEditSchema) }, responses: { 200: { description: "The renamed meal with the listed items at their new amounts; items left out are removed", ...json(savedMealSchema) }, 400: failure("Invalid request, an item the meal lacks, or an amount outside the journal's limits"), 404: failure("Saved meal not found"), 409: failure("Revision or idempotency conflict") } });
 
   app.delete("/v1/saved-meals/:id", async (context) => {
     const id = z.uuid().safeParse(context.req.param("id"));
@@ -256,8 +238,9 @@ export function createApp(db: AppDatabase, auth: { token: string; userId: string
 
     if (!id.success || revision === null) return error(400, "Invalid saved meal deletion");
 
-    return mealResponse(await mutateMeal(db, context.get("userId"), context.get("idempotencyKey"), { kind: "delete", id: id.data, revision }), "Saved meal not found");
+    return mutationResponse(await mutateMeal(db, context.get("userId"), context.get("idempotencyKey"), { kind: "delete", id: id.data, revision }), "Saved meal not found");
   });
+  app.openAPIRegistry.registerPath({ method: "delete", path: "/v1/saved-meals/{id}", request: { params: z.object({ id: z.uuid() }), headers: editHeaders }, responses: { 204: { description: "Deleted saved meal; foods already logged from it stay" }, 404: failure("Saved meal not found"), 409: failure("Revision or idempotency conflict") } });
 
   app.get("/v1/days/:date", async (context) => {
     const date = z.iso.date().safeParse(context.req.param("date"));
@@ -271,6 +254,7 @@ export function createApp(db: AppDatabase, auth: { token: string; userId: string
       headers: { "Content-Type": "application/json" },
     });
   });
+  app.openAPIRegistry.registerPath({ method: "get", path: "/v1/days/{date}", request: { params: z.object({ date: z.iso.date() }) }, responses: { 200: { description: "Food and water entries and totals for the recorded local day", ...json(daySchema) } } });
 
   function recordDeletion<Input, Entry>(path: string, kind: RecordKind<Input, Entry>) {
     const { label } = kind;
@@ -281,9 +265,9 @@ export function createApp(db: AppDatabase, auth: { token: string; userId: string
 
       if (!id.success || revision === null) return error(400, `Invalid ${label.toLowerCase()} deletion`);
 
-      return recordResponse(await mutateRecord(db, context.get("userId"), key, kind, { kind: "delete", id: id.data, revision }), label);
+      return mutationResponse(await mutateRecord(db, context.get("userId"), key, kind, { kind: "delete", id: id.data, revision }), `${label} not found`);
     });
-    app.openAPIRegistry.registerPath({ method: "delete", path: `${path}/{id}`, request: { params: z.object({ id: z.uuid() }), headers: editHeaders }, responses: { 204: { description: `Deleted ${label.toLowerCase()}` }, 404: { description: `${label} not found`, content: { "application/json": { schema: errorSchema } } }, 409: { description: "Revision or idempotency conflict", content: { "application/json": { schema: errorSchema } } } } });
+    app.openAPIRegistry.registerPath({ method: "delete", path: `${path}/{id}`, request: { params: z.object({ id: z.uuid() }), headers: editHeaders }, responses: { 204: { description: `Deleted ${label.toLowerCase()}` }, 404: failure(`${label} not found`), 409: failure("Revision or idempotency conflict") } });
   }
 
   function jsonRecordCreation<Input, Entry>(path: string, kind: RecordKind<Input, Entry>, schema: z.ZodType<Input>, docs?: { 404?: string }) {
@@ -294,13 +278,13 @@ export function createApp(db: AppDatabase, auth: { token: string; userId: string
 
       if (!input.success) return error(400, `Invalid ${label.toLowerCase()}`);
 
-      return recordResponse(await mutateRecord(db, context.get("userId"), key, kind, { kind: "create", input: input.data }), label);
+      return mutationResponse(await mutateRecord(db, context.get("userId"), key, kind, { kind: "create", input: input.data }), `${label} not found`);
     });
 
-    const responses: RouteConfig["responses"] = { 201: { description: `Created ${label.toLowerCase()}`, content: { "application/json": { schema: kind.schema } } }, 400: { description: "Invalid request", content: { "application/json": { schema: errorSchema } } }, 409: { description: "Idempotency conflict", content: { "application/json": { schema: errorSchema } } } };
+    const responses: RouteConfig["responses"] = { 201: { description: `Created ${label.toLowerCase()}`, ...json(kind.schema) }, 400: failure("Invalid request"), 409: failure("Idempotency conflict") };
 
-    if (docs?.[404]) responses[404] = { description: docs[404], content: { "application/json": { schema: errorSchema } } };
-    app.openAPIRegistry.registerPath({ method: "post", path, request: { headers: mutationHeaders, body: { content: { "application/json": { schema } } } }, responses });
+    if (docs?.[404]) responses[404] = failure(docs[404]);
+    app.openAPIRegistry.registerPath({ method: "post", path, request: { headers: mutationHeaders, body: json(schema) }, responses });
   }
 
   jsonRecordCreation(recordPaths.water, waterRecords, waterInputSchema);
@@ -314,15 +298,6 @@ export function createApp(db: AppDatabase, auth: { token: string; userId: string
   recordDeletion(recordPaths.sleep, sleepRecords);
   recordDeletion(recordPaths.photo, photoRecords);
   recordDeletion(recordPaths.supplementIntake, intakeRecords);
-
-  app.get(`${recordPaths.workout}/summary/:date`, async (context) => {
-    const date = z.iso.date().safeParse(context.req.param("date"));
-
-    if (!date.success) return error(400, "Invalid workout summary request");
-
-    return context.json(await getWorkoutSummary(db, context.get("userId"), date.data));
-  });
-  app.openAPIRegistry.registerPath({ method: "get", path: `${recordPaths.workout}/summary/{date}`, request: { params: z.object({ date: z.iso.date() }) }, responses: { 200: { description: "Workout count and minutes for the local day", content: { "application/json": { schema: workoutSummarySchema } } } } });
 
   const uploadSchema = z.object({ file: z.instanceof(File), occurredAt: occurredAtSchema, timeZone: timeZoneSchema });
 
@@ -341,8 +316,9 @@ export function createApp(db: AppDatabase, auth: { token: string; userId: string
     if (!contentType) return error(415, "Photo must be a JPEG, PNG, or WebP image");
     const input = { occurredAt: form.data.occurredAt, timeZone: form.data.timeZone, contentType, image };
 
-    return recordResponse(await mutateRecord(db, context.get("userId"), key, photoRecords, { kind: "create", input }), photoRecords.label);
+    return mutationResponse(await mutateRecord(db, context.get("userId"), key, photoRecords, { kind: "create", input }), `${photoRecords.label} not found`);
   });
+  app.openAPIRegistry.registerPath({ method: "post", path: recordPaths.photo, request: { headers: mutationHeaders, body: { content: { "multipart/form-data": { schema: photoUploadSchema } } } }, responses: { 201: { description: "Uploaded progress photo", ...json(photoSchema) }, 400: failure("Invalid request"), 409: failure("Idempotency conflict"), 413: failure("Photo larger than 8 MB"), 415: failure("Not a JPEG, PNG, or WebP image") } });
 
   app.get("/v1/progress-photos/:id/image", async (context) => {
     const id = z.uuid().safeParse(context.req.param("id"));
@@ -356,6 +332,7 @@ export function createApp(db: AppDatabase, auth: { token: string; userId: string
       headers: { "Content-Type": photo.contentType, "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff", "Content-Security-Policy": "default-src 'none'" },
     });
   });
+  app.openAPIRegistry.registerPath({ method: "get", path: "/v1/progress-photos/{id}/image", request: { params: z.object({ id: z.uuid() }) }, responses: { 200: { description: "The stored image bytes", content: { "image/jpeg": { schema: z.string().meta({ format: "binary" }) }, "image/png": { schema: z.string().meta({ format: "binary" }) }, "image/webp": { schema: z.string().meta({ format: "binary" }) } } }, 404: failure("Photo not found") } });
 
   app.get("/v1/overview/:date", async (context) => {
     const date = z.iso.date().safeParse(context.req.param("date"));
@@ -364,8 +341,19 @@ export function createApp(db: AppDatabase, auth: { token: string; userId: string
 
     return context.json(await getOverview(db, context.get("userId"), date.data));
   });
+  app.openAPIRegistry.registerPath({ method: "get", path: "/v1/overview/{date}", request: { params: z.object({ date: z.iso.date() }) }, responses: { 200: { description: "Nutrition, sports, measurements, sleep, and recent progress photos for the local day", ...json(overviewSchema) } } });
+
+  app.get("/v1/review/:date", async (context) => {
+    const date = z.iso.date().safeParse(context.req.param("date"));
+
+    if (!date.success) return error(400, "Invalid review request");
+
+    return context.json(await getReview(db, context.get("userId"), date.data));
+  });
+  app.openAPIRegistry.registerPath({ method: "get", path: "/v1/review/{date}", request: { params: z.object({ date: z.iso.date() }) }, responses: { 200: { description: "Calories, protein, workouts, sleep, and weight for the seven local days ending on the date, with null for unrecorded days", ...json(reviewSchema) }, 400: failure("Invalid date") } });
 
   app.get("/v1/dashboard", async (context) => context.json(await getDashboard(db, context.get("userId"))));
+  app.openAPIRegistry.registerPath({ method: "get", path: "/v1/dashboard", responses: { 200: { description: "Cards shown on the My Day page, in display order; defaults until the user saves a layout", ...json(dashboardSchema) } } });
 
   // A full replacement of the layout, so repeating the request is safe without an idempotency key.
   app.put("/v1/dashboard", async (context) => {
@@ -375,6 +363,7 @@ export function createApp(db: AppDatabase, auth: { token: string; userId: string
 
     return context.json(await saveDashboard(db, context.get("userId"), input.data));
   });
+  app.openAPIRegistry.registerPath({ method: "put", path: "/v1/dashboard", request: { body: json(dashboardSchema) }, responses: { 200: { description: "Saved dashboard layout", ...json(dashboardSchema) }, 400: failure("Unknown or repeated card") } });
 
   function datedRoutes<T extends DatedTable, Input, Result>(path: string, kind: DatedKind<T, Input, Result>, docs: { label: string; read: string; save: string; invalid: string }) {
     app.get(`${path}/:date`, async (context) => {
@@ -397,29 +386,13 @@ export function createApp(db: AppDatabase, auth: { token: string; userId: string
 
     const datedPath = `${path}/{date}`;
     const params = z.object({ date: z.iso.date() });
-    app.openAPIRegistry.registerPath({ method: "get", path: datedPath, request: { params }, responses: { 200: { description: docs.read, content: { "application/json": { schema: kind.schema } } } } });
-    app.openAPIRegistry.registerPath({ method: "put", path: datedPath, request: { params, body: { content: { "application/json": { schema: kind.input } } } }, responses: { 200: { description: docs.save, content: { "application/json": { schema: kind.schema } } }, 400: { description: docs.invalid, content: { "application/json": { schema: errorSchema } } } } });
+    app.openAPIRegistry.registerPath({ method: "get", path: datedPath, request: { params }, responses: { 200: { description: docs.read, ...json(kind.schema) } } });
+    app.openAPIRegistry.registerPath({ method: "put", path: datedPath, request: { params, body: json(kind.input) }, responses: { 200: { description: docs.save, ...json(kind.schema) }, 400: failure(docs.invalid) } });
   }
 
   datedRoutes("/v1/targets", targetsKind, { label: "targets", read: "Targets in force on the local day; defaults until the user saves some", save: "Targets saved to take effect on the local day, until the next change", invalid: "Missing or out-of-range target" });
   datedRoutes(recordPaths.supplementStack, stackKind, { label: "supplement stack", read: "Supplements in force on the local day; empty until the user saves some", save: "Supplements saved to take effect on the local day, until the next change", invalid: "Invalid supplement or repeated id" });
 
-  app.openAPIRegistry.registerPath({ method: "post", path: "/v1/food-entries", request: { headers: mutationHeaders, body: { content: { "application/json": { schema: submissionSchema } } } }, responses: { 201: { description: "Created food entry", content: { "application/json": { schema: entrySchema } } }, 400: { description: "Invalid request", content: { "application/json": { schema: errorSchema } } }, 404: { description: "Catalog food not found", content: { "application/json": { schema: errorSchema } } }, 409: { description: "Idempotency conflict", content: { "application/json": { schema: errorSchema } } } } });
-  app.openAPIRegistry.registerPath({ method: "post", path: "/v1/food-entries/{id}/repeats", request: { params: z.object({ id: z.uuid() }), headers: mutationHeaders, body: { content: { "application/json": { schema: repeatInputSchema } } } }, responses: { 201: { description: "A new entry copying the saved food, amount and nutrients", content: { "application/json": { schema: entrySchema } } }, 400: { description: "Invalid request", content: { "application/json": { schema: errorSchema } } }, 404: { description: "Entry not found", content: { "application/json": { schema: errorSchema } } }, 409: { description: "Idempotency conflict", content: { "application/json": { schema: errorSchema } } } } });
-  app.openAPIRegistry.registerPath({ method: "get", path: "/v1/foods/search", request: { query: z.object({ q: z.string().min(2).max(80), locale: z.string().optional() }) }, responses: { 200: { description: "Ciqual food matches and attribution", content: { "application/json": { schema: searchResultSchema } } }, 400: { description: "Invalid query", content: { "application/json": { schema: errorSchema } } } } });
-  app.openAPIRegistry.registerPath({ method: "patch", path: "/v1/food-entries/{id}", request: { params: z.object({ id: z.uuid() }), headers: editHeaders, body: { content: { "application/json": { schema: submissionSchema } } } }, responses: { 200: { description: "Updated food entry", content: { "application/json": { schema: entrySchema } } }, 404: { description: "Entry or catalog food not found", content: { "application/json": { schema: errorSchema } } }, 409: { description: "Revision or idempotency conflict", content: { "application/json": { schema: errorSchema } } } } });
-  app.openAPIRegistry.registerPath({ method: "delete", path: "/v1/food-entries/{id}", request: { params: z.object({ id: z.uuid() }), headers: editHeaders }, responses: { 204: { description: "Deleted food entry" }, 404: { description: "Entry not found", content: { "application/json": { schema: errorSchema } } }, 409: { description: "Revision or idempotency conflict", content: { "application/json": { schema: errorSchema } } } } });
-  app.openAPIRegistry.registerPath({ method: "get", path: "/v1/saved-meals", responses: { 200: { description: "Saved meals, newest first", content: { "application/json": { schema: savedMealListSchema } } } } });
-  app.openAPIRegistry.registerPath({ method: "post", path: "/v1/saved-meals", request: { headers: mutationHeaders, body: { content: { "application/json": { schema: mealInputSchema } } } }, responses: { 201: { description: "A saved meal copying the chosen entries' foods at the given amounts", content: { "application/json": { schema: savedMealSchema } } }, 400: { description: "Invalid request or an amount outside the journal's limits", content: { "application/json": { schema: errorSchema } } }, 404: { description: "Food entry not found", content: { "application/json": { schema: errorSchema } } }, 409: { description: "Idempotency conflict", content: { "application/json": { schema: errorSchema } } } } });
-  app.openAPIRegistry.registerPath({ method: "post", path: "/v1/saved-meals/{id}/logs", request: { params: z.object({ id: z.uuid() }), headers: mutationHeaders, body: { content: { "application/json": { schema: mealLogInputSchema } } } }, responses: { 201: { description: "One food entry per chosen item, scaled to its amount, all logged at one time", content: { "application/json": { schema: mealLogSchema } } }, 400: { description: "Invalid request, an item the meal lacks, or an amount outside the journal's limits", content: { "application/json": { schema: errorSchema } } }, 404: { description: "Saved meal not found", content: { "application/json": { schema: errorSchema } } }, 409: { description: "Idempotency conflict", content: { "application/json": { schema: errorSchema } } } } });
-  app.openAPIRegistry.registerPath({ method: "patch", path: "/v1/saved-meals/{id}", request: { params: z.object({ id: z.uuid() }), headers: editHeaders, body: { content: { "application/json": { schema: mealEditSchema } } } }, responses: { 200: { description: "The renamed meal with the listed items at their new amounts; items left out are removed", content: { "application/json": { schema: savedMealSchema } } }, 400: { description: "Invalid request, an item the meal lacks, or an amount outside the journal's limits", content: { "application/json": { schema: errorSchema } } }, 404: { description: "Saved meal not found", content: { "application/json": { schema: errorSchema } } }, 409: { description: "Revision or idempotency conflict", content: { "application/json": { schema: errorSchema } } } } });
-  app.openAPIRegistry.registerPath({ method: "delete", path: "/v1/saved-meals/{id}", request: { params: z.object({ id: z.uuid() }), headers: editHeaders }, responses: { 204: { description: "Deleted saved meal; foods already logged from it stay" }, 404: { description: "Saved meal not found", content: { "application/json": { schema: errorSchema } } }, 409: { description: "Revision or idempotency conflict", content: { "application/json": { schema: errorSchema } } } } });
-  app.openAPIRegistry.registerPath({ method: "get", path: "/v1/days/{date}", request: { params: z.object({ date: z.iso.date() }) }, responses: { 200: { description: "Food and water entries and totals for the recorded local day", content: { "application/json": { schema: daySchema } } } } });
-  app.openAPIRegistry.registerPath({ method: "get", path: "/v1/dashboard", responses: { 200: { description: "Cards shown on the My Day page, in display order; defaults until the user saves a layout", content: { "application/json": { schema: dashboardSchema } } } } });
-  app.openAPIRegistry.registerPath({ method: "put", path: "/v1/dashboard", request: { body: { content: { "application/json": { schema: dashboardSchema } } } }, responses: { 200: { description: "Saved dashboard layout", content: { "application/json": { schema: dashboardSchema } } }, 400: { description: "Unknown or repeated card", content: { "application/json": { schema: errorSchema } } } } });
-  app.openAPIRegistry.registerPath({ method: "post", path: recordPaths.photo, request: { headers: mutationHeaders, body: { content: { "multipart/form-data": { schema: photoUploadSchema } } } }, responses: { 201: { description: "Uploaded progress photo", content: { "application/json": { schema: photoSchema } } }, 400: { description: "Invalid request", content: { "application/json": { schema: errorSchema } } }, 409: { description: "Idempotency conflict", content: { "application/json": { schema: errorSchema } } }, 413: { description: "Photo larger than 8 MB", content: { "application/json": { schema: errorSchema } } }, 415: { description: "Not a JPEG, PNG, or WebP image", content: { "application/json": { schema: errorSchema } } } } });
-  app.openAPIRegistry.registerPath({ method: "get", path: "/v1/progress-photos/{id}/image", request: { params: z.object({ id: z.uuid() }) }, responses: { 200: { description: "The stored image bytes", content: { "image/jpeg": { schema: z.string().meta({ format: "binary" }) }, "image/png": { schema: z.string().meta({ format: "binary" }) }, "image/webp": { schema: z.string().meta({ format: "binary" }) } } }, 404: { description: "Photo not found", content: { "application/json": { schema: errorSchema } } } } });
-  app.openAPIRegistry.registerPath({ method: "get", path: "/v1/overview/{date}", request: { params: z.object({ date: z.iso.date() }) }, responses: { 200: { description: "Nutrition, sports, measurements, sleep, and recent progress photos for the local day", content: { "application/json": { schema: overviewSchema } } } } });
 
   app.doc31("/openapi.json", { openapi: "3.1.0", info: { title: "Nouri API", version: "1.0.0" } });
 
