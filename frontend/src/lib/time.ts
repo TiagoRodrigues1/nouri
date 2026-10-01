@@ -65,3 +65,23 @@ export function dateLabel(value: string): string {
 export function currentTime(now = new Date()): string {
   return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
 }
+
+export function calendarDate(value: string): Date {
+  const [y = 0, m = 1, d = 1] = value.split("-").map(Number);
+
+  return new Date(y, m - 1, d);
+}
+
+const shortDay = new Intl.DateTimeFormat("en", { weekday: "short", day: "numeric", month: "short" });
+
+// "Mon, Sep 28", for one row of a timeline.
+export function shortDayLabel(value: string): string {
+  return shortDay.format(calendarDate(value));
+}
+
+// The seven days ending on `value`: "Last 7 days" when it is today, otherwise the range.
+export function weekLabel(value: string, isToday: boolean): string {
+  if (isToday) return "Last 7 days";
+
+  return new Intl.DateTimeFormat("en", { day: "numeric", month: "short", year: "numeric" }).formatRange(calendarDate(shiftDate(value, -6)), calendarDate(value));
+}

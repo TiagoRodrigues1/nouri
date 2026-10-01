@@ -5,9 +5,9 @@ import { Activity, Clock3, Droplet, PieChart, Timer, Trash2, Trophy, Utensils } 
 import { Button } from "../components/ui/button";
 import { colors } from "../theme.stylex";
 import { styles } from "../my-day-styles";
-import { kcalPerGram } from "../lib/nutrition";
 import { clock, entryHour } from "../lib/time";
-import { getWorkoutSummary, format, type FoodEntry, type Targets, type WaterEntry } from "../lib/api";
+import { overviewQueryOptions } from "../lib/day-query";
+import { format, type FoodEntry, type Targets, type WaterEntry } from "../lib/api";
 import { ActivityRings, Bottle, Donut, Ring, type ActivityRing } from "./charts";
 
 type GaugeProps = {
@@ -88,6 +88,9 @@ export function WindowCard({ first, last }: { first: Date | undefined; last: Dat
   );
 }
 
+// Energy per gram, used to show how each macro splits the day's energy.
+const kcalPerGram = { proteinG: 4, carbsG: 4, fatG: 9 } as const;
+
 type MixProps = {
   kcal: number | null | undefined;
   proteinG: number | null | undefined;
@@ -135,12 +138,13 @@ export function MixCard({ kcal, proteinG, carbsG, fatG }: MixProps) {
   );
 }
 
-export function ActivityCard({ token, date, targets }: { token: string; date: string | undefined; targets: Targets }) {
-  const query = useQuery({ queryKey: ["workout-summary", token, date], queryFn: () => getWorkoutSummary(token, date!), enabled: Boolean(token && date) });
-  const sports = query.data;
+// The Move ring counts the estimates that were recorded; a workout without one adds nothing.
+export function ActivityCard({ token, date, targets }: { token: string; date: string; targets: Targets }) {
+  const sports = useQuery(overviewQueryOptions(token, date)).data?.sports;
+  const burnedKcal = sports?.entries.reduce((sum, workout) => sum + (workout.energyKcal ?? 0), 0);
 
   const rings: ActivityRing[] = [
-    { label: "Move", value: sports?.burnedKcal ?? 0, goal: targets.burnedKcal, unit: "kcal", color: colors.move },
+    { label: "Move", value: burnedKcal ?? 0, goal: targets.burnedKcal, unit: "kcal", color: colors.move },
     { label: "Exercise", value: sports?.totalMinutes ?? 0, goal: targets.exerciseMinutes, unit: "min", color: colors.exercise },
     { label: "Workouts", value: sports?.entryCount ?? 0, goal: targets.workouts, unit: "", color: colors.workouts },
   ];

@@ -2,11 +2,12 @@ import { createRecord, deleteRecord } from "./api";
 import { recordPaths } from "../../../src/journal/paths";
 import type { WaterEntry, WaterInput } from "../../../src/water/contract";
 import { useIdempotentWrite, useIdempotentDelete } from "./use-idempotent";
+import { queryRefresh } from "./query-refresh";
 
 type PendingWater = { input: WaterInput; signature: string };
 
 export function useWater(token: string, onConnect: () => void) {
-  const refresh = ["day", "overview"];
+  const refresh = () => queryRefresh.water;
 
   const create = useIdempotentWrite<PendingWater>(token, (pending, key) => createRecord(token, key, { path: recordPaths.water, input: pending.input }), {
     refresh, success: () => "Water added to your log.", signature: (pending) => pending.signature,

@@ -208,7 +208,6 @@ void test("Google Health sleep and workouts", async (t) => {
       });
       assert.equal(sports.entries[1]?.distanceM, null);
       assert.deepEqual({ entryCount: sports.entryCount, totalMinutes: sports.totalMinutes, energyKcal: sports.energyKcal }, { entryCount: 2, totalMinutes: 90, energyKcal: 752 });
-      assert.deepEqual(await (await app.request("/v1/workouts/summary/2026-09-24", { headers: auth })).json(), { entryCount: 2, totalMinutes: 90, burnedKcal: 752 });
     });
 
     await t.test("deletion lock and repeat sync", async () => {

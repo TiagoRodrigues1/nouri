@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, between, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { AppDatabase, Transaction } from "../db/database.js";
 import { softDelete } from "../journal/records.js";
 import { withReceipt } from "../journal/receipt.js";
@@ -8,8 +8,6 @@ import { localDate } from "../time.js";
 import { resolveFood } from "./catalog.js";
 import { entrySchema } from "./contract.js";
 import type { CatalogFoodInput, FoodEntry, FoodInput, FoodSubmission, RepeatInput } from "./contract.js";
-
-export type { FoodEntry, FoodInput } from "./contract.js";
 
 export type FoodCommand =
   | { kind: "create"; input: FoodSubmission }
@@ -179,7 +177,23 @@ export async function getFoodDay(db: AppDatabase, userId: string, date: string) 
     eq(foodEntries.userId, userId), eq(foodEntries.localDate, date), isNull(foodEntries.deletedAt),
   )).orderBy(foodEntries.occurredAt, foodEntries.id);
 
-  const total = (pick: (row: FoodRow) => number | null): number | null => {
+  return {
+    date,
+    food: {
+      entries: rows.map(entry),
+      entryCount: rows.length,
+      totals: foodTotals(rows),
+    },
+  };
+}
+
+export type FoodRangeDay = { entryCount: number; kcal: number | null; proteinG: number | null };
+
+type NutrientRow = Pick<FoodRow, "kcalMilli" | "proteinMilli" | "carbsMilli" | "fatMilli">;
+
+// A total is known only when every logged food has that nutrient.
+function foodTotals(rows: NutrientRow[]) {
+  const total = (pick: (row: NutrientRow) => number | null): number | null => {
     if (rows.length === 0) return null;
     let sum = 0;
 
@@ -194,16 +208,37 @@ export async function getFoodDay(db: AppDatabase, userId: string, date: string) 
   };
 
   return {
-    date,
-    food: {
-      entries: rows.map(entry),
-      entryCount: rows.length,
-      totals: {
-        kcal: total((row) => row.kcalMilli),
-        proteinG: total((row) => row.proteinMilli),
-        carbsG: total((row) => row.carbsMilli),
-        fatG: total((row) => row.fatMilli),
-      },
-    },
+    kcal: total((row) => row.kcalMilli),
+    proteinG: total((row) => row.proteinMilli),
+    carbsG: total((row) => row.carbsMilli),
+    fatG: total((row) => row.fatMilli),
   };
+}
+
+// Days from `from` to `to` that have foods, by local date. A total is null unless every food on the day has the value.
+export async function getFoodRange(db: AppDatabase, userId: string, from: string, to: string): Promise<Map<string, FoodRangeDay>> {
+  const rows = await db.select({
+    localDate: foodEntries.localDate,
+    kcalMilli: foodEntries.kcalMilli,
+    proteinMilli: foodEntries.proteinMilli,
+    carbsMilli: foodEntries.carbsMilli,
+    fatMilli: foodEntries.fatMilli,
+  }).from(foodEntries).where(and(
+    eq(foodEntries.userId, userId), between(foodEntries.localDate, from, to), isNull(foodEntries.deletedAt),
+  ));
+
+  const days = new Map<string, NutrientRow[]>();
+
+  for (const { localDate, ...nutrients } of rows) {
+    const entries = days.get(localDate) ?? [];
+
+    entries.push(nutrients);
+    days.set(localDate, entries);
+  }
+
+  return new Map([...days].map(([date, entries]) => {
+    const { kcal, proteinG } = foodTotals(entries);
+
+    return [date, { entryCount: entries.length, kcal, proteinG }];
+  }));
 }

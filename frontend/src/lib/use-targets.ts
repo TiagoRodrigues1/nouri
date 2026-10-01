@@ -2,11 +2,7 @@ import { defaultTargets, targetsForDaySchema } from "../../../src/targets/contra
 import type { Targets } from "./api";
 import { datedResource } from "./dated-resource";
 
-const targetsResource = datedResource<Targets, typeof targetsForDaySchema>("/v1/targets", "targets", targetsForDaySchema);
-
-export const useTargetsQuery = targetsResource.useDatedQuery;
-
-export const useSaveTargets = targetsResource.useSaveDated;
+export const { useDatedQuery: useTargetsQuery, useSaveDated: useSaveTargets } = datedResource<Targets, typeof targetsForDaySchema>("/v1/targets", "targets", targetsForDaySchema);
 
 // A failed read is its own state rather than the defaults, so a screen never presents numbers the person did not set.
 // Every state carries `targets`, so a screen reads it directly and compares only when it is there.

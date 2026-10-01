@@ -1,12 +1,13 @@
 import * as stylex from "@stylexjs/stylex";
 import { styles } from "./dashboard-styles";
-import { useState, type FormEvent } from "react";
-import { Link, Outlet, useLocation } from "@tanstack/react-router";
+import { useEffect, useState, type FormEvent } from "react";
+import { Link, Outlet, useLocation, useNavigate, useSearch } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   ChevronLeft,
   ChevronRight,
   LayoutDashboard,
+  CalendarRange,
   ChartColumn,
   Droplet,
   Dumbbell,
@@ -20,10 +21,11 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "./components/ui/button";
-import { Input } from "./components/ui/input";
+import { DatePicker } from "./components/ui/date-picker";
 import { createFood, deleteFood, getDay } from "./lib/api";
-import { dateLabel, localDate, occurredAt, shiftDate, timeZone as zone } from "./lib/time";
+import { dateLabel, localDate, occurredAt, shiftDate, weekLabel, timeZone as zone } from "./lib/time";
 import { useIdempotentWrite, useIdempotentDelete } from "./lib/use-idempotent";
+import { queryRefresh } from "./lib/query-refresh";
 import { useWater } from "./lib/use-water";
 import { useConnection } from "./lib/use-connection";
 import { submissionSchema, type FoodSubmission } from "../../src/food/contract";
@@ -53,7 +55,7 @@ const now = () => localDate(new Date());
 
 type FoodInput = FoodSubmission["food"];
 
-type View = "today" | "overview";
+type View = "today" | "overview" | "review";
 
 type PendingFood = { input: FoodSubmission; signature: string };
 
@@ -62,7 +64,10 @@ type RecordKind = "water" | "workout" | "sleep" | "measurement";
 export function Dashboard() {
   const queryClient = useQueryClient();
   const path = useLocation({ select: (location) => location.pathname });
-  const view: View = path === "/overview" ? "overview" : "today";
+  const view: View = path === "/overview" ? "overview" : path === "/review" ? "review" : "today";
+  const navigate = useNavigate();
+  const search = useSearch({ strict: false });
+  const reviewEnd = search.to ?? now();
 
   const [token, setToken] = useState(
     () => sessionStorage.getItem(disconnectedKey) === "true"
@@ -71,9 +76,18 @@ export function Dashboard() {
   );
 
 
-  const [date, setDate] = useState(
+  const [storedDate, setStoredDate] = useState(
     () => sessionStorage.getItem(dateKey) || now(),
   );
+
+  const date = search.date ?? storedDate;
+
+  useEffect(() => {
+    if (!search.date) return;
+
+    sessionStorage.setItem(dateKey, search.date);
+    setStoredDate(search.date);
+  }, [search.date]);
 
   const [logOpen, setLogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -96,13 +110,11 @@ export function Dashboard() {
   const googleHealth = useConnection(token, "google-health");
 
   const foodDelete = useIdempotentDelete<FoodEntry>(token, (entry, key) => deleteFood(token, entry, key), {
-    refresh: ["day", "overview"], success: () => "Food removed from your log.",
+    refresh: () => queryRefresh.food, success: () => "Food removed from your log.",
   });
 
-  const refresh = ["day", "overview"];
-
   const createMutation = useIdempotentWrite<PendingFood>(token, (pending, key) => createFood(token, key, pending.input), {
-    refresh, success: () => "Food added to your log.", onSuccess: () => setLogOpen(false),
+    refresh: () => queryRefresh.food, success: () => "Food added to your log.", onSuccess: () => setLogOpen(false),
     signature: (pending) => pending.signature,
   });
 
@@ -118,9 +130,17 @@ export function Dashboard() {
     toast.dismiss();
   }
 
-  function selectDate(next: string) {
-    sessionStorage.setItem(dateKey, next);
-    setDate(next);
+  // Review keeps its own week in the URL, so opening one of its days and coming back returns to the same week.
+  const reviewing = view === "review";
+  const shownDate = reviewing ? reviewEnd : date;
+  const isShownToday = shownDate === now();
+  const step = reviewing ? 7 : 1;
+  const unit = reviewing ? "week" : "day";
+
+  function pickDate(next: string) {
+    if (reviewing) void navigate({ to: "/review", search: { to: next } });
+    else void navigate({ to: view === "overview" ? "/overview" : "/", search: { date: next } });
+
     toast.dismiss();
   }
 
@@ -154,8 +174,8 @@ export function Dashboard() {
     }
 
     createMutation.mutate({
-      input: submissionSchema.parse({ occurredAt: occurredAt(date, time), timeZone: zone, food }),
-      signature: JSON.stringify({ date, time, zone, food }),
+      input: submissionSchema.parse({ occurredAt: occurredAt(shownDate, time), timeZone: zone, food }),
+      signature: JSON.stringify({ date: shownDate, time, zone, food }),
     });
   }
 
@@ -216,6 +236,13 @@ export function Dashboard() {
             <ChartColumn size={17} {...stylex.props(view === "overview" && styles.iconAccent)} />
             Overview
           </Link>
+          <Link
+            to="/review"
+            {...stylex.props(styles.navItem, view === "review" && styles.navItemActive)}
+          >
+            <CalendarRange size={17} {...stylex.props(view === "review" && styles.iconAccent)} />
+            Review
+          </Link>
           <p {...stylex.props(styles.navCaption, styles.navCaptionData)}>SETTINGS</p>
           <button
             type="button"
@@ -255,26 +282,23 @@ export function Dashboard() {
       <main {...stylex.props(styles.mainArea)}>
         <div {...stylex.props(styles.pageContent)}>
           <header {...stylex.props(styles.dayHeader)}>
-            <h1 {...stylex.props(styles.dayHeadline)}>{isToday ? "Today" : dateLabel(date)}</h1>
+            <h1 {...stylex.props(styles.dayHeadline)}>{reviewing ? weekLabel(reviewEnd, reviewEnd === now()) : isToday ? "Today" : dateLabel(date)}</h1>
             <div {...stylex.props(styles.dateActions)}>
               {view === "today" && (
                 <Button variant="outline" size="icon" aria-label="Customize cards" title="Customize cards" disabled={!token} onClick={() => setCustomizingCards(true)}>
                   <SlidersHorizontal size={16} />
                 </Button>
               )}
-              <Button variant="outline" size="icon" aria-label="Previous day" onClick={() => selectDate(shiftDate(date, -1))}>
+              <Button variant="outline" size="icon" aria-label={`Previous ${unit}`} onClick={() => pickDate(shiftDate(shownDate, -step))}>
                 <ChevronLeft size={17} />
               </Button>
-              <Input
-                {...stylex.props(styles.dateInput)}
-                aria-label="Choose log date"
-                type="date"
-                value={date}
-                onChange={(event) => {
-                  if (event.target.value) selectDate(event.target.value);
-                }}
+              <DatePicker
+                label={reviewing ? "Choose the last day of the week" : "Choose log date"}
+                value={shownDate}
+                days={reviewing ? 7 : 1}
+                onChange={pickDate}
               />
-              <Button variant="outline" size="icon" aria-label="Next day" onClick={() => selectDate(shiftDate(date, 1))}>
+              <Button variant="outline" size="icon" aria-label={`Next ${unit}`} onClick={() => pickDate(shiftDate(shownDate, step))}>
                 <ChevronRight size={17} />
               </Button>
             </div>
@@ -286,13 +310,13 @@ export function Dashboard() {
       <SupplementsDialog open={supplementsOpen} onOpenChange={setSupplementsOpen} token={token} />
       <WearablesDialog open={wearablesOpen} onOpenChange={setWearablesOpen} connection={googleHealth} />
       <ConnectionDialog open={connectionOpen} onOpenChange={setConnectionOpen} token={token} onConnect={connect} onDisconnect={disconnect} />
-      <LogFoodDialog open={logOpen} onOpenChange={setLogOpen} token={token} date={date} isToday={isToday} pending={createMutation.isPending} onSave={saveFood} onConnect={() => { setLogOpen(false); setConnectionOpen(true); }} />
+      <LogFoodDialog open={logOpen} onOpenChange={setLogOpen} token={token} date={shownDate} isToday={isShownToday} pending={createMutation.isPending} onSave={saveFood} onConnect={() => { setLogOpen(false); setConnectionOpen(true); }} />
       <EditFoodDialog token={token} date={date} entryId={editingId} onClose={() => setEditingId(null)} />
       <SaveMealDialog token={token} date={date} selection={mealSelection} onClose={() => setMealSelection(null)} />
-      <WaterDialog open={recordDialog === "water"} onOpenChange={(open) => setRecordDialog(open ? "water" : null)} date={date} pending={water.pending} onSave={(input) => water.add(input, () => setRecordDialog(null))} />
-      <WorkoutDialog open={recordDialog === "workout"} onOpenChange={(open) => setRecordDialog(open ? "workout" : null)} date={date} pending={journal.create.isPending} onSave={(input) => saveRecord({ path: recordPaths.workout, input }, "Workout")} />
-      <SleepDialog open={recordDialog === "sleep"} onOpenChange={(open) => setRecordDialog(open ? "sleep" : null)} date={date} pending={journal.create.isPending} onSave={(input) => saveRecord({ path: recordPaths.sleep, input }, "Sleep")} />
-      <MeasurementDialog open={recordDialog === "measurement"} onOpenChange={(open) => setRecordDialog(open ? "measurement" : null)} date={date} pending={journal.create.isPending} onSave={(input) => saveRecord({ path: recordPaths.measurement, input }, "Measurement")} />
+      <WaterDialog open={recordDialog === "water"} onOpenChange={(open) => setRecordDialog(open ? "water" : null)} date={shownDate} pending={water.pending} onSave={(input) => water.add(input, () => setRecordDialog(null))} />
+      <WorkoutDialog open={recordDialog === "workout"} onOpenChange={(open) => setRecordDialog(open ? "workout" : null)} date={shownDate} pending={journal.create.isPending} onSave={(input) => saveRecord({ path: recordPaths.workout, input }, "Workout")} />
+      <SleepDialog open={recordDialog === "sleep"} onOpenChange={(open) => setRecordDialog(open ? "sleep" : null)} date={shownDate} pending={journal.create.isPending} onSave={(input) => saveRecord({ path: recordPaths.sleep, input }, "Sleep")} />
+      <MeasurementDialog open={recordDialog === "measurement"} onOpenChange={(open) => setRecordDialog(open ? "measurement" : null)} date={shownDate} pending={journal.create.isPending} onSave={(input) => saveRecord({ path: recordPaths.measurement, input }, "Measurement")} />
     </div>
     </dashboardPageContext.Provider>
   );

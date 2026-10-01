@@ -101,3 +101,5 @@ export type FoodDay = z.infer<typeof daySchema>;
 export type SearchResult = z.infer<typeof searchResultSchema>;
 
 export type CatalogSelection = z.infer<typeof catalogRefSchema>;
+
+export type FoodQuantity = z.infer<typeof quantitySchema>;

@@ -7,6 +7,7 @@ This index is the maintained list of Nouri's user paths. Read the relevant file 
 - Launch a fresh run with `control-nouri launch RUN_ID`, source its `/tmp/nouri-verify-RUN_ID/env`, and run `control-nouri doctor RUN_ID`.
 - Open `$NOURI_BASE_URL/` in the run's own `"$CONTROL" browser "$RUN_ID"` session.
 - Start from an empty database and open the journal page.
+- The header date is a shadcn date picker, not a text input. Choose the `Choose log date` button (`Choose the last day of the week` on Review), use `Go to the Previous Month` or `Go to the Next Month` if needed, then choose the day button, named like `Friday, September 25th, 2026`.
 - Keep screenshots and redacted snapshots in `/tmp/nouri-verification-evidence/$RUN_ID`.
 
 ## Proof rules
@@ -21,10 +22,11 @@ This index is the maintained list of Nouri's user paths. Read the relevant file 
 - [Search foods](search.md): Ciqual search results, no-match state, attribution.
 - [Log a catalog food](catalog-log.md): search, select, set grams, save and read back.
 - [Log a manual food](manual-log.md): manual tab, nutrition fields, save and read back.
-- [Browse dates and delete](dates-delete.md): date input and arrows, daily totals, remove a row.
+- [Browse dates and delete](dates-delete.md): date picker and arrows, daily totals, remove a row.
 - [Edit a food](edit.md): pencil on timeline rows, catalog amount, manual fields and time, revision conflict.
 - [Log water](water.md): preset and custom amounts, daily total, remove a drink.
 - [Overview](overview.md): sidebar link, category tabs, measurements, workouts, sleep, progress photos, deletion.
+- [Review](review.md): sidebar link, seven-day table with blank unrecorded days and recorded-day counts, day links into Today and Overview, Back, week arrows.
 - [Wearable import](wearables.md): Wearables dialog in the sidebar, not-set-up state, fixture-backed Connect, imported sleep and workouts, repeat sync, disconnect, forged callback.
 - [Customize My Day cards](cards.md): show, hide, reorder, save, reload, and restore defaults.
 - [Log again](log-again.md): timeline log-again button on today and past days, recorded time zones, `/food` redirect.

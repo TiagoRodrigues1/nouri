@@ -4,11 +4,12 @@ import { recordPaths } from "../../../src/journal/paths";
 import { stackForDaySchema } from "../../../src/supplements/contract";
 import { datedResource } from "./dated-resource";
 import { useIdempotentWrite, useIdempotentDelete } from "./use-idempotent";
+import { queryRefresh } from "./query-refresh";
 
 type PendingIntake = { supplement: Supplement; date: string; time: string };
 
 // The day's checklist is built from the stack and the intakes, so either change refreshes both screens.
-const refresh = ["day", "overview"];
+const refresh = () => queryRefresh.supplements;
 
 // Ticks supplements off on the day on screen. The server fills in name and dose from that day's stack.
 export function useSupplements(token: string, date: string) {
@@ -33,11 +34,7 @@ export function useSupplements(token: string, date: string) {
   };
 }
 
-const stackResource = datedResource<Supplement[], typeof stackForDaySchema>(recordPaths.supplementStack, "supplement-stack", stackForDaySchema, {
-  refresh,
+export const { useDatedQuery: useSupplementStack, useSaveDated: useSaveSupplementStack } = datedResource<Supplement[], typeof stackForDaySchema>(recordPaths.supplementStack, "supplement-stack", stackForDaySchema, {
+  refresh: [...queryRefresh.supplements],
   body: (supplements) => ({ supplements }),
 });
-
-export const useSupplementStack = stackResource.useDatedQuery;
-
-export const useSaveSupplementStack = stackResource.useSaveDated;
