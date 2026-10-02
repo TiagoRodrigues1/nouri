@@ -2,10 +2,8 @@ import type { ReactNode } from "react";
 import type { UseQueryResult } from "@tanstack/react-query";
 import { Button } from "./components/ui/button";
 
-// What a page shows in place of a query's data: a prompt to connect, the error with a retry, or a loading line.
-export function queryStatus(token: string, query: UseQueryResult<unknown>, messages: { disconnected: string; loading: string }): ReactNode {
-  if (!token) return messages.disconnected;
-
+// What a page shows in place of a query's data: the error with a retry, or a loading line.
+export function queryStatus(query: UseQueryResult<unknown>, loading: string): ReactNode {
   if (query.isError) {
     return (
       <>
@@ -15,5 +13,5 @@ export function queryStatus(token: string, query: UseQueryResult<unknown>, messa
     );
   }
 
-  return query.isPending ? messages.loading : null;
+  return query.isPending ? loading : null;
 }

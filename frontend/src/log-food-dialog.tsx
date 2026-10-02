@@ -19,15 +19,13 @@ type FoodInput = FoodSubmission["food"];
 type LogFoodDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  token: string;
   date: string;
   isToday: boolean;
   pending: boolean;
   onSave: (event: FormEvent<HTMLFormElement>, food: FoodInput, time: string) => void;
-  onConnect: () => void;
 };
 
-export function LogFoodDialog({ open, onOpenChange, token, date, isToday, pending, onSave, onConnect }: LogFoodDialogProps) {
+export function LogFoodDialog({ open, onOpenChange, date, isToday, pending, onSave }: LogFoodDialogProps) {
   const [searchDraft, setSearchDraft] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [selected, setSelected] = useState<Candidate | null>(null);
@@ -40,9 +38,9 @@ export function LogFoodDialog({ open, onOpenChange, token, date, isToday, pendin
   }, [open]);
 
   const searchQuery = useQuery({
-    queryKey: ["foods", token, searchTerm],
-    queryFn: () => searchFoods(token, searchTerm),
-    enabled: Boolean(token) && searchTerm.length >= 2,
+    queryKey: ["foods", searchTerm],
+    queryFn: () => searchFoods(searchTerm),
+    enabled: searchTerm.length >= 2,
   });
 
   function search(event: FormEvent<HTMLFormElement>) {
@@ -89,7 +87,7 @@ export function LogFoodDialog({ open, onOpenChange, token, date, isToday, pendin
                     onChange={(event) => setSearchDraft(event.target.value)}
                     required
                   />
-                  <Button type="submit" disabled={!token}>
+                  <Button type="submit">
                     <Search size={16} /> Search
                   </Button>
                 </div>
@@ -97,14 +95,7 @@ export function LogFoodDialog({ open, onOpenChange, token, date, isToday, pendin
               <p {...stylex.props(styles.fieldHint)}>
                 Ciqual results show nutrition per 100 g.
               </p>
-              {!token ? (
-                <div {...stylex.props(styles.searchMessage)}>
-                  <p>Connect your food log to search.</p>
-                  <Button type="button" variant="outline" onClick={onConnect}>
-                    Connect your log
-                  </Button>
-                </div>
-              ) : searchQuery.isFetching ? (
+              {searchQuery.isFetching ? (
                 <p {...stylex.props(styles.searchMessage)}>Searching foods…</p>
               ) : searchQuery.isError ? (
                 <p {...stylex.props(styles.searchMessage)}>{searchQuery.error.message}</p>
@@ -184,11 +175,11 @@ export function LogFoodDialog({ open, onOpenChange, token, date, isToday, pendin
               ))}
             </TabsContent>
             <TabsContent value="meals">
-              <SavedMealsTab token={token} date={date} time={time} onLogged={() => onOpenChange(false)} />
+              <SavedMealsTab date={date} time={time} onLogged={() => onOpenChange(false)} />
             </TabsContent>
             <TabsContent value="manual">
               <ManualForm
-                disabled={!token || pending}
+                disabled={pending}
                 onSubmit={(event, food) => onSave(event, food, time)}
               />
             </TabsContent>

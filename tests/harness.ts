@@ -5,6 +5,9 @@ import { createApp } from "../src/app.js";
 import { applyMigrations } from "../src/db/migrations.js";
 import type { WearableRuntime } from "../src/wearables/provider.js";
 
+// pk_test_ followed by base64 of "example.clerk.accounts.dev$", the shape Clerk issues.
+export const publishableKey = `pk_test_${Buffer.from("example.clerk.accounts.dev$").toString("base64")}`;
+
 export function createHarness(wearables?: WearableRuntime) {
   const url = process.env.DATABASE_URL;
 
@@ -13,17 +16,27 @@ export function createHarness(wearables?: WearableRuntime) {
   const admin = postgres(url, { max: 1, onnotice: () => undefined });
   const client = postgres(url, { max: 10, connection: { search_path: schema } });
   const userId = "11111111-1111-4111-8111-111111111111";
-  const token = "test-token-with-at-least-thirty-two-characters";
+  const otherUserId = "22222222-2222-4222-8222-222222222222";
+  const token = "test-session-token";
   const db = drizzle(client);
-  const app = createApp(db, { token, userId }, wearables);
-  const otherApp = createApp(db, { token, userId: "22222222-2222-4222-8222-222222222222" });
+
+  // Stands in for Clerk: the test token signs in as whichever Clerk user the app was built for.
+  const identity = (clerkUserId: string) => ({
+    authenticate: async (request: Request) => request.headers.get("Authorization") === `Bearer ${token}` ? clerkUserId : null,
+    publishableKey,
+  });
+
+  const app = createApp(db, identity("user_test_1"), wearables);
+  const otherApp = createApp(db, identity("user_test_2"));
   const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
 
   return {
     app, otherApp, client, db, token, userId, headers,
+    signedInAs: (clerkUserId: string) => createApp(db, identity(clerkUserId), wearables),
     setup: async () => {
       await admin.unsafe(`CREATE SCHEMA "${schema}"`);
       await applyMigrations(client);
+      await client`INSERT INTO users (id, clerk_user_id) VALUES (${userId}, 'user_test_1'), (${otherUserId}, 'user_test_2')`;
     },
     cleanup: async () => {
       await client.end();

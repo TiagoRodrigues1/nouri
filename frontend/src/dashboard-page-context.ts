@@ -6,7 +6,6 @@ import type { useWater } from "./lib/use-water";
 import type { useJournal } from "./overview/use-journal";
 
 export type DashboardPageContext = {
-  token: string;
   date: string;
   isToday: boolean;
   onEditFood: (entry: FoodEntry) => void;

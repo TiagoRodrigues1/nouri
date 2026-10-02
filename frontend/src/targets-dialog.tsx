@@ -68,15 +68,15 @@ function stored({ scale = 1, precision = 0, optional }: Field, input: string): n
   return Math.round(Number(input) * scale * factor) / factor;
 }
 
-type TargetsDialogProps = { open: boolean; onOpenChange: (open: boolean) => void; token: string };
+type TargetsDialogProps = { open: boolean; onOpenChange: (open: boolean) => void };
 
-export function TargetsDialog({ open, onOpenChange, token }: TargetsDialogProps) {
+export function TargetsDialog({ open, onOpenChange }: TargetsDialogProps) {
   // Changes take effect today, so the form edits and saves the set in force on today's date.
   const today = localDate(new Date());
-  const query = useTargetsQuery(token, today);
+  const query = useTargetsQuery(today);
   // Saving replaces the whole set, so the form waits for the saved targets rather than seeding from defaults.
   const targets = query.data?.targets;
-  const status = targets ? null : queryStatus(token, query, { disconnected: "Connect your log to edit your targets.", loading: "Loading your targets…" });
+  const status = targets ? null : queryStatus(query, "Loading your targets…");
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -89,17 +89,17 @@ export function TargetsDialog({ open, onOpenChange, token }: TargetsDialogProps)
           <p {...stylex.props(query.isError ? formStyles.connectionError : formStyles.dialogDescription)} role={query.isError ? "alert" : undefined}>{status}</p>
         )}
         {/* Keyed by day, so a form left open past midnight restarts from the new day's targets. */}
-        {targets && <TargetsForm key={today} token={token} date={today} targets={targets} onSaved={() => onOpenChange(false)} />}
+        {targets && <TargetsForm key={today} date={today} targets={targets} onSaved={() => onOpenChange(false)} />}
       </DialogContent>
     </Dialog>
   );
 }
 
 // Mounted only while the dialog is open, so each opening starts from the targets in force today.
-function TargetsForm({ token, date, targets, onSaved }: { token: string; date: string; targets: Targets; onSaved: () => void }) {
+function TargetsForm({ date, targets, onSaved }: { date: string; targets: Targets; onSaved: () => void }) {
   const [draft, setDraft] = useState(() => draftFrom(targets));
   const [invalid, setInvalid] = useState("");
-  const save = useSaveTargets(token, date);
+  const save = useSaveTargets(date);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

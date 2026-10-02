@@ -29,10 +29,10 @@ type Category = (typeof categories)[number]["id"];
 type Tab = "all" | Category;
 
 export function Overview() {
-  const { token, date, journal } = useDashboardPage();
+  const { date, journal } = useDashboardPage();
   const [tab, setTab] = useState<Tab>("all");
 
-  const query = useQuery(overviewQueryOptions(token, date));
+  const query = useQuery(overviewQueryOptions(date));
 
   async function upload(file: File) {
     if (file.size > maxPhotoBytes) {
@@ -51,7 +51,7 @@ export function Overview() {
   }
 
   const data = query.data;
-  const targets = useTargets(token, date);
+  const targets = useTargets(date);
   const remove = (path: RecordPath, label: string) => (entry: { id: string; revision: number }) => journal.remove.mutate({ path, label, ...entry });
   const busy = journal.create.isPending || journal.remove.isPending;
 
@@ -59,7 +59,6 @@ export function Overview() {
     sports: <SportsSection sports={data.sports} busy={busy} onDelete={remove("/v1/workouts", "Workout")} />,
     measurements: (
       <MeasurementsSection
-        token={token}
         date={date}
         measurements={data.measurements}
         weightGoalKg={targets.targets?.weightKg ?? null}
@@ -73,7 +72,7 @@ export function Overview() {
     sleep: <SleepSection sleep={data.sleep} goalMinutes={targets.targets?.sleepMinutes} busy={busy} onDelete={remove("/v1/sleep-sessions", "Sleep session")} />,
   } : { sports: null, measurements: null, sleep: null };
 
-  const status = queryStatus(token, query, { disconnected: "Connect your log to see your overview.", loading: "Loading your overview…" });
+  const status = queryStatus(query, "Loading your overview…");
 
   return (
     <>

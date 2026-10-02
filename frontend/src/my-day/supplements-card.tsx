@@ -7,7 +7,6 @@ import { checklist, takenAt } from "../lib/supplements";
 import type { Supplement, SupplementDay, SupplementIntake } from "../lib/api";
 
 type SupplementsCardProps = {
-  connected: boolean;
   day: SupplementDay | undefined;
   pending: boolean;
   onTake: (supplement: Supplement) => void;
@@ -15,7 +14,7 @@ type SupplementsCardProps = {
   onManage: () => void;
 };
 
-export function SupplementsCard({ connected, day, pending, onTake, onRemove, onManage }: SupplementsCardProps) {
+export function SupplementsCard({ day, pending, onTake, onRemove, onManage }: SupplementsCardProps) {
   const { rows, unlisted, taken, total, empty } = checklist(day ?? { items: [], unlisted: [] });
 
   return (
@@ -33,7 +32,7 @@ export function SupplementsCard({ connected, day, pending, onTake, onRemove, onM
       </div>
       {empty ? (
         <div {...stylex.props(styles.empty)}>
-          <p {...stylex.props(styles.emptyText)}>{connected ? "No supplements on your list for this day." : "Connect to track your supplements."}</p>
+          <p {...stylex.props(styles.emptyText)}>No supplements on your list for this day.</p>
           <Button type="button" variant="outline" size="sm" onClick={onManage}>Add supplements</Button>
         </div>
       ) : (
@@ -46,11 +45,11 @@ export function SupplementsCard({ connected, day, pending, onTake, onRemove, onM
               </span>
               {/* One click takes it now; clicking the taken button removes the latest intake, so a slip is one click to undo. */}
               {last ? (
-                <Button variant="secondary" size="sm" {...stylex.props(styles.taken)} aria-label={unmarkLabel} disabled={!connected || pending} onClick={() => onRemove(last)}>
+                <Button variant="secondary" size="sm" {...stylex.props(styles.taken)} aria-label={unmarkLabel} disabled={pending} onClick={() => onRemove(last)}>
                   <Check size={15} /> {timesLabel}{takenAt(last)}
                 </Button>
               ) : (
-                <Button variant="outline" size="icon-sm" aria-label={markLabel} title="Mark as taken" disabled={!connected || pending} onClick={() => onTake(supplement)}>
+                <Button variant="outline" size="icon-sm" aria-label={markLabel} title="Mark as taken" disabled={pending} onClick={() => onTake(supplement)}>
                   <Check size={15} />
                 </Button>
               )}

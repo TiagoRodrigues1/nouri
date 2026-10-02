@@ -6,12 +6,14 @@ import type { AppDatabase } from "../db/database.js";
 import { error, errorSchema } from "../http-error.js";
 import { authorizationSchema, connectionStatusSchema, disconnectResultSchema, syncResultSchema, wearableProviderSchema } from "./contract.js";
 import type { WearableProvider } from "./contract.js";
-import { connectionFor, stateLifetimeMs, unconfiguredStatus, type Connection } from "./connections.js";
-import { oauthCallbackPath, type WearableRuntime } from "./provider.js";
+import { connectionFor, stateLifetimeMs, stateOwner, unconfiguredStatus, type Connection } from "./connections.js";
+import { oauthCallbackPath, type CloudProvider, type WearableRuntime } from "./provider.js";
 
 const integrationPath = "/v1/integrations/:provider";
 
 const notConfigured = "This service is not set up on this server. Add its settings to .env and restart Nouri.";
+
+type Env = { Variables: { userId: string } };
 
 function stateCookie(id: WearableProvider, context: Context) {
   const secure = new URL(context.req.url).protocol === "https:";
@@ -19,23 +21,32 @@ function stateCookie(id: WearableProvider, context: Context) {
   return { name: `nouri_${id}_state`, options: { path: oauthCallbackPath(id), httpOnly: true, sameSite: "Lax" as const, secure } };
 }
 
-export function integrationRoutes(db: AppDatabase, runtime: WearableRuntime | undefined, userId: string) {
-  const app = new OpenAPIHono();
-  const connections = new Map<WearableProvider, Connection>(runtime?.providers.map((provider) => [provider.id, connectionFor(db, runtime, provider, userId)]));
+export function integrationRoutes(db: AppDatabase, runtime: WearableRuntime | undefined) {
+  const app = new OpenAPIHono<Env>();
+  const providers = new Map<WearableProvider, CloudProvider>(runtime?.providers.map((provider) => [provider.id, provider]));
 
-  const withProvider = (run: (id: WearableProvider, connection: Connection | undefined, context: Context) => Promise<Response>) =>
-    async (context: Context) => {
-      const parsed = wearableProviderSchema.safeParse(context.req.param("provider"));
+  const connection = (id: WearableProvider, userId: string) => {
+    const provider = providers.get(id);
 
-      if (!parsed.success) return error(404, "Unknown integration");
+    return runtime && provider ? connectionFor(db, runtime, provider, userId) : undefined;
+  };
 
-      return run(parsed.data, connections.get(parsed.data), context);
+  const providerParam = (context: Context) => wearableProviderSchema.safeParse(context.req.param("provider")).data;
+
+  // Behind the /v1 sign-in check, so each request acts for the person it authenticated.
+  const withProvider = (run: (id: WearableProvider, connection: Connection | undefined, context: Context<Env>) => Promise<Response>) =>
+    async (context: Context<Env>) => {
+      const id = providerParam(context);
+
+      if (!id) return error(404, "Unknown integration");
+
+      return run(id, connection(id, context.get("userId")), context);
     };
 
-  const withConfigured = (run: (connection: Connection, context: Context) => Promise<Response>) =>
+  const withConfigured = (run: (connection: Connection, context: Context<Env>) => Promise<Response>) =>
     withProvider(async (_id, connection, context) => connection ? run(connection, context) : error(409, notConfigured));
 
-  app.get(integrationPath, withProvider(async (id, connection, context) => context.json(connection ? await connection.status() : await unconfiguredStatus(db, userId, id))));
+  app.get(integrationPath, withProvider(async (id, connection, context) => context.json(connection ? await connection.status() : await unconfiguredStatus(db, context.get("userId"), id))));
 
   app.post(`${integrationPath}/authorizations`, withConfigured(async (connection, context) => {
     const { callbackOrigin } = connection.provider;
@@ -52,21 +63,28 @@ export function integrationRoutes(db: AppDatabase, runtime: WearableRuntime | un
     return context.json({ authorizationUrl: url });
   }));
 
-  // The browser lands here, so even an unconfigured provider redirects back to the page instead of answering with JSON.
-  app.get(oauthCallbackPath(":provider"), withProvider(async (id, connection, context) => {
+  // The browser lands here without a session token, so the stored state names the person who started the sign-in.
+  // Even an unconfigured provider redirects back to the page instead of answering with JSON.
+  app.get(oauthCallbackPath(":provider"), async (context) => {
+    const id = providerParam(context);
+
+    if (!id) return error(404, "Unknown integration");
     const cookie = stateCookie(id, context);
     const query = (name: string) => context.req.query(name) || undefined;
+    const state = query("state");
+    const owner = state ? await stateOwner(db, id, state) : null;
+    const connected = owner ? connection(id, owner) : undefined;
 
-    const result = connection
-      ? await connection.complete({ state: query("state"), cookie: getCookie(context, cookie.name), code: query("code"), error: query("error") })
-      : "token-failed";
+    const result = connected
+      ? await connected.complete({ state, cookie: getCookie(context, cookie.name), code: query("code"), error: query("error") })
+      : providers.has(id) ? "expired-link" : "token-failed";
 
     deleteCookie(context, cookie.name, cookie.options);
     context.header("Cache-Control", "no-store");
     context.header("Referrer-Policy", "no-referrer");
 
     return context.redirect(`/overview?connect=${id}&result=${result}`, 303);
-  }));
+  });
 
   app.post(`${integrationPath}/syncs`, withConfigured(async (connection, context) => {
     const synced = await connection.sync();

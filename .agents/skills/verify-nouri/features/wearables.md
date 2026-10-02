@@ -9,9 +9,15 @@ To drive Connect without a Google account, start the fixture-backed app on the r
 ```sh
 source "/tmp/nouri-verify-$RUN_ID/env"
 PORT2=<free port>
-setsid env DATABASE_URL="$DATABASE_URL" API_TOKEN="$API_TOKEN" API_USER_ID="$API_USER_ID" PORT=$PORT2 \
+setsid env CLERK_AUTHORIZED_PARTIES="http://127.0.0.1:$PORT2" PORT=$PORT2 \
   node --import tsx tests/fake-google-server.ts > "/tmp/nouri-verify-$RUN_ID/fake-google.log" 2>&1 &
 echo $! > "/tmp/nouri-verify-$RUN_ID/fake-google-pid"
+```
+
+Sign the browser in on that port; the sign-in link works on any origin the app is served from:
+
+```sh
+"$CONTROL" browser "$RUN_ID" open "$("$CONTROL" sign-in-url "$RUN_ID" | sed "s#$NOURI_BASE_URL#http://127.0.0.1:$PORT2#")"
 ```
 
 In the browser, route `https://accounts.google.com/**` to a 302 back to the request's `redirect_uri`. The `run-code` sandbox has no `URL`, so split the query string by hand. Include the same `state` and `code=4/fake-approved-<code_challenge>`. Choosing `Connect` then lands on `/overview` and syncs. On 2026-09-24 the list shows `03:40 – 11:25` in Europe/Lisbon, `7 h 45 min · Google Fitbit Air · Google Health`, and a 45-minute nap, both with an `Imported` badge and no delete button. Manual sleep keeps its `Delete sleep …` button. The Sports list on the same date shows `Evening Run` (`22:30 · 40 min · 8.02 km · 512 kcal · Google Fitbit Air · Google Health`) and `Weights` (`02:00 · 50 min · 240 kcal · …`), each with an `Imported` badge. The weights started at 21:00 at -04:00, so they belong to 2026-09-24 even though Lisbon time is past midnight. `GET /v1/overview/2026-09-24` shows `sports.entries[].source` with `kind: "wearable"` and `title`, and `sports.entryCount` 2. `GET /v1/overview/2026-09-24` shows `source.kind: "wearable"`, `timeZone: "-04:00"`, and the night's stages. `Sync now` then toasts `Google Health synced. No changes.` `Disconnect` opens a confirmation naming both imported counts; confirming removes the imported sleep and workouts and leaves manual ones.

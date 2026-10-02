@@ -11,13 +11,13 @@ import { styles } from "../overview-styles";
 import { Empty, Tile } from "./shared";
 import { clock, dateLabel } from "../lib/time";
 
-// Photos need the bearer token, so they load as blobs and show through object URLs.
-function usePhotoUrl(token: string, id: string): string | null {
+// Photos need the session token, so they load as blobs and show through object URLs.
+function usePhotoUrl(id: string): string | null {
   const [url, setUrl] = useState<string | null>(null);
 
   const query = useQuery({
-    queryKey: ["photo", token, id],
-    queryFn: () => getPhotoImage(token, id),
+    queryKey: ["photo", id],
+    queryFn: () => getPhotoImage(id),
     staleTime: Infinity,
   });
 
@@ -33,7 +33,7 @@ function usePhotoUrl(token: string, id: string): string | null {
   return url;
 }
 
-export function PhotosTile({ token, photos, busy, onUpload, onDelete }: { token: string; photos: Photo[]; busy: boolean; onUpload: (file: File) => void; onDelete: (photo: Photo) => void }) {
+export function PhotosTile({ photos, busy, onUpload, onDelete }: { photos: Photo[]; busy: boolean; onUpload: (file: File) => void; onDelete: (photo: Photo) => void }) {
   const input = useRef<HTMLInputElement>(null);
   const [viewing, setViewing] = useState<Photo | null>(null);
 
@@ -69,7 +69,7 @@ export function PhotosTile({ token, photos, busy, onUpload, onDelete }: { token:
         <ul {...stylex.props(styles.photos)} aria-label="Progress photos">
           {photos.map((photo) => (
             <li key={photo.id}>
-              <PhotoThumb token={token} photo={photo} onOpen={() => setViewing(photo)} />
+              <PhotoThumb photo={photo} onOpen={() => setViewing(photo)} />
             </li>
           ))}
         </ul>
@@ -78,7 +78,6 @@ export function PhotosTile({ token, photos, busy, onUpload, onDelete }: { token:
         <DialogContent>
           {viewing && (
             <PhotoView
-              token={token}
               photo={viewing}
               busy={busy}
               onDelete={() => {
@@ -93,8 +92,8 @@ export function PhotosTile({ token, photos, busy, onUpload, onDelete }: { token:
   );
 }
 
-function PhotoThumb({ token, photo, onOpen }: { token: string; photo: Photo; onOpen: () => void }) {
-  const url = usePhotoUrl(token, photo.id);
+function PhotoThumb({ photo, onOpen }: { photo: Photo; onOpen: () => void }) {
+  const url = usePhotoUrl(photo.id);
 
   return (
     <button type="button" {...stylex.props(styles.thumb)} aria-label={`Open photo from ${dateLabel(photo.localDate)}`} onClick={onOpen}>
@@ -104,8 +103,8 @@ function PhotoThumb({ token, photo, onOpen }: { token: string; photo: Photo; onO
   );
 }
 
-function PhotoView({ token, photo, busy, onDelete }: { token: string; photo: Photo; busy: boolean; onDelete: () => void }) {
-  const url = usePhotoUrl(token, photo.id);
+function PhotoView({ photo, busy, onDelete }: { photo: Photo; busy: boolean; onDelete: () => void }) {
+  const url = usePhotoUrl(photo.id);
 
   return (
     <>

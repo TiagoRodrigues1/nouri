@@ -13,7 +13,7 @@ let now = new Date("2026-09-27T12:00:00Z");
 
 const tokenKey = Buffer.alloc(32, 7);
 
-const { app, client, token, setup, cleanup } = createHarness({ tokenKey, now: () => now, providers: [googleHealthProvider({ ...googleConfig, fetch: google.fetch })] });
+const { app, client, token, signedInAs, setup, cleanup } = createHarness({ tokenKey, now: () => now, providers: [googleHealthProvider({ ...googleConfig, fetch: google.fetch })] });
 
 const unconfigured = createHarness();
 
@@ -347,6 +347,18 @@ void test("Google Health sleep and workouts", async (t) => {
       for (const operation of [spec.paths["/v1/integrations/{provider}/authorizations"].post, spec.paths["/v1/integrations/{provider}/syncs"].post, spec.paths["/v1/integrations/{provider}"].delete]) {
         assert.ok(!operation.parameters?.some((item: { name: string }) => item.name === "Idempotency-Key"));
       }
+    });
+
+    await t.test("the callback connects whoever started the sign-in", async () => {
+      // The callback carries no session, so the stored state decides whose account Google joins.
+      const other = signedInAs("user_test_2");
+      const started = await other.request(`${base}/authorizations`, { method: "POST", headers: auth });
+      const cookie = /nouri_google-health_state=([^;]+)/.exec(started.headers.get("Set-Cookie") ?? "")?.[1] ?? "";
+      const approved = google.approve((await started.json()).authorizationUrl);
+      const callback = await app.request(`/oauth/google-health/callback?state=${encodeURIComponent(approved.state)}&code=${encodeURIComponent(approved.code)}`, { headers: { Cookie: `nouri_google-health_state=${cookie}` } });
+      assert.equal(new URL(callback.headers.get("Location") ?? "", "http://x").searchParams.get("result"), "connected");
+      assert.equal((await (await other.request(base, { headers: auth })).json()).connection, "connected");
+      assert.equal((await status()).connection, "not-connected");
     });
 
   } finally {

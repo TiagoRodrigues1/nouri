@@ -23,9 +23,9 @@ type Row =
 type MyDayProps = { day: Day | undefined; status: ReactNode };
 
 export function MyDay({ day, status }: MyDayProps) {
-  const { token, date, isToday, onEditFood: onEdit, onSaveMeal, foodDelete, water, onManageSupplements, customizingCards, onCustomizingCardsChange } = useDashboardPage();
-  const supplements = useSupplements(token, date);
-  const logAgain = useLogAgain(token, date);
+  const { date, isToday, onEditFood: onEdit, onSaveMeal, foodDelete, water, onManageSupplements, customizingCards, onCustomizingCardsChange } = useDashboardPage();
+  const supplements = useSupplements(date);
+  const logAgain = useLogAgain(date);
   const busy = foodDelete.isPending || logAgain.pending;
   const onDelete = (entry: FoodEntry) => foodDelete.mutate(entry);
   const now = useNow();
@@ -34,9 +34,8 @@ export function MyDay({ day, status }: MyDayProps) {
   const times = entries.map((entry) => new Date(entry.occurredAt)).sort((a, b) => a.getTime() - b.getTime());
   const eaten = isToday ? times.filter((time) => time <= now) : times;
   const last = eaten.at(-1);
-  const connected = Boolean(token);
-  const layout = useDashboardCards(token);
-  const targetsState = useTargets(token, date);
+  const layout = useDashboardCards();
+  const targetsState = useTargets(date);
   const { targets } = targetsState;
   // Cards wait for the targets too, so no gauge draws against a value about to change.
   const shown = targets && layout.cards;
@@ -51,16 +50,15 @@ export function MyDay({ day, status }: MyDayProps) {
           <span {...stylex.props(styles.cardAside)}>vs. your daily targets</span>
         </div>
         <div {...stylex.props(styles.gauges)}>
-          <Gauge icon={<Flame size={14} />} label="Energy" unit="kcal" value={totals?.kcal} target={targets.kcal} color={colors.food} connected={connected} />
-          <Gauge icon={<Beef size={14} />} label="Protein" unit="g" value={totals?.proteinG} target={targets.proteinG} color={colors.protein} connected={connected} />
-          <Gauge icon={<Wheat size={14} />} label="Carbs" unit="g" value={totals?.carbsG} target={targets.carbsG} color={colors.carbs} connected={connected} />
-          <Gauge icon={<Droplet size={14} />} label="Fat" unit="g" value={totals?.fatG} target={targets.fatG} color={colors.fat} connected={connected} />
+          <Gauge icon={<Flame size={14} />} label="Energy" unit="kcal" value={totals?.kcal} target={targets.kcal} color={colors.food} />
+          <Gauge icon={<Beef size={14} />} label="Protein" unit="g" value={totals?.proteinG} target={targets.proteinG} color={colors.protein} />
+          <Gauge icon={<Wheat size={14} />} label="Carbs" unit="g" value={totals?.carbsG} target={targets.carbsG} color={colors.carbs} />
+          <Gauge icon={<Droplet size={14} />} label="Fat" unit="g" value={totals?.fatG} target={targets.fatG} color={colors.fat} />
         </div>
       </section>
     ),
     water: (
       <WaterCard
-        connected={connected}
         goalMl={targets.waterMl}
         entries={day?.water.entries ?? []}
         totalMl={day?.water.totalMl}
@@ -70,7 +68,6 @@ export function MyDay({ day, status }: MyDayProps) {
     ),
     supplements: (
       <SupplementsCard
-        connected={connected}
         day={day?.supplements}
         pending={supplements.pending}
         onTake={supplements.take}
@@ -79,7 +76,7 @@ export function MyDay({ day, status }: MyDayProps) {
       />
     ),
     mix: <MixCard kcal={totals?.kcal} proteinG={totals?.proteinG} carbsG={totals?.carbsG} fatG={totals?.fatG} />,
-    activity: <ActivityCard token={token} date={date} targets={targets} />,
+    activity: <ActivityCard date={date} targets={targets} />,
     fasting: isToday && last ? <FastingCard since={now.getTime() - last.getTime()} last={last} goalHours={targets.fastingHours} /> : <WindowCard first={times[0]} last={times.at(-1)} />,
     largest: <LargestCard entries={entries} totalKcal={totals?.kcal} />,
     meals: <MealsCard times={times} entries={entries} />,
@@ -91,7 +88,7 @@ export function MyDay({ day, status }: MyDayProps) {
         entries={entries}
         now={isToday ? now : null}
         logAgainWhen={isToday ? "now" : "today"}
-        summary={connected ? `${entries.length} ${entries.length === 1 ? "food" : "foods"} · ${format(totals?.kcal)} kcal` : ""}
+        summary={`${entries.length} ${entries.length === 1 ? "food" : "foods"} · ${format(totals?.kcal)} kcal`}
         status={status}
         busy={busy}
         onLogAgain={logAgain.logAgain}

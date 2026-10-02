@@ -14,33 +14,32 @@ function listCounts(counts: Record<ImportKind, number>): string {
   return parts.length ? parts.join(" and ") : "nothing";
 }
 
-function useConnectionStatus(token: string, provider: WearableProvider) {
+function useConnectionStatus(provider: WearableProvider) {
   return useQuery({
-    queryKey: ["connection", token, provider],
-    queryFn: () => getConnection(token, provider),
-    enabled: Boolean(token),
+    queryKey: ["connection", provider],
+    queryFn: () => getConnection(provider),
   });
 }
 
 // Connect, Sync, and Disconnect for one cloud provider. Imported sleep and workouts show up through the overview query.
 // The page shell mounts it once, so the OAuth callback is handled whichever page it lands on.
-export function useConnection(token: string, provider: WearableProvider) {
+export function useConnection(provider: WearableProvider) {
   const client = useQueryClient();
   const { name, revokeHelp } = providerDetails[provider];
 
   const refresh = () => Promise.all(["connection", ...new Set([...queryRefresh.sleep, ...queryRefresh.workout])]
-    .map((name) => client.invalidateQueries({ queryKey: [name, token] })));
+    .map((name) => client.invalidateQueries({ queryKey: [name] })));
 
-  const status = useConnectionStatus(token, provider);
+  const status = useConnectionStatus(provider);
 
   const connect = useMutation({
-    mutationFn: () => startConnection(token, provider),
+    mutationFn: () => startConnection(provider),
     onSuccess: (url) => window.location.assign(url),
     onError: (error) => toast.error(error.message),
   });
 
   const sync = useMutation({
-    mutationFn: () => syncConnection(token, provider),
+    mutationFn: () => syncConnection(provider),
     onSuccess: async (result) => {
       await refresh();
 
@@ -59,7 +58,7 @@ export function useConnection(token: string, provider: WearableProvider) {
   });
 
   const disconnect = useMutation({
-    mutationFn: () => disconnectConnection(token, provider),
+    mutationFn: () => disconnectConnection(provider),
     onSuccess: async (result) => {
       await refresh();
       const removed = listCounts(result.removed);
@@ -74,7 +73,7 @@ export function useConnection(token: string, provider: WearableProvider) {
   const { mutate: startSync } = sync;
 
   useEffect(() => {
-    if (handled.current || !token) return;
+    if (handled.current) return;
     const params = new URLSearchParams(window.location.search);
     const result = callbackResults.find((item) => item === params.get("result"));
 
@@ -90,7 +89,7 @@ export function useConnection(token: string, provider: WearableProvider) {
     } else {
       toast.error(callbackMessages[result]);
     }
-  }, [token, provider, startSync]);
+  }, [provider, startSync]);
 
   return { provider, status, connect, sync, disconnect };
 }

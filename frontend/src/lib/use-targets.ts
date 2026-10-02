@@ -1,4 +1,4 @@
-import { defaultTargets, targetsForDaySchema } from "../../../src/targets/contract";
+import { targetsForDaySchema } from "../../../src/targets/contract";
 import type { Targets } from "./api";
 import { datedResource } from "./dated-resource";
 
@@ -11,11 +11,8 @@ export type TargetsState =
   | { status: "loading"; targets?: undefined }
   | { status: "error"; targets?: undefined; message: string; retry: () => void };
 
-// A disconnected log has no saved targets, so it measures against the defaults.
-export function useTargets(token: string, date: string): TargetsState {
-  const query = useTargetsQuery(token, date);
-
-  if (!token) return { status: "ready", targets: defaultTargets };
+export function useTargets(date: string): TargetsState {
+  const query = useTargetsQuery(date);
 
   if (query.data) return { status: "ready", targets: query.data.targets };
 

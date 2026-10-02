@@ -9,25 +9,24 @@ export function datedResource<Input, Schema extends z.ZodType>(
   schema: Schema,
   options: { refresh?: string[]; body?: (input: Input) => object } = {},
 ) {
-  function useDatedQuery(token: string, date: string) {
+  function useDatedQuery(date: string) {
     return useQuery({
-      queryKey: [name, token, date],
-      queryFn: () => request(token, `${path}/${date}`, schema),
-      enabled: Boolean(token),
+      queryKey: [name, date],
+      queryFn: () => request(`${path}/${date}`, schema),
     });
   }
 
-  function useSaveDated(token: string, date: string) {
+  function useSaveDated(date: string) {
     const client = useQueryClient();
 
     return useMutation({
-      mutationFn: (input: Input) => request(token, `${path}/${date}`, schema, {
+      mutationFn: (input: Input) => request(`${path}/${date}`, schema, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(options.body ? options.body(input) : input),
       }),
       onSuccess: () => Promise.all([name, ...options.refresh ?? []].map((key) =>
-        client.invalidateQueries({ queryKey: [key, token] }))),
+        client.invalidateQueries({ queryKey: [key] }))),
     });
   }
 

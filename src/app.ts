@@ -15,9 +15,9 @@ import { getDated, saveDated, type DatedKind, type DatedTable } from "./effectiv
 import { mealEditSchema, mealInputSchema, mealLogInputSchema, mealLogSchema, savedMealListSchema, savedMealSchema } from "./meals/contract.js";
 import { listMeals, logMeal, mutateMeal } from "./meals/meals.js";
 import { integrationRoutes } from "./wearables/routes.js";
-import { sameSecret } from "./crypto.js";
 import { error, errorSchema } from "./http-error.js";
 import type { WearableRuntime } from "./wearables/provider.js";
+import { clerkFrontendOrigin, userFor, type Identity } from "./identity/identity.js";
 import { recordPaths } from "./journal/paths.js";
 import { mutateRecord } from "./journal/records.js";
 import type { RecordKind } from "./journal/records.js";
@@ -72,26 +72,23 @@ function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (character) => `&#${character.charCodeAt(0)};`);
 }
 
-function sameToken(actual: string | undefined, expected: string): boolean {
-  if (!actual?.startsWith("Bearer ")) return false;
-
-  return sameSecret(actual.slice(7), expected);
-}
-
-export function createApp(db: AppDatabase, auth: { token: string; userId: string }, wearables?: WearableRuntime) {
+export function createApp(db: AppDatabase, identity: Identity, wearables?: WearableRuntime) {
   const app = new OpenAPIHono<{ Variables: { userId: string; idempotencyKey: string } }>();
+
+  // Clerk loads its scripts from the instance's Frontend API, shows avatars from img.clerk.com, and runs bot protection in a Cloudflare frame.
+  const clerk = clerkFrontendOrigin(identity.publishableKey);
+  const challenges = "https://challenges.cloudflare.com";
 
   const pageHeaders = {
     "Cache-Control": "no-store",
     "X-Content-Type-Options": "nosniff",
-    "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' blob:; base-uri 'none'; form-action 'self'",
+    "Content-Security-Policy": `default-src 'self'; script-src 'self' ${clerk} ${challenges}; style-src 'self' 'unsafe-inline'; connect-src 'self' ${clerk}; img-src 'self' blob: https://img.clerk.com; worker-src 'self' blob:; frame-src ${challenges}; base-uri 'none'; form-action 'self'`,
   };
 
-  // The page carries the configured token so the browser connects without asking for it.
-  const tokenMeta = `<meta name="nouri-api-token" content="${escapeHtml(auth.token)}" />`;
+  const keyMeta = `<meta name="nouri-clerk-publishable-key" content="${escapeHtml(identity.publishableKey)}" />`;
 
   for (const path of ["/", "/food", "/overview", "/review"]) {
-    app.get(path, async () => new Response((await readFile(new URL("../web/dist/index.html", import.meta.url), "utf8")).replace("</head>", `${tokenMeta}</head>`), {
+    app.get(path, async () => new Response((await readFile(new URL("../web/dist/index.html", import.meta.url), "utf8")).replace("</head>", `${keyMeta}</head>`), {
       headers: { ...pageHeaders, "Content-Type": "text/html; charset=utf-8" },
     }));
   }
@@ -126,8 +123,10 @@ export function createApp(db: AppDatabase, auth: { token: string; userId: string
   const failure = (description: string) => ({ description, ...json(errorSchema) });
 
   app.use("/v1/*", async (context, next) => {
-    if (!sameToken(context.req.header("Authorization"), auth.token)) return error(401, "Unauthorized");
-    context.set("userId", auth.userId);
+    const clerkUserId = await identity.authenticate(context.req.raw);
+
+    if (!clerkUserId) return error(401, "Unauthorized");
+    context.set("userId", await userFor(db, clerkUserId));
     await next();
   });
 
@@ -141,7 +140,7 @@ export function createApp(db: AppDatabase, auth: { token: string; userId: string
     await next();
   });
 
-  app.route("/", integrationRoutes(db, wearables, auth.userId));
+  app.route("/", integrationRoutes(db, wearables));
 
   app.post("/v1/food-entries", async (context) => {
     const key = context.get("idempotencyKey");

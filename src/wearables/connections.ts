@@ -42,6 +42,14 @@ export async function unconfiguredStatus(db: AppDatabase, userId: string, provid
   return { provider, connection: "not-configured", granted: [], ...fields, windowDays: null };
 }
 
+// Who started the sign-in this callback state belongs to. complete() still checks the browser's cookie and consumes the state.
+export async function stateOwner(db: AppDatabase, provider: WearableProvider, state: string): Promise<string | null> {
+  const [pending] = await db.select({ userId: wearableOauthStates.userId }).from(wearableOauthStates)
+    .where(and(eq(wearableOauthStates.provider, provider), eq(wearableOauthStates.stateHash, sha256Base64url(state))));
+
+  return pending?.userId ?? null;
+}
+
 export type CallbackInput = { state: string | undefined; cookie: string | undefined; code: string | undefined; error: string | undefined };
 
 export type SyncOutcome =

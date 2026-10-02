@@ -250,3 +250,10 @@ CREATE TABLE IF NOT EXISTS wearable_oauth_states (
   expires_at timestamptz NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now()
 );
+
+-- One row per person. Every user_id above refers to users.id; Clerk owns sign-in and is named only here.
+CREATE TABLE IF NOT EXISTS users (
+  id uuid PRIMARY KEY,
+  clerk_user_id text NOT NULL UNIQUE,
+  created_at timestamptz NOT NULL DEFAULT now()
+);

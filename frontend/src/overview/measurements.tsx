@@ -10,7 +10,6 @@ import { DeleteButton, Empty, Section, Sparkline, Stat, Tile, Value, Caption } f
 import { PhotosTile } from "./photos";
 
 type MeasurementsProps = {
-  token: string;
   date: string;
   measurements: OverviewData["measurements"];
   weightGoalKg: number | null;
@@ -39,7 +38,7 @@ function goalProgress(weight: number | undefined, goal: number): string {
   return gap < 0.05 ? `At your ${format(goal, 1)} kg goal` : `${format(gap, 1)} kg from your ${format(goal, 1)} kg goal`;
 }
 
-export function MeasurementsSection({ token, date, measurements, weightGoalKg, photos, busy, onDelete, onUpload, onDeletePhoto }: MeasurementsProps) {
+export function MeasurementsSection({ date, measurements, weightGoalKg, photos, busy, onDelete, onUpload, onDeletePhoto }: MeasurementsProps) {
   const { latest, bmi, weightChange } = measurements;
   const asOf = (recorded: { localDate: string } | null) => (recorded && recorded.localDate !== date ? `Recorded ${dateLabel(recorded.localDate)}` : "Recorded this day");
 
@@ -99,7 +98,7 @@ export function MeasurementsSection({ token, date, measurements, weightGoalKg, p
           </ul>
         )}
       </Tile>
-      <PhotosTile token={token} photos={photos} busy={busy} onUpload={onUpload} onDelete={onDeletePhoto} />
+      <PhotosTile photos={photos} busy={busy} onUpload={onUpload} onDelete={onDeletePhoto} />
     </Section>
   );
 }

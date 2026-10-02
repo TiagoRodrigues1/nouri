@@ -126,16 +126,8 @@ export const styles = stylex.create({
     gap: "10px",
     padding: "17px 8px 0",
   },
-  avatar: {
-    width: "33px",
-    height: "33px",
-    borderRadius: "50%",
-    display: "grid",
-    placeItems: "center",
-    backgroundColor: colors.accent,
-    color: colors.primary,
-    fontWeight: "800",
-    fontSize: "13px",
+  profileName: {
+    minWidth: 0,
   },
   mainArea: {
     minWidth: "0",
@@ -160,6 +152,9 @@ export const styles = stylex.create({
   profileText: {
     display: "block",
     fontSize: "12px",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
   },
   profileSubtext: {
     color: colors.mutedForeground,

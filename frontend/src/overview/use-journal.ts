@@ -7,14 +7,14 @@ type PendingRecord = (RecordCommand | { path: typeof recordPaths.photo; input: F
 
 type PendingDelete = { path: RecordPath; label: string; id: string; revision: number };
 
-export function useJournal(token: string) {
-  const create = useIdempotentWrite<PendingRecord>(token, (record, key) => record.path === recordPaths.photo ? createPhoto(token, key, record.input) : createRecord(token, key, record), {
+export function useJournal() {
+  const create = useIdempotentWrite<PendingRecord>((record, key) => record.path === recordPaths.photo ? createPhoto(key, record.input) : createRecord(key, record), {
     refreshFor: (record) => recordQueryRefresh[record.path],
     success: (record) => `${record.label} saved.`,
     signature: (record) => record.signature,
   });
 
-  const remove = useIdempotentDelete<PendingDelete>(token, (record, key) => deleteRecord(token, record.path, record, key), {
+  const remove = useIdempotentDelete<PendingDelete>((record, key) => deleteRecord(record.path, record, key), {
     refreshFor: (record) => recordQueryRefresh[record.path],
     success: (record) => `${record.label} removed.`,
   });

@@ -60,15 +60,14 @@ const metrics: Metric[] = [
 ];
 
 export function Review() {
-  const { token, date } = useDashboardPage();
+  const { date } = useDashboardPage();
 
   const query = useQuery({
-    queryKey: ["review", token, date],
-    queryFn: () => getReview(token, date),
-    enabled: Boolean(token),
+    queryKey: ["review", date],
+    queryFn: () => getReview(date),
   });
 
-  const status = queryStatus(token, query, { disconnected: "Connect your log to review your week.", loading: "Loading your week…" });
+  const status = queryStatus(query, "Loading your week…");
   const review = query.data;
 
   if (status || !review) return <p {...stylex.props(styles.status)}>{status}</p>;

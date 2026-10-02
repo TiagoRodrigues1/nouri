@@ -9,7 +9,7 @@ Read [features/README.md](features/README.md) and the relevant feature file befo
 
 ## Launch
 
-Run from the repository root. Docker, `pnpm`, `pg_isready`, `curl`, Python 3, OpenSSL, and `playwright cli` must be on `PATH`. Dependencies are described in the root and `frontend/package.json` files; run `pnpm install` if `node_modules` is absent. The helper starts a disposable `postgres:16-alpine` container on a random localhost port, applies `db/schema.sql`, and starts `src/server.ts` on another free localhost port. Each run gets its own token and user UUID.
+Run from the repository root. Docker, `pnpm`, `pg_isready`, `curl`, Python 3, and `playwright cli` must be on `PATH`. The repository `.env` must hold `CLERK_SECRET_KEY` and `CLERK_PUBLISHABLE_KEY` for a Clerk development instance; the helper refuses live keys. Dependencies are described in the root and `frontend/package.json` files; run `pnpm install` if `node_modules` is absent. The helper starts a disposable `postgres:16-alpine` container on a random localhost port, applies `db/schema.sql`, and starts `src/server.ts` on another free localhost port. Each run creates its own Clerk test user (a `+clerk_test` address that never receives mail) and deletes it at cleanup.
 
 The server serves the built page from `web/dist`. `launch` refuses to start when that build is missing or older than `frontend/index.html` or the TypeScript and CSS under `frontend/src` and `src` (the page imports its contracts from `src`). Run `pnpm build:web` first. The helper does not build for you, because rebuilding replaces assets under any other run serving the same `web/dist`.
 
@@ -22,11 +22,11 @@ EVIDENCE="/tmp/nouri-verification-evidence/$RUN_ID"
 mkdir -p "$EVIDENCE"
 ```
 
-The helper prints `Healthy Nouri run ...` when the page, OpenAPI document, authenticated day request, server process, and database answer. It records its own process and container IDs under `/tmp/nouri-verify-$RUN_ID`. Keep the shell variables for the entire drive. Two runs with different IDs use separate databases, ports, tokens, and browser sessions. Never drive an instance started by somebody else.
+The helper prints `Healthy Nouri run ...` when the page, OpenAPI document, authenticated day request, server process, and database answer. It records its own process and container IDs under `/tmp/nouri-verify-$RUN_ID`. Keep the shell variables for the entire drive. Two runs with different IDs use separate databases, ports, Clerk users, and browser sessions. Never drive an instance started by somebody else.
 
 ## Doctor
 
-Run this read-only check first whenever the instance looks wrong. It requires the original app PID and database container ID, checks PostgreSQL readiness, confirms the page and OpenAPI title/version, and makes an authenticated day request with this run's token.
+Run this read-only check first whenever the instance looks wrong. It requires the original app PID and database container ID, checks PostgreSQL readiness, confirms the page and OpenAPI title/version, and checks that the API refuses a request without a session.
 
 ```sh
 "$CONTROL" doctor "$RUN_ID"
@@ -34,30 +34,30 @@ Run this read-only check first whenever the instance looks wrong. It requires th
 
 ## Drive
 
-Use the helper's `browser` action, which runs `playwright cli` in this run's scratch directory with session `nouri-$RUN_ID`. Playwright's automatic snapshots stay there and disappear during cleanup. Use the selectors and accessible names in the feature map. Open the page to load the journal.
+Use the helper's `browser` action, which runs `playwright cli` in this run's scratch directory with session `nouri-$RUN_ID`. Playwright's automatic snapshots stay there and disappear during cleanup. Use the selectors and accessible names in the feature map. `sign-in-url` prints a single-use link that signs the browser in as the run's user; opening it loads the journal. Opening `$NOURI_BASE_URL/` without it shows Clerk's sign-in instead.
 
 ```sh
-"$CONTROL" browser "$RUN_ID" open "$NOURI_BASE_URL/"
-"$CONTROL" browser "$RUN_ID" snapshot | sed "s/$API_TOKEN/[REDACTED]/g"
+"$CONTROL" browser "$RUN_ID" open "$("$CONTROL" sign-in-url "$RUN_ID")"
+"$CONTROL" browser "$RUN_ID" snapshot
 ```
 
-The token is a secret. Do not put `env`, browser storage, request headers, or unredacted `fill` output into evidence. Redact token text from snapshots before displaying or saving them. Use `"$CONTROL" browser "$RUN_ID" run-code 'async (page) => { ... }'` for assertions with Playwright locators when a snapshot is ambiguous. Do not set app state through `page.evaluate` or call internal functions to create the state under test.
+The sign-in link, session tokens, and the Clerk secret in `env` are secrets. Do not put `env`, the sign-in URL, browser storage, cookies, or request headers into evidence. Use `"$CONTROL" browser "$RUN_ID" run-code 'async (page) => { ... }'` for assertions with Playwright locators when a snapshot is ambiguous. Do not set app state through `page.evaluate` or call internal functions to create the state under test.
 
 ## Evidence
 
-Save proof under `$EVIDENCE`; cleanup never removes it. For each feature, record the feature ID and entry point, a screenshot or redacted page snapshot before the user action, the browser action, and the resulting screen. `"$CONTROL" browser "$RUN_ID" screenshot --filename "$EVIDENCE/before.png"` and the same command with `after.png` save screenshots directly. For text proof, pipe `snapshot` through `sed "s/$API_TOKEN/[REDACTED]/g"` before writing it to `$EVIDENCE`.
+Save proof under `$EVIDENCE`; cleanup never removes it. For each feature, record the feature ID and entry point, a screenshot or redacted page snapshot before the user action, the browser action, and the resulting screen. `"$CONTROL" browser "$RUN_ID" screenshot --filename "$EVIDENCE/before.png"` and the same command with `after.png` save screenshots directly. For text proof, write `snapshot` output to `$EVIDENCE`; check it does not contain the address bar's `__clerk_ticket` value.
 
 For a mutation, save an authenticated readback from the endpoint that owns the result: `GET /v1/days/<date>` for food, water, and supplement intakes, `GET /v1/supplement-stack/<date>` for the supplement list, `GET /v1/overview/<date>` for Overview records, or `GET /v1/dashboard` for card layout. Assert the relevant entries and totals. This is a second read of persisted state, not a substitute for the browser action. Search proof should show query, results or empty state, and source attribution. Follow real page controls. Do not use internal setters or test-only endpoints. Mock only a production boundary that already exists; the default Nouri run uses the real local database. Nouri has no dry-run mode. If a future recipe uses one, inspect actual files, network activity, and database state to establish what it skips.
 
-Example readback, after choosing a date in the page:
+Example readback, after choosing a date in the page. Clerk accepts only session tokens minted for the page's origin, so `readback` makes the GET from the signed-in browser and prints the JSON:
 
 ```sh
-curl -fsS -H "Authorization: Bearer $API_TOKEN" "$NOURI_BASE_URL/v1/days/2026-09-25" > "$EVIDENCE/day.json"
+"$CONTROL" readback "$RUN_ID" /v1/days/2026-09-25 > "$EVIDENCE/day.json"
 ```
 
 ## Cleanup
 
-The helper closes only this run's browser, stops only its recorded app process and database container, and removes its runtime directory, including the token and raw Playwright snapshots. It never touches `$EVIDENCE`.
+The helper closes only this run's browser, stops only its recorded app process and database container, deletes its Clerk test user, and removes its runtime directory, including the Clerk secret copy and raw Playwright snapshots. It never touches `$EVIDENCE`.
 
 ```sh
 "$CONTROL" cleanup "$RUN_ID"

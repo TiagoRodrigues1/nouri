@@ -7,12 +7,11 @@ import { z } from "zod";
 import { createApp } from "../src/app.js";
 import { oauthCallbackPath } from "../src/wearables/provider.js";
 import { wearablesFromEnv } from "../src/google-health/config.js";
+import { identityFromEnv } from "../src/identity/identity.js";
 import { FakeGoogle, fixture, googleConfig } from "./fake-google.js";
 
 const settings = z.object({
   DATABASE_URL: z.string().min(1),
-  API_TOKEN: z.string().min(32),
-  API_USER_ID: z.uuid(),
   PORT: z.coerce.number().int(),
 }).parse(process.env);
 
@@ -24,4 +23,4 @@ for (const name of ["sleep-night", "sleep-nap", "sleep-too-long", "exercise-run"
 
 const wearables = wearablesFromEnv({ GOOGLE_HEALTH_CLIENT_ID: googleConfig.clientId, GOOGLE_HEALTH_CLIENT_SECRET: googleConfig.clientSecret, GOOGLE_HEALTH_REDIRECT_URI: redirectUri, WEARABLE_TOKEN_KEY: Buffer.alloc(32, 9).toString("hex") }, google.fetch);
 
-serve({ fetch: createApp(drizzle(postgres(settings.DATABASE_URL)), { token: settings.API_TOKEN, userId: settings.API_USER_ID }, wearables).fetch, port: settings.PORT, hostname: "127.0.0.1" });
+serve({ fetch: createApp(drizzle(postgres(settings.DATABASE_URL)), identityFromEnv(process.env), wearables).fetch, port: settings.PORT, hostname: "127.0.0.1" });

@@ -23,21 +23,20 @@ export const cardLabels: Record<CardId, { name: string; description: string }> =
 };
 
 // Cards stay undefined while the saved layout loads, so the defaults never flash before it.
-export function useDashboardCards(token: string) {
+export function useDashboardCards() {
   const queryClient = useQueryClient();
 
   const query = useQuery({
-    queryKey: ["dashboard", token],
-    queryFn: () => getDashboard(token),
-    enabled: Boolean(token),
+    queryKey: ["dashboard"],
+    queryFn: () => getDashboard(),
   });
 
   const mutation = useMutation({
-    mutationFn: (cards: CardId[]) => saveDashboard(token, { cards }),
-    onSuccess: (saved) => queryClient.setQueryData(["dashboard", token], saved),
+    mutationFn: (cards: CardId[]) => saveDashboard({ cards }),
+    onSuccess: (saved) => queryClient.setQueryData(["dashboard"], saved),
   });
 
-  const cards = !token || query.isError ? defaultCards : query.data?.cards;
+  const cards = query.isError ? defaultCards : query.data?.cards;
 
   return { cards, mutation };
 }
