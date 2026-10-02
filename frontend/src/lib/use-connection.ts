@@ -14,23 +14,25 @@ function listCounts(counts: Record<ImportKind, number>): string {
   return parts.length ? parts.join(" and ") : "nothing";
 }
 
-function useConnectionStatus(provider: WearableProvider) {
+function useConnectionStatus(provider: WearableProvider, enabled: boolean) {
   return useQuery({
     queryKey: ["connection", provider],
     queryFn: () => getConnection(provider),
+    enabled,
   });
 }
 
 // Connect, Sync, and Disconnect for one cloud provider. Imported sleep and workouts show up through the overview query.
 // The page shell mounts it once, so the OAuth callback is handled whichever page it lands on.
-export function useConnection(provider: WearableProvider) {
+// The status is read only while `showing`, since counting imports costs the server queries no page needs.
+export function useConnection(provider: WearableProvider, showing: boolean) {
   const client = useQueryClient();
   const { name, revokeHelp } = providerDetails[provider];
 
   const refresh = () => Promise.all(["connection", ...new Set([...queryRefresh.sleep, ...queryRefresh.workout])]
     .map((name) => client.invalidateQueries({ queryKey: [name] })));
 
-  const status = useConnectionStatus(provider);
+  const status = useConnectionStatus(provider, showing);
 
   const connect = useMutation({
     mutationFn: () => startConnection(provider),

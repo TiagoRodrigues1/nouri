@@ -63,6 +63,13 @@ void test("food CRUD, stable retries, day totals, and concurrent writes", async 
     assert.equal(stylesheet.status, 200);
     assert.match(stylesheet.headers.get("Content-Type") ?? "", /text\/css/);
 
+    // Asset names carry their content hash, so browsers keep them; the page itself is always fetched fresh.
+    assert.equal(stylesheet.headers.get("Cache-Control"), "public, max-age=31536000, immutable");
+    assert.equal(page.headers.get("Cache-Control"), "no-store");
+    const compressed = await app.request(stylePath, { headers: { "Accept-Encoding": "gzip" } });
+    assert.equal(compressed.headers.get("Content-Encoding"), "gzip");
+    assert.equal(await new Response(compressed.body?.pipeThrough(new DecompressionStream("gzip"))).text(), await (await app.request(stylePath)).text());
+
     const unauthorized = await app.request("/v1/days/2026-09-25");
     assert.equal(unauthorized.status, 401);
 

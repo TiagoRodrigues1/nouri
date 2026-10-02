@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { OpenAPIHono } from "@hono/zod-openapi";
 import type { RouteConfig } from "@hono/zod-openapi";
 import { bodyLimit } from "hono/body-limit";
+import { compress } from "hono/compress";
 import { z } from "zod";
 import { dashboardSchema } from "./dashboard/contract.js";
 import { getDashboard, saveDashboard } from "./dashboard/dashboard.js";
@@ -27,7 +28,7 @@ import { overviewSchema } from "./overview/contract.js";
 import { getOverview } from "./overview/overview.js";
 import { reviewSchema } from "./review/contract.js";
 import { getReview } from "./review/review.js";
-import { maxPhotoBytes, photoSchema, photoUploadSchema } from "./photos/contract.js";
+import { maxPhotoBytes, maxThumbnailBytes, photoSchema, photoUploadSchema } from "./photos/contract.js";
 import { detectPhotoType, getPhotoImage, photoRecords } from "./photos/photos.js";
 import { sleepInputSchema } from "./sleep/contract.js";
 import { sleepRecords } from "./sleep/sleep.js";
@@ -87,8 +88,26 @@ export function createApp(db: AppDatabase, identity: Identity, wearables?: Weara
 
   const keyMeta = `<meta name="nouri-clerk-publishable-key" content="${escapeHtml(identity.publishableKey)}" />`;
 
+  // Text responses (the page, scripts, styles, JSON) shrink several times over; images and fonts are already compressed.
+  app.use(compress());
+
+  // The built page only changes with a new build, which restarts the server, so it is read once.
+  // A failed read is not kept, so a page built after startup still gets served.
+  let page: Promise<string> | undefined;
+
+  async function indexPage(): Promise<string> {
+    page ??= readFile(new URL("../web/dist/index.html", import.meta.url), "utf8").then((html) => html.replace("</head>", `${keyMeta}</head>`));
+
+    try {
+      return await page;
+    } catch (failure) {
+      page = undefined;
+      throw failure;
+    }
+  }
+
   for (const path of ["/", "/food", "/overview", "/review"]) {
-    app.get(path, async () => new Response((await readFile(new URL("../web/dist/index.html", import.meta.url), "utf8")).replace("</head>", `${keyMeta}</head>`), {
+    app.get(path, async () => new Response(await indexPage(), {
       headers: { ...pageHeaders, "Content-Type": "text/html; charset=utf-8" },
     }));
   }
@@ -113,7 +132,8 @@ export function createApp(db: AppDatabase, identity: Identity, wearables?: Weara
 
     if (!body) return error(404, "Asset not found");
 
-    return new Response(body, { headers: { ...pageHeaders, "Content-Type": contentType } });
+    // Vite names each asset after its content, so a name always means the same bytes and browsers can keep them.
+    return new Response(body, { headers: { ...pageHeaders, "Cache-Control": "public, max-age=31536000, immutable", "Content-Type": contentType } });
   });
 
   const keyParameter = z.string().min(1).max(200);
@@ -122,11 +142,24 @@ export function createApp(db: AppDatabase, identity: Identity, wearables?: Weara
   const json = (schema: z.ZodType) => ({ content: { "application/json": { schema } } });
   const failure = (description: string) => ({ description, ...json(errorSchema) });
 
+  // A Clerk user's Nouri id never changes, so each is looked up once rather than on every request.
+  const userIds = new Map<string, string>();
+
   app.use("/v1/*", async (context, next) => {
     const clerkUserId = await identity.authenticate(context.req.raw);
 
     if (!clerkUserId) return error(401, "Unauthorized");
-    context.set("userId", await userFor(db, clerkUserId));
+    let userId = userIds.get(clerkUserId);
+
+    if (!userId) {
+      userId = await userFor(db, clerkUserId);
+
+      // Bounds memory; clearing only costs the next request of each person one lookup.
+      if (userIds.size >= 10_000) userIds.clear();
+      userIds.set(clerkUserId, userId);
+    }
+
+    context.set("userId", userId);
     await next();
   });
 
@@ -307,10 +340,10 @@ export function createApp(db: AppDatabase, identity: Identity, wearables?: Weara
   });
   app.openAPIRegistry.registerPath({ method: "get", path: `${recordPaths.workout}/summary/{date}`, request: { params: z.object({ date: z.iso.date() }) }, responses: { 200: { description: "Workout count, minutes, and recorded energy estimates for the local day", ...json(workoutSummarySchema) } } });
 
-  const uploadSchema = z.object({ file: z.instanceof(File), occurredAt: occurredAtSchema, timeZone: timeZoneSchema });
+  const uploadSchema = z.object({ file: z.instanceof(File), thumbnail: z.instanceof(File).optional(), occurredAt: occurredAtSchema, timeZone: timeZoneSchema });
 
   // Multipart overhead rides on top of the image limit; the image itself is checked after parsing.
-  app.post(recordPaths.photo, bodyLimit({ maxSize: maxPhotoBytes + 64 * 1024, onError: () => error(413, "Photo is larger than 8 MB") }), async (context) => {
+  app.post(recordPaths.photo, bodyLimit({ maxSize: maxPhotoBytes + maxThumbnailBytes + 64 * 1024, onError: () => error(413, "Photo is larger than 8 MB") }), async (context) => {
     const key = context.get("idempotencyKey");
 
     const form = uploadSchema.safeParse(await context.req.parseBody().catch(() => null));
@@ -322,25 +355,36 @@ export function createApp(db: AppDatabase, identity: Identity, wearables?: Weara
     const contentType = detectPhotoType(image);
 
     if (!contentType) return error(415, "Photo must be a JPEG, PNG, or WebP image");
-    const input = { occurredAt: form.data.occurredAt, timeZone: form.data.timeZone, contentType, image };
+    const thumbnail = form.data.thumbnail ? Buffer.from(await form.data.thumbnail.arrayBuffer()) : null;
+
+    if (thumbnail && (thumbnail.length > maxThumbnailBytes || detectPhotoType(thumbnail) !== "image/jpeg")) return error(400, "Photo thumbnail must be a JPEG of at most 256 KB");
+    const input = { occurredAt: form.data.occurredAt, timeZone: form.data.timeZone, contentType, image, thumbnail };
 
     return mutationResponse(await mutateRecord(db, context.get("userId"), key, photoRecords, { kind: "create", input }), `${photoRecords.label} not found`);
   });
   app.openAPIRegistry.registerPath({ method: "post", path: recordPaths.photo, request: { headers: mutationHeaders, body: { content: { "multipart/form-data": { schema: photoUploadSchema } } } }, responses: { 201: { description: "Uploaded progress photo", ...json(photoSchema) }, 400: failure("Invalid request"), 409: failure("Idempotency conflict"), 413: failure("Photo larger than 8 MB"), 415: failure("Not a JPEG, PNG, or WebP image") } });
 
-  app.get("/v1/progress-photos/:id/image", async (context) => {
-    const id = z.uuid().safeParse(context.req.param("id"));
+  // The browser's HTTP cache is shared by everyone who signs in on it and ignores the session token, so photos are never stored there.
+  function photoRoute(suffix: string, size: "full" | "thumbnail", description: string) {
+    app.get(`/v1/progress-photos/:id/${suffix}`, async (context) => {
+      const id = z.uuid().safeParse(context.req.param("id"));
 
-    if (!id.success) return error(400, "Invalid photo request");
-    const photo = await getPhotoImage(db, context.get("userId"), id.data);
+      if (!id.success) return error(400, "Invalid photo request");
+      const photo = await getPhotoImage(db, context.get("userId"), id.data, size);
 
-    if (!photo) return error(404, "Photo not found");
+      if (!photo) return error(404, "Photo not found");
 
-    return new Response(new Uint8Array(photo.image), {
-      headers: { "Content-Type": photo.contentType, "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff", "Content-Security-Policy": "default-src 'none'" },
+      return new Response(new Uint8Array(photo.image), {
+        headers: { "Content-Type": photo.contentType, "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff", "Content-Security-Policy": "default-src 'none'" },
+      });
     });
-  });
-  app.openAPIRegistry.registerPath({ method: "get", path: "/v1/progress-photos/{id}/image", request: { params: z.object({ id: z.uuid() }) }, responses: { 200: { description: "The stored image bytes", content: { "image/jpeg": { schema: z.string().meta({ format: "binary" }) }, "image/png": { schema: z.string().meta({ format: "binary" }) }, "image/webp": { schema: z.string().meta({ format: "binary" }) } } }, 404: failure("Photo not found") } });
+
+    const binary = { schema: z.string().meta({ format: "binary" }) };
+    app.openAPIRegistry.registerPath({ method: "get", path: `/v1/progress-photos/{id}/${suffix}`, request: { params: z.object({ id: z.uuid() }) }, responses: { 200: { description, content: { "image/jpeg": binary, "image/png": binary, "image/webp": binary } }, 404: failure("Photo not found") } });
+  }
+
+  photoRoute("image", "full", "The stored image bytes");
+  photoRoute("thumbnail", "thumbnail", "The photo's thumbnail, or the full image for a photo uploaded without one");
 
   app.get("/v1/overview/:date", async (context) => {
     const date = z.iso.date().safeParse(context.req.param("date"));
@@ -349,7 +393,7 @@ export function createApp(db: AppDatabase, identity: Identity, wearables?: Weara
 
     return context.json(await getOverview(db, context.get("userId"), date.data));
   });
-  app.openAPIRegistry.registerPath({ method: "get", path: "/v1/overview/{date}", request: { params: z.object({ date: z.iso.date() }) }, responses: { 200: { description: "Nutrition, sports, measurements, sleep, and recent progress photos for the local day", ...json(overviewSchema) } } });
+  app.openAPIRegistry.registerPath({ method: "get", path: "/v1/overview/{date}", request: { params: z.object({ date: z.iso.date() }) }, responses: { 200: { description: "Sports, measurements, sleep, and recent progress photos for the local day", ...json(overviewSchema) } } });
 
   app.get("/v1/review/:date", async (context) => {
     const date = z.iso.date().safeParse(context.req.param("date"));

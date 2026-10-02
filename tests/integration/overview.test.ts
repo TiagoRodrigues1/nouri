@@ -12,6 +12,8 @@ const zone = "Europe/Lisbon";
 // The smallest valid PNG header is enough; the server checks the leading bytes, not the pixels.
 const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]);
 
+const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 16]);
+
 // Loose on purpose: the tests send unknown kinds and out-of-range values the API must reject.
 type Body = {
   occurredAt?: string;
@@ -36,10 +38,12 @@ function remove(path: string, revision: number, key = randomUUID()) {
   return app.request(path, { method: "DELETE", headers: { ...auth, "Idempotency-Key": key, "If-Match": `"${revision}"` } });
 }
 
-function upload(image: Buffer, key = randomUUID(), occurredAt = "2026-09-24T08:00:00Z") {
+function upload(image: Buffer, key = randomUUID(), occurredAt = "2026-09-24T08:00:00Z", thumbnail?: Buffer) {
   const form = new FormData();
 
   form.set("file", new File([new Uint8Array(image)], "progress.png"));
+
+  if (thumbnail) form.set("thumbnail", new File([new Uint8Array(thumbnail)], "thumbnail.jpg"));
   form.set("occurredAt", occurredAt);
   form.set("timeZone", zone);
 
@@ -54,7 +58,15 @@ async function overview(date: string, target = app) {
   return response.json();
 }
 
-void test("overview combines nutrition, sports, measurements, sleep, and photos", async () => {
+async function readDay(date: string) {
+  const response = await app.request(`/v1/days/${date}`, { headers: auth });
+
+  assert.equal(response.status, 200);
+
+  return response.json();
+}
+
+void test("overview combines sports, measurements, sleep, and photos", async () => {
   await setup();
 
   try {
@@ -62,8 +74,8 @@ void test("overview combines nutrition, sports, measurements, sleep, and photos"
     assert.equal((await app.request("/v1/overview/yesterday", { headers: auth })).status, 400);
 
     const empty = await overview("2026-09-24");
-    assert.equal(empty.nutrition.food.entryCount, 0);
-    assert.equal(empty.nutrition.water.totalMl, null);
+    // Food, water, and supplements come from the day, so the overview does not read them again.
+    assert.deepEqual(Object.keys(empty).sort(), ["date", "measurements", "photos", "sleep", "sports"]);
     assert.deepEqual(empty.sports, { entries: [], entryCount: 0, totalMinutes: null, energyKcal: null });
     assert.deepEqual(await (await app.request("/v1/workouts/summary/2026-09-24", { headers: auth })).json(), { entryCount: 0, totalMinutes: null, burnedKcal: null });
     assert.equal((await app.request("/v1/workouts/summary/invalid", { headers: auth })).status, 400);
@@ -71,17 +83,16 @@ void test("overview combines nutrition, sports, measurements, sleep, and photos"
     assert.deepEqual(empty.sleep, { sessions: [], totalMinutes: null, stages: null });
     assert.equal(empty.measurements.bmi, null);
     assert.deepEqual(empty.photos, []);
-    assert.deepEqual(empty.supplements, { items: [], unlisted: [] });
 
-    // Supplements: the day's checklist comes with the overview, so ticking one shows up here.
+    // Supplements: the day's checklist comes with the day, so ticking one shows up there.
     const creatine = { id: randomUUID(), name: "Creatine", kind: "creatine", dose: { amount: 5, unit: "g" } };
     assert.equal((await app.request("/v1/supplement-stack/2026-09-24", { method: "PUT", headers: { ...auth, "Content-Type": "application/json" }, body: JSON.stringify({ supplements: [creatine] }) })).status, 200);
     const taken = await app.request("/v1/supplement-intakes", { method: "POST", headers: { ...auth, "Content-Type": "application/json", "Idempotency-Key": randomUUID() }, body: JSON.stringify({ occurredAt: "2026-09-24T07:40:00Z", timeZone: zone, supplementId: creatine.id }) });
     assert.equal(taken.status, 201);
-    const checklist = (await overview("2026-09-24")).supplements;
+    const checklist = (await readDay("2026-09-24")).supplements;
     assert.deepEqual(checklist.items[0].supplement, creatine);
     assert.deepEqual(checklist.items[0].intakes, [await taken.json()]);
-    assert.deepEqual((await overview("2026-09-23")).supplements, { items: [], unlisted: [] });
+    assert.deepEqual((await readDay("2026-09-23")).supplements, { items: [], unlisted: [] });
 
     // Measurements carry forward, and BMI uses the latest weight and height.
     assert.equal((await post("/v1/measurements", { occurredAt: "2026-09-20T08:00:00Z", timeZone: zone, kind: "height", value: 180 })).status, 201);
@@ -154,6 +165,27 @@ void test("overview combines nutrition, sports, measurements, sleep, and photos"
     assert.deepEqual(Buffer.from(await image.arrayBuffer()), png);
     assert.equal((await otherApp.request(`/v1/progress-photos/${photo.id}/image`, { headers: auth })).status, 404);
 
+    // A photo uploaded without a thumbnail shows its full image in the grid.
+    const fallback = await app.request(`/v1/progress-photos/${photo.id}/thumbnail`, { headers: auth });
+    assert.equal(fallback.headers.get("Content-Type"), "image/png");
+    assert.deepEqual(Buffer.from(await fallback.arrayBuffer()), png);
+
+    // The page sends a small JPEG next to the original; the grid reads it and the viewer reads the original.
+    assert.equal((await upload(png, randomUUID(), "2026-09-22T08:00:00Z", png)).status, 400);
+    assert.equal((await upload(png, randomUUID(), "2026-09-22T08:00:00Z", Buffer.concat([jpeg, Buffer.alloc(300 * 1024)]))).status, 400);
+    const thumbed = await (await upload(png, randomUUID(), "2026-09-22T08:00:00Z", jpeg)).json();
+    const thumbnail = await app.request(`/v1/progress-photos/${thumbed.id}/thumbnail`, { headers: auth });
+    assert.equal(thumbnail.status, 200);
+    assert.equal(thumbnail.headers.get("Content-Type"), "image/jpeg");
+    assert.deepEqual(Buffer.from(await thumbnail.arrayBuffer()), jpeg);
+    assert.deepEqual(Buffer.from(await (await app.request(`/v1/progress-photos/${thumbed.id}/image`, { headers: auth })).arrayBuffer()), png);
+    assert.equal((await otherApp.request(`/v1/progress-photos/${thumbed.id}/thumbnail`, { headers: auth })).status, 404);
+    assert.equal((await remove(`/v1/progress-photos/${thumbed.id}`, thumbed.revision)).status, 204);
+    assert.equal((await app.request(`/v1/progress-photos/${thumbed.id}/thumbnail`, { headers: auth })).status, 404);
+    const [thumbErased] = await client`SELECT length(image) AS bytes, thumbnail FROM progress_photos WHERE id = ${thumbed.id}`;
+    assert.equal(thumbErased?.bytes, 0);
+    assert.equal(thumbErased?.thumbnail, null);
+
     day = await overview("2026-09-24");
     assert.deepEqual(day.photos.map((item: { id: string }) => item.id), [photo.id]);
     assert.deepEqual((await overview("2026-09-23")).photos, []);
@@ -184,7 +216,7 @@ void test("overview combines nutrition, sports, measurements, sleep, and photos"
 
     const spec = await (await app.request("/openapi.json")).json();
 
-    for (const path of ["/v1/overview/{date}", "/v1/measurements", "/v1/workouts", "/v1/sleep-sessions", "/v1/progress-photos", "/v1/progress-photos/{id}", "/v1/progress-photos/{id}/image"]) assert.ok(spec.paths[path], path);
+    for (const path of ["/v1/overview/{date}", "/v1/measurements", "/v1/workouts", "/v1/sleep-sessions", "/v1/progress-photos", "/v1/progress-photos/{id}", "/v1/progress-photos/{id}/image", "/v1/progress-photos/{id}/thumbnail"]) assert.ok(spec.paths[path], path);
   } finally {
     await cleanup();
   }

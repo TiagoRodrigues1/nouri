@@ -34,6 +34,15 @@ const indexed = data.foods.map((food) => {
   return { food, french, english, tokens: [...new Set(`${english} ${french}`.split(/[^a-z0-9]+/).filter(Boolean))] };
 });
 
+// Searches compare names in the reader's language first, so each language keeps its own ordering of the two names.
+const byLanguage = {
+  fr: indexed.map(({ food, french, english, tokens }) => ({ food, name: french, other: english, tokens })),
+  en: indexed.map(({ food, french, english, tokens }) => ({ food, name: english, other: french, tokens })),
+};
+
+// Every distinct word in the catalog. Typo matching checks each once instead of once per food that uses it.
+const vocabulary = [...new Set(indexed.flatMap(({ tokens }) => tokens))];
+
 function candidate(food: z.infer<typeof row>, locale: string): CatalogCandidate {
   const language = locale.startsWith("fr") || !food.nameEn ? "fr" : "en";
 
@@ -47,17 +56,27 @@ function candidate(food: z.infer<typeof row>, locale: string): CatalogCandidate 
   };
 }
 
+// Reused across calls; search runs on the request thread, so allocating a table per comparison adds up.
+let cells = new Uint16Array(0);
+
 // Optimal string alignment distance, so a swapped pair of letters counts as one typo.
-function editDistance(left: string, right: string): number {
+// Stops early once every cell in a row exceeds `limit`, since the distance can only grow from there.
+function editDistance(left: string, right: string, limit: number): number {
   const width = right.length + 1;
-  const cells = new Uint16Array((left.length + 1) * width);
+  const size = (left.length + 1) * width;
+
+  if (cells.length < size) cells = new Uint16Array(size);
   const at = (i: number, j: number) => cells[i * width + j] ?? 0;
 
   for (let i = 0; i <= left.length; i++) cells[i * width] = i;
 
   for (let j = 0; j <= right.length; j++) cells[j] = j;
 
-  for (let i = 1; i <= left.length; i++)
+  let previousBest = 0;
+
+  for (let i = 1; i <= left.length; i++) {
+    let rowBest = at(i, 0);
+
     for (let j = 1; j <= right.length; j++) {
       const cost = left[i - 1] === right[j - 1] ? 0 : 1;
       let best = Math.min(at(i - 1, j) + 1, at(i, j - 1) + 1, at(i - 1, j - 1) + cost);
@@ -66,33 +85,33 @@ function editDistance(left: string, right: string): number {
         best = Math.min(best, at(i - 2, j - 2) + 1);
 
       cells[i * width + j] = best;
+      rowBest = Math.min(rowBest, best);
     }
+
+    // A transposition reads two rows back, so the previous row must be out of reach too.
+    if (rowBest > limit && previousBest > limit) return limit + 1;
+    previousBest = rowBest;
+  }
 
   return at(left.length, right.length);
 }
 
 // Short words must match exactly; longer ones allow one typo, or two from eight letters.
-function nearlyMatches(word: string, tokens: string[]): boolean {
+function nearlyMatches(word: string, token: string): boolean {
   const allowed = word.length >= 8 ? 2 : word.length >= 4 ? 1 : 0;
 
-  if (allowed === 0) return tokens.some((token) => token.startsWith(word));
+  if (allowed === 0) return token.startsWith(word);
 
-  return tokens.some((token) =>
-    Math.abs(token.length - word.length) <= allowed
-      ? editDistance(word, token) <= allowed
-      : token.length > word.length && editDistance(word, token.slice(0, word.length)) <= allowed);
+  return Math.abs(token.length - word.length) <= allowed
+    ? editDistance(word, token, allowed) <= allowed
+    : token.length > word.length && editDistance(word, token.slice(0, word.length), allowed) <= allowed;
 }
 
 export function searchFoods(query: string, locale: string) {
   const normalizedQuery = normalize(query);
   const words = normalizedQuery.split(/\s+/);
 
-  const foods = indexed.map(({ food, french, english, tokens }) => ({
-    food,
-    name: locale.startsWith("fr") ? french : english,
-    other: locale.startsWith("fr") ? english : french,
-    tokens,
-  }));
+  const foods = byLanguage[locale.startsWith("fr") ? "fr" : "en"];
 
   const exact = foods.flatMap(({ food, name, other }) => {
     if (!words.every((word) => name.includes(word) || other.includes(word))) return [];
@@ -106,15 +125,21 @@ export function searchFoods(query: string, locale: string) {
   });
 
   // Fall back to typo-tolerant matching only when nothing matches as typed.
-  const matches = exact.length > 0 ? exact : foods.flatMap(({ food, name, tokens }) => {
-    if (!words.every((word) => nearlyMatches(word, tokens))) return [];
-
-    return [{ food, score: /\braw\b|\bcru\b/.test(name) ? 5 : 6 }];
-  });
+  const matches = exact.length > 0 ? exact : typoMatches(foods, words);
 
   matches.sort((left, right) => left.score - right.score || left.food.nameEn.length - right.food.nameEn.length || left.food.id.localeCompare(right.food.id));
 
   return { items: matches.slice(0, 20).map(({ food }) => candidate(food, locale)), attribution: [attribution] };
+}
+
+function typoMatches(foods: (typeof byLanguage)["en"], words: string[]) {
+  const near = words.map((word) => new Set(vocabulary.filter((token) => nearlyMatches(word, token))));
+
+  return foods.flatMap(({ food, name, tokens }) => {
+    if (!near.every((matched) => tokens.some((token) => matched.has(token)))) return [];
+
+    return [{ food, score: /\braw\b|\bcru\b/.test(name) ? 5 : 6 }];
+  });
 }
 
 export function resolveFood(ref: CatalogSelection, amountG: number, occurredAt: string, timeZone: string): FoodInput | null {

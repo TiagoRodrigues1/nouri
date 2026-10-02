@@ -11,7 +11,7 @@ type Refresh<Input> =
 // One key per distinct request, reused while it is retried. Serves creates and edits alike.
 export function useIdempotentWrite<Input>(
   send: (input: Input, key: string) => Promise<object | void>,
-  options: Refresh<Input> & { success?: (input: Input) => string; onSuccess?: () => void; signature?: (input: Input) => string },
+  options: Refresh<Input> & { success?: (input: Input) => string; onSuccess?: (input: Input) => void; signature?: (input: Input) => string },
 ) {
   const client = useQueryClient();
   const pending = useRef(new PendingWrites<Input, object | void>());
@@ -33,10 +33,12 @@ export function useIdempotentWrite<Input>(
 
       pending.current.complete(signature, key);
 
-      await refresh(input);
-
+      // The write is saved, so the dialog closes and says so now. The mutation stays pending until the
+      // reads come back, which keeps buttons that act on the old revisions disabled meanwhile.
       if (options.success) toast.success(options.success(input));
-      options.onSuccess?.();
+      options.onSuccess?.(input);
+
+      await refresh(input);
     },
     onError: (error, input) => {
       toast.error(error.message);

@@ -9,10 +9,12 @@ export function datedResource<Input, Schema extends z.ZodType>(
   schema: Schema,
   options: { refresh?: string[]; body?: (input: Input) => object } = {},
 ) {
-  function useDatedQuery(date: string) {
+  // `enabled` lets a closed dialog skip the read until it opens.
+  function useDatedQuery(date: string, enabled = true) {
     return useQuery({
       queryKey: [name, date],
       queryFn: () => request(`${path}/${date}`, schema),
+      enabled,
     });
   }
 
@@ -25,8 +27,10 @@ export function datedResource<Input, Schema extends z.ZodType>(
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(options.body ? options.body(input) : input),
       }),
-      onSuccess: () => Promise.all([name, ...options.refresh ?? []].map((key) =>
-        client.invalidateQueries({ queryKey: [key] }))),
+      // Not awaited, so the dialog closes as soon as the value is saved rather than after every read refreshes.
+      onSuccess: () => {
+        for (const key of [name, ...options.refresh ?? []]) void client.invalidateQueries({ queryKey: [key] });
+      },
     });
   }
 

@@ -7,7 +7,7 @@ import { localDate } from "../time.js";
 import { photoSchema } from "./contract.js";
 import type { Photo, PhotoType } from "./contract.js";
 
-export type PhotoInput = { occurredAt: string; timeZone: string; contentType: PhotoType; image: Buffer };
+export type PhotoInput = { occurredAt: string; timeZone: string; contentType: PhotoType; image: Buffer; thumbnail: Buffer | null };
 
 const recentLimit = 12;
 
@@ -45,7 +45,7 @@ export const photoRecords: RecordKind<PhotoInput, Photo> = {
   schema: photoSchema,
   fingerprint: (input) => createHash("sha256").update(input.image).update(JSON.stringify([input.occurredAt, input.timeZone])).digest("hex"),
   // A removed photo keeps its row for the revision history but not the picture itself.
-  erase: sql`image = ''::bytea`,
+  erase: sql`image = ''::bytea, thumbnail = NULL`,
   create: async (tx, userId, input) => {
     const [row] = await tx.insert(progressPhotos).values({
       id: randomUUID(),
@@ -56,6 +56,7 @@ export const photoRecords: RecordKind<PhotoInput, Photo> = {
       contentType: input.contentType,
       byteSize: input.image.length,
       image: input.image,
+      thumbnail: input.thumbnail,
     }).returning(metadata);
 
     if (!row) throw new Error("Photo insert returned no row");
@@ -72,8 +73,16 @@ export async function getRecentPhotos(db: AppDatabase, userId: string, date: str
   return rows.map(photo);
 }
 
-export async function getPhotoImage(db: AppDatabase, userId: string, id: string): Promise<{ contentType: PhotoType; image: Buffer } | null> {
-  const [row] = await db.select({ contentType: progressPhotos.contentType, image: progressPhotos.image }).from(progressPhotos)
+// The thumbnail falls back to the full image for photos uploaded before thumbnails existed.
+export async function getPhotoImage(db: AppDatabase, userId: string, id: string, size: "full" | "thumbnail"): Promise<{ contentType: PhotoType; image: Buffer } | null> {
+  const columns = size === "full"
+    ? { contentType: progressPhotos.contentType, image: progressPhotos.image }
+    : {
+      contentType: sql<PhotoType>`CASE WHEN ${progressPhotos.thumbnail} IS NULL THEN ${progressPhotos.contentType} ELSE 'image/jpeg' END`,
+      image: sql<Buffer>`coalesce(${progressPhotos.thumbnail}, ${progressPhotos.image})`,
+    };
+
+  const [row] = await db.select(columns).from(progressPhotos)
     .where(and(eq(progressPhotos.userId, userId), eq(progressPhotos.id, id), isNull(progressPhotos.deletedAt)));
 
   return row ?? null;

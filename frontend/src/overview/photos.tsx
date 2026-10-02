@@ -12,12 +12,13 @@ import { Empty, Tile } from "./shared";
 import { clock, dateLabel } from "../lib/time";
 
 // Photos need the session token, so they load as blobs and show through object URLs.
-function usePhotoUrl(id: string): string | null {
+// The grid reads thumbnails; only the viewer downloads the original.
+function usePhotoUrl(id: string, size: "image" | "thumbnail"): string | null {
   const [url, setUrl] = useState<string | null>(null);
 
   const query = useQuery({
-    queryKey: ["photo", id],
-    queryFn: () => getPhotoImage(id),
+    queryKey: ["photo", id, size],
+    queryFn: () => getPhotoImage(id, size),
     staleTime: Infinity,
   });
 
@@ -92,19 +93,21 @@ export function PhotosTile({ photos, busy, onUpload, onDelete }: { photos: Photo
   );
 }
 
+const thumbDay = new Intl.DateTimeFormat("en", { day: "numeric", month: "short" });
+
 function PhotoThumb({ photo, onOpen }: { photo: Photo; onOpen: () => void }) {
-  const url = usePhotoUrl(photo.id);
+  const url = usePhotoUrl(photo.id, "thumbnail");
 
   return (
     <button type="button" {...stylex.props(styles.thumb)} aria-label={`Open photo from ${dateLabel(photo.localDate)}`} onClick={onOpen}>
       {url ? <img src={url} alt="" {...stylex.props(styles.thumbImage)} /> : <Camera size={18} />}
-      <span {...stylex.props(styles.thumbDate)}>{new Intl.DateTimeFormat("en", { day: "numeric", month: "short" }).format(new Date(photo.occurredAt))}</span>
+      <span {...stylex.props(styles.thumbDate)}>{thumbDay.format(new Date(photo.occurredAt))}</span>
     </button>
   );
 }
 
 function PhotoView({ photo, busy, onDelete }: { photo: Photo; busy: boolean; onDelete: () => void }) {
-  const url = usePhotoUrl(photo.id);
+  const url = usePhotoUrl(photo.id, "image");
 
   return (
     <>

@@ -1,5 +1,6 @@
 import * as stylex from "@stylexjs/stylex";
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Beef, BookmarkPlus, Droplet, Flame, Pencil, RotateCcw, Trash2, Wheat } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { colors } from "./theme.stylex";
@@ -7,6 +8,7 @@ import { styles } from "./my-day-styles";
 import { DashboardCardsDialog, useDashboardCards } from "./dashboard-cards";
 import { clock, entryHour, entryTime } from "./lib/time";
 import { useTargets } from "./lib/use-targets";
+import { workoutSummaryQueryOptions } from "./lib/day-query";
 import { useLogAgain } from "./lib/use-log-again";
 import { TargetsNotice } from "./targets-notice";
 import { useSupplements } from "./lib/use-supplements";
@@ -35,6 +37,9 @@ export function MyDay({ day, status }: MyDayProps) {
   const eaten = isToday ? times.filter((time) => time <= now) : times;
   const last = eaten.at(-1);
   const layout = useDashboardCards();
+  // The Activity card mounts only once the targets and layout arrive, so its read starts here, alongside them.
+  // While the layout is unknown it assumes the card is shown.
+  useQuery({ ...workoutSummaryQueryOptions(date), enabled: layout.cards?.includes("activity") ?? true });
   const targetsState = useTargets(date);
   const { targets } = targetsState;
   // Cards wait for the targets too, so no gauge draws against a value about to change.

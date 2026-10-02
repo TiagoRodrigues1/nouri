@@ -5,6 +5,8 @@ export const photoTypes = ["image/jpeg", "image/png", "image/webp"] as const;
 
 export const maxPhotoBytes = 8 * 1024 * 1024;
 
+export const maxThumbnailBytes = 256 * 1024;
+
 export const photoSchema = recordBaseSchema.extend({
   contentType: z.enum(photoTypes),
   byteSize: z.number().int().positive(),
@@ -14,6 +16,7 @@ export const photoUploadSchema = z.object({
   occurredAt: z.iso.datetime({ offset: true }),
   timeZone: z.string(),
   file: z.string().meta({ format: "binary", description: "A JPEG, PNG, or WebP image of at most 8 MB" }),
+  thumbnail: z.string().optional().meta({ format: "binary", description: "A JPEG of at most 256 KB shown in place of the image in photo lists" }),
 });
 
 export type PhotoType = z.infer<typeof photoSchema>["contentType"];

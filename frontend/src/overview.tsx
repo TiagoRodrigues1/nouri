@@ -10,7 +10,7 @@ import { SportsSection } from "./overview/sports";
 import { MeasurementsSection } from "./overview/measurements";
 import { SleepSection } from "./overview/sleep";
 import { styles } from "./overview-styles";
-import { maxPhotoBytes } from "../../src/photos/contract";
+import { maxPhotoBytes, maxThumbnailBytes } from "../../src/photos/contract";
 import type { RecordPath } from "./lib/api";
 import { overviewQueryOptions } from "./lib/day-query";
 import { occurredAt, timeZone } from "./lib/time";
@@ -28,6 +28,36 @@ type Category = (typeof categories)[number]["id"];
 
 type Tab = "all" | Category;
 
+// Grid tiles are about 150 px wide at 3:4, so a 320 px short side stays sharp on a 2x screen.
+const thumbnailShortSide = 320;
+
+const thumbnailLongSide = 960;
+
+// A small JPEG for the photo grid. Null when the browser cannot decode the image, so the grid falls back to the original.
+async function thumbnailOf(file: File): Promise<Blob | null> {
+  try {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, thumbnailShortSide / Math.min(bitmap.width, bitmap.height), thumbnailLongSide / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    const context = canvas.getContext("2d");
+
+    if (!context) return null;
+    // JPEG has no transparency, so a PNG's clear areas become white rather than black.
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close();
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.8));
+
+    return blob && blob.size <= maxThumbnailBytes ? blob : null;
+  } catch {
+    return null;
+  }
+}
+
 export function Overview() {
   const { date, journal } = useDashboardPage();
   const [tab, setTab] = useState<Tab>("all");
@@ -41,10 +71,12 @@ export function Overview() {
       return;
     }
 
-    const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+    const [digest, thumbnail] = await Promise.all([crypto.subtle.digest("SHA-256", await file.arrayBuffer()), thumbnailOf(file)]);
     const hash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
     const form = new FormData();
     form.set("file", file);
+
+    if (thumbnail) form.set("thumbnail", thumbnail, "thumbnail.jpg");
     form.set("occurredAt", occurredAt(date));
     form.set("timeZone", timeZone);
     journal.create.mutate({ path: recordPaths.photo, label: "Photo", input: form, signature: JSON.stringify([date, hash]) });

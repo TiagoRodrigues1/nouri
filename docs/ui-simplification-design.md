@@ -26,4 +26,4 @@ Keeping three pages and trimming each would still show food totals twice and nee
 
 ## Not changed
 
-`GET /v1/overview/{date}` still returns `nutrition` and `supplements`, since API clients may read them. The My Day card catalog is unchanged.
+The My Day card catalog is unchanged. `GET /v1/overview/{date}` later dropped `nutrition` and `supplements`: the page never showed them, the app had no other API clients, and reading them cost four queries per overview. Food, water, and supplements come from `GET /v1/days/{date}`.

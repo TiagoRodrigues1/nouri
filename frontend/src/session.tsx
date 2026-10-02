@@ -42,8 +42,12 @@ function SignedIn() {
   return <AccountQueries key={userId} />;
 }
 
+// Every write invalidates the reads it changes, so a read younger than the stale time is still current
+// and moving between pages shows it without asking the server again.
+const staleTime = 30_000;
+
 function AccountQueries() {
-  const [client] = useState(() => new QueryClient({ defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } } }));
+  const [client] = useState(() => new QueryClient({ defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false, staleTime } } }));
 
   return (
     <QueryClientProvider client={client}>

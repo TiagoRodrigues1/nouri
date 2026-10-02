@@ -164,6 +164,9 @@ CREATE TABLE IF NOT EXISTS progress_photos (
 
 CREATE INDEX IF NOT EXISTS progress_photos_user_day_active_idx ON progress_photos (user_id, local_date) WHERE deleted_at IS NULL;
 
+-- A small JPEG the page makes before uploading, so the photo grid never downloads originals. Photos uploaded before it have none.
+ALTER TABLE progress_photos ADD COLUMN IF NOT EXISTS thumbnail bytea CHECK (octet_length(thumbnail) BETWEEN 1 AND 262144);
+
 -- One row per change; a day uses the latest list that took effect on or before it.
 CREATE TABLE IF NOT EXISTS supplement_stacks (
   user_id uuid NOT NULL,
