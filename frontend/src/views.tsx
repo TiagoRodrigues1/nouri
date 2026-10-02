@@ -67,7 +67,7 @@ export function Dashboard() {
   const view: View = path === "/overview" ? "overview" : path === "/review" ? "review" : "today";
   const navigate = useNavigate();
   const search = useSearch({ strict: false });
-  const reviewEnd = search.to ?? now();
+  const today = now();
 
   const [token, setToken] = useState(
     () => sessionStorage.getItem(disconnectedKey) === "true"
@@ -77,10 +77,15 @@ export function Dashboard() {
 
 
   const [storedDate, setStoredDate] = useState(
-    () => sessionStorage.getItem(dateKey) || now(),
+    () => sessionStorage.getItem(dateKey) || today,
   );
 
-  const date = search.date ?? storedDate;
+  // Review owns its window end in the URL; Today and Overview share the remembered day.
+  const reviewing = view === "review";
+  const date = reviewing ? search.to ?? today : search.date ?? storedDate;
+  const isToday = date === today;
+  const step = reviewing ? 7 : 1;
+  const unit = reviewing ? "week" : "day";
 
   useEffect(() => {
     if (!search.date) return;
@@ -110,15 +115,13 @@ export function Dashboard() {
   const googleHealth = useConnection(token, "google-health");
 
   const foodDelete = useIdempotentDelete<FoodEntry>(token, (entry, key) => deleteFood(token, entry, key), {
-    refresh: () => queryRefresh.food, success: () => "Food removed from your log.",
+    refresh: queryRefresh.food, success: () => "Food removed from your log.",
   });
 
   const createMutation = useIdempotentWrite<PendingFood>(token, (pending, key) => createFood(token, key, pending.input), {
-    refresh: () => queryRefresh.food, success: () => "Food added to your log.", onSuccess: () => setLogOpen(false),
+    refresh: queryRefresh.food, success: () => "Food added to your log.", onSuccess: () => setLogOpen(false),
     signature: (pending) => pending.signature,
   });
-
-  const isToday = date === now();
 
   async function connect(next: string) {
     await getDay(next, date);
@@ -129,13 +132,6 @@ export function Dashboard() {
     setConnectionOpen(false);
     toast.dismiss();
   }
-
-  // Review keeps its own week in the URL, so opening one of its days and coming back returns to the same week.
-  const reviewing = view === "review";
-  const shownDate = reviewing ? reviewEnd : date;
-  const isShownToday = shownDate === now();
-  const step = reviewing ? 7 : 1;
-  const unit = reviewing ? "week" : "day";
 
   function pickDate(next: string) {
     if (reviewing) void navigate({ to: "/review", search: { to: next } });
@@ -174,8 +170,8 @@ export function Dashboard() {
     }
 
     createMutation.mutate({
-      input: submissionSchema.parse({ occurredAt: occurredAt(shownDate, time), timeZone: zone, food }),
-      signature: JSON.stringify({ date: shownDate, time, zone, food }),
+      input: submissionSchema.parse({ occurredAt: occurredAt(date, time), timeZone: zone, food }),
+      signature: JSON.stringify({ date, time, zone, food }),
     });
   }
 
@@ -282,23 +278,23 @@ export function Dashboard() {
       <main {...stylex.props(styles.mainArea)}>
         <div {...stylex.props(styles.pageContent)}>
           <header {...stylex.props(styles.dayHeader)}>
-            <h1 {...stylex.props(styles.dayHeadline)}>{reviewing ? weekLabel(reviewEnd, reviewEnd === now()) : isToday ? "Today" : dateLabel(date)}</h1>
+            <h1 {...stylex.props(styles.dayHeadline)}>{reviewing ? weekLabel(date, isToday) : isToday ? "Today" : dateLabel(date)}</h1>
             <div {...stylex.props(styles.dateActions)}>
               {view === "today" && (
                 <Button variant="outline" size="icon" aria-label="Customize cards" title="Customize cards" disabled={!token} onClick={() => setCustomizingCards(true)}>
                   <SlidersHorizontal size={16} />
                 </Button>
               )}
-              <Button variant="outline" size="icon" aria-label={`Previous ${unit}`} onClick={() => pickDate(shiftDate(shownDate, -step))}>
+              <Button variant="outline" size="icon" aria-label={`Previous ${unit}`} onClick={() => pickDate(shiftDate(date, -step))}>
                 <ChevronLeft size={17} />
               </Button>
               <DatePicker
                 label={reviewing ? "Choose the last day of the week" : "Choose log date"}
-                value={shownDate}
+                value={date}
                 days={reviewing ? 7 : 1}
                 onChange={pickDate}
               />
-              <Button variant="outline" size="icon" aria-label={`Next ${unit}`} onClick={() => pickDate(shiftDate(shownDate, step))}>
+              <Button variant="outline" size="icon" aria-label={`Next ${unit}`} onClick={() => pickDate(shiftDate(date, step))}>
                 <ChevronRight size={17} />
               </Button>
             </div>
@@ -310,13 +306,13 @@ export function Dashboard() {
       <SupplementsDialog open={supplementsOpen} onOpenChange={setSupplementsOpen} token={token} />
       <WearablesDialog open={wearablesOpen} onOpenChange={setWearablesOpen} connection={googleHealth} />
       <ConnectionDialog open={connectionOpen} onOpenChange={setConnectionOpen} token={token} onConnect={connect} onDisconnect={disconnect} />
-      <LogFoodDialog open={logOpen} onOpenChange={setLogOpen} token={token} date={shownDate} isToday={isShownToday} pending={createMutation.isPending} onSave={saveFood} onConnect={() => { setLogOpen(false); setConnectionOpen(true); }} />
+      <LogFoodDialog open={logOpen} onOpenChange={setLogOpen} token={token} date={date} isToday={isToday} pending={createMutation.isPending} onSave={saveFood} onConnect={() => { setLogOpen(false); setConnectionOpen(true); }} />
       <EditFoodDialog token={token} date={date} entryId={editingId} onClose={() => setEditingId(null)} />
       <SaveMealDialog token={token} date={date} selection={mealSelection} onClose={() => setMealSelection(null)} />
-      <WaterDialog open={recordDialog === "water"} onOpenChange={(open) => setRecordDialog(open ? "water" : null)} date={shownDate} pending={water.pending} onSave={(input) => water.add(input, () => setRecordDialog(null))} />
-      <WorkoutDialog open={recordDialog === "workout"} onOpenChange={(open) => setRecordDialog(open ? "workout" : null)} date={shownDate} pending={journal.create.isPending} onSave={(input) => saveRecord({ path: recordPaths.workout, input }, "Workout")} />
-      <SleepDialog open={recordDialog === "sleep"} onOpenChange={(open) => setRecordDialog(open ? "sleep" : null)} date={shownDate} pending={journal.create.isPending} onSave={(input) => saveRecord({ path: recordPaths.sleep, input }, "Sleep")} />
-      <MeasurementDialog open={recordDialog === "measurement"} onOpenChange={(open) => setRecordDialog(open ? "measurement" : null)} date={shownDate} pending={journal.create.isPending} onSave={(input) => saveRecord({ path: recordPaths.measurement, input }, "Measurement")} />
+      <WaterDialog open={recordDialog === "water"} onOpenChange={(open) => setRecordDialog(open ? "water" : null)} date={date} pending={water.pending} onSave={(input) => water.add(input, () => setRecordDialog(null))} />
+      <WorkoutDialog open={recordDialog === "workout"} onOpenChange={(open) => setRecordDialog(open ? "workout" : null)} date={date} pending={journal.create.isPending} onSave={(input) => saveRecord({ path: recordPaths.workout, input }, "Workout")} />
+      <SleepDialog open={recordDialog === "sleep"} onOpenChange={(open) => setRecordDialog(open ? "sleep" : null)} date={date} pending={journal.create.isPending} onSave={(input) => saveRecord({ path: recordPaths.sleep, input }, "Sleep")} />
+      <MeasurementDialog open={recordDialog === "measurement"} onOpenChange={(open) => setRecordDialog(open ? "measurement" : null)} date={date} pending={journal.create.isPending} onSave={(input) => saveRecord({ path: recordPaths.measurement, input }, "Measurement")} />
     </div>
     </dashboardPageContext.Provider>
   );

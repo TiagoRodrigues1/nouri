@@ -9,7 +9,7 @@ type PendingRepeat = { entry: FoodEntry; date: string; input: RepeatInput };
 // Logs the same food and amount again today at the current time, whichever day is on screen.
 export function useLogAgain(token: string, shownDate: string) {
   const mutation = useIdempotentWrite<PendingRepeat>(token, (pending, key) => repeatFood(token, key, pending.entry, pending.input), {
-    refresh: () => queryRefresh.food,
+    refresh: queryRefresh.food,
     success: (pending) => (pending.date === shownDate ? "Food added to your log." : "Food added to today's log."),
     signature: (pending) => JSON.stringify([pending.entry.id, pending.input]),
   });

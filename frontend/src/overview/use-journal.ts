@@ -9,13 +9,13 @@ type PendingDelete = { path: RecordPath; label: string; id: string; revision: nu
 
 export function useJournal(token: string) {
   const create = useIdempotentWrite<PendingRecord>(token, (record, key) => record.path === recordPaths.photo ? createPhoto(token, key, record.input) : createRecord(token, key, record), {
-    refresh: (record) => recordQueryRefresh[record.path],
+    refreshFor: (record) => recordQueryRefresh[record.path],
     success: (record) => `${record.label} saved.`,
     signature: (record) => record.signature,
   });
 
   const remove = useIdempotentDelete<PendingDelete>(token, (record, key) => deleteRecord(token, record.path, record, key), {
-    refresh: (record) => recordQueryRefresh[record.path],
+    refreshFor: (record) => recordQueryRefresh[record.path],
     success: (record) => `${record.label} removed.`,
   });
 

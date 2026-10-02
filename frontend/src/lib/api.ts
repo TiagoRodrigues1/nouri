@@ -6,6 +6,8 @@ import type { MeasurementInput } from "../../../src/measurements/contract";
 import type { SleepInput } from "../../../src/sleep/contract";
 import type { IntakeInput } from "../../../src/supplements/contract";
 import type { WorkoutInput } from "../../../src/workouts/contract";
+import { workoutSummarySchema } from "../../../src/workouts/contract";
+import type { WorkoutSummary } from "../../../src/workouts/contract";
 import { dashboardSchema } from "../../../src/dashboard/contract";
 import type { Dashboard } from "../../../src/dashboard/contract";
 import { daySchema } from "../../../src/days/contract";
@@ -171,6 +173,10 @@ export async function getReview(token: string, date: string): Promise<Review> {
 
 export async function getOverview(token: string, date: string): Promise<Overview> {
   return request(token, `/v1/overview/${date}`, overviewSchema);
+}
+
+export async function getWorkoutSummary(token: string, date: string): Promise<WorkoutSummary> {
+  return request(token, `${recordPaths.workout}/summary/${date}`, workoutSummarySchema);
 }
 
 export async function createRecord(token: string, key: string, command: RecordCommand): Promise<void> {
