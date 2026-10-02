@@ -73,7 +73,7 @@ type TargetsDialogProps = { open: boolean; onOpenChange: (open: boolean) => void
 export function TargetsDialog({ open, onOpenChange }: TargetsDialogProps) {
   // Changes take effect today, so the form edits and saves the set in force on today's date.
   const today = localDate(new Date());
-  const query = useTargetsQuery(today);
+  const query = useTargetsQuery(today, open);
   // Saving replaces the whole set, so the form waits for the saved targets rather than seeding from defaults.
   const targets = query.data?.targets;
   const status = targets ? null : queryStatus(query, "Loading your targets…");

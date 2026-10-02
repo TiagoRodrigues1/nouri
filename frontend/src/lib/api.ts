@@ -196,8 +196,8 @@ export async function deleteRecord(path: RecordPath, entry: { id: string; revisi
 }
 
 // Images need the session token, so the page fetches them instead of pointing an <img> at the API.
-export async function getPhotoImage(id: string): Promise<Blob> {
-  const response = await authorized(`${recordPaths.photo}/${encodeURIComponent(id)}/image`);
+export async function getPhotoImage(id: string, size: "image" | "thumbnail"): Promise<Blob> {
+  const response = await authorized(`${recordPaths.photo}/${encodeURIComponent(id)}/${size}`);
 
   if (!response.ok) throw new Error(`Could not load photo (${response.status}).`);
 

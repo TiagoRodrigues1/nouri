@@ -29,7 +29,7 @@ type SupplementsDialogProps = { open: boolean; onOpenChange: (open: boolean) => 
 export function SupplementsDialog({ open, onOpenChange }: SupplementsDialogProps) {
   // Changes take effect today, so the form edits and saves the list in force on today's date.
   const today = localDate(new Date());
-  const query = useSupplementStack(today);
+  const query = useSupplementStack(today, open);
   const supplements = query.data?.supplements;
   const status = supplements ? null : queryStatus(query, "Loading your supplements…");
 

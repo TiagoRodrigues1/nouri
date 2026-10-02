@@ -120,6 +120,7 @@ export const progressPhotos = pgTable("progress_photos", {
   contentType: text("content_type").$type<PhotoType>().notNull(),
   byteSize: integer("byte_size").notNull(),
   image: bytea("image").notNull(),
+  thumbnail: bytea("thumbnail"),
 }, (table) => [activeDayIndex("progress_photos", table)]);
 
 export const dashboardLayouts = pgTable("dashboard_layouts", {

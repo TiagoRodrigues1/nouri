@@ -95,7 +95,7 @@ export function Dashboard() {
 
   const water = useWater();
 
-  const googleHealth = useConnection("google-health");
+  const googleHealth = useConnection("google-health", wearablesOpen);
 
   const foodDelete = useIdempotentDelete<FoodEntry>((entry, key) => deleteFood(entry, key), {
     refresh: queryRefresh.food, success: () => "Food removed from your log.",
@@ -130,7 +130,7 @@ export function Dashboard() {
   }
 
   function saveRecord(command: RecordCommand, label: string) {
-    journal.create.mutate({ ...command, label, signature: `${command.path} ${JSON.stringify(command.input)}` }, { onSuccess: () => setRecordDialog(null) });
+    journal.create.mutate({ ...command, label, signature: `${command.path} ${JSON.stringify(command.input)}`, onSaved: () => setRecordDialog(null) });
   }
 
   return (
