@@ -19,6 +19,7 @@ This index is the maintained list of Nouri's user paths. Read the relevant file 
 
 ## Features
 
+- [Account access](auth.md): signed-out page, test-user sign-in, sign-out, and protected API.
 - [Search foods](search.md): Ciqual search results, no-match state, attribution.
 - [Log a catalog food](catalog-log.md): search, select, set grams, save and read back.
 - [Log a manual food](manual-log.md): manual tab, nutrition fields, save and read back.

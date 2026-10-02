@@ -4,7 +4,7 @@ The sidebar's `Wearables` item opens a dialog with a `Google Health` panel. Its 
 
 The default `control-nouri launch` run has no Google settings. There, check that the dialog reads `Not set up` and explains that settings go in `.env`.
 
-To drive Connect without a Google account, start the fixture-backed app on the run's database. This replaces only Google's HTTP boundary:
+To drive Connect without a Google account, start the fixture-backed app on the run's database. This replaces only Google's HTTP boundary. The checked-in fixture records are dated September 24, 2026, and sync reads only the previous 30 days. The import assertions below require those records to remain in the sync window. Once they age out, refresh the fixture dates before using this recipe to judge import behavior.
 
 ```sh
 source "/tmp/nouri-verify-$RUN_ID/env"
