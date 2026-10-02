@@ -12,8 +12,8 @@ type PendingIntake = { supplement: Supplement; date: string; time: string };
 const refresh = queryRefresh.supplements;
 
 // Ticks supplements off on the day on screen. The server fills in name and dose from that day's stack.
-export function useSupplements(token: string, date: string) {
-  const create = useIdempotentWrite<PendingIntake>(token, (pending, key) => createRecord(token, key, {
+export function useSupplements(date: string) {
+  const create = useIdempotentWrite<PendingIntake>((pending, key) => createRecord(key, {
     path: recordPaths.supplementIntake,
     input: { occurredAt: occurredAt(pending.date, pending.time), timeZone, supplementId: pending.supplement.id },
   }), {
@@ -21,7 +21,7 @@ export function useSupplements(token: string, date: string) {
     signature: (pending) => JSON.stringify([pending.date, pending.time, pending.supplement.id]),
   });
 
-  const remove = useIdempotentDelete<SupplementIntake>(token, (intake, key) => deleteRecord(token, recordPaths.supplementIntake, intake, key), {
+  const remove = useIdempotentDelete<SupplementIntake>((intake, key) => deleteRecord(recordPaths.supplementIntake, intake, key), {
     refresh, success: (intake) => `${intake.name} unmarked.`,
   });
 

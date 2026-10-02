@@ -54,7 +54,7 @@ Imported sleep and workouts are outside the manual delete path, so deleting thei
 - CSRF: `POST /v1/integrations/{provider}/authorizations` is bearer-protected. It stores a one-time state (hashed, 10-minute lifetime) and sets the same value in an `HttpOnly; SameSite=Lax` cookie scoped to the callback path. The callback accepts only a state that matches the cookie and an unexpired stored row, and it deletes the row on use. A link crafted by someone else lacks the cookie and connects nothing.
 - The callback sends `Referrer-Policy: no-referrer` and redirects to `/overview?connect=<provider>&result=<outcome>`. The page reports the outcome and removes the parameters.
 - If the person unticks sleep on Google's consent screen, Nouri revokes the partial grant and reports `missing-scope`.
-- Nouri keeps its single-user model: the callback connects the configured `API_USER_ID`.
+- The callback arrives by browser redirect without a session token. It connects the user who stored the matching state, and only if the cookie proves this browser started that sign-in.
 
 ## Failure handling
 

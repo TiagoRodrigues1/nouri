@@ -17,10 +17,9 @@ type GaugeProps = {
   value: number | null | undefined;
   target: number;
   color: string;
-  connected: boolean;
 };
 
-export function Gauge({ icon, label, unit, value, target, color, connected }: GaugeProps) {
+export function Gauge({ icon, label, unit, value, target, color }: GaugeProps) {
   return (
     <div {...stylex.props(styles.gauge)}>
       <div {...stylex.props(styles.ringWrap)}>
@@ -28,7 +27,7 @@ export function Gauge({ icon, label, unit, value, target, color, connected }: Ga
         <span {...stylex.props(styles.ringCenter, styles.gaugeIcon)}>{icon}</span>
       </div>
       <span {...stylex.props(styles.gaugeValue)}>
-        {connected ? format(value) : "—"}
+        {format(value)}
         <span {...stylex.props(styles.gaugeUnit)}>{unit}</span>
       </span>
       <span {...stylex.props(styles.gaugeLabel)}>
@@ -139,8 +138,8 @@ export function MixCard({ kcal, proteinG, carbsG, fatG }: MixProps) {
 }
 
 // The Move ring counts the estimates that were recorded; a workout without one adds nothing.
-export function ActivityCard({ token, date, targets }: { token: string; date: string; targets: Targets }) {
-  const sports = useQuery(workoutSummaryQueryOptions(token, date)).data;
+export function ActivityCard({ date, targets }: { date: string; targets: Targets }) {
+  const sports = useQuery(workoutSummaryQueryOptions(date)).data;
 
   const rings: ActivityRing[] = [
     { label: "Move", value: sports?.burnedKcal ?? 0, goal: targets.burnedKcal, unit: "kcal", color: colors.move },
@@ -244,16 +243,13 @@ export function LargestCard({ entries, totalKcal }: { entries: FoodEntry[]; tota
   );
 }
 
-function waterProgress(connected: boolean, totalMl: number, goalMl: number): string {
-  if (!connected) return "Connect to track your water";
-
+function waterProgress(totalMl: number, goalMl: number): string {
   if (totalMl >= goalMl) return "Goal reached. Nice work!";
 
   return `${Math.round((totalMl / goalMl) * 100)}% of your goal · ${format(goalMl - totalMl)} ml to go`;
 }
 
 type WaterCardProps = {
-  connected: boolean;
   goalMl: number;
   entries: WaterEntry[];
   totalMl: number | null | undefined;
@@ -261,7 +257,7 @@ type WaterCardProps = {
   onDelete: (entry: WaterEntry) => void;
 };
 
-export function WaterCard({ connected, goalMl, entries, totalMl, pending, onDelete }: WaterCardProps) {
+export function WaterCard({ goalMl, entries, totalMl, pending, onDelete }: WaterCardProps) {
   return (
     <section {...stylex.props(styles.card, styles.wide)} aria-label="Water">
       <div {...stylex.props(styles.cardHead)}>
@@ -274,9 +270,9 @@ export function WaterCard({ connected, goalMl, entries, totalMl, pending, onDele
         <Bottle share={(totalMl ?? 0) / goalMl} />
         <div {...stylex.props(styles.waterControls)}>
           <div>
-            <span {...stylex.props(styles.bigValue)}>{connected ? format(totalMl ?? 0) : "—"}</span>
+            <span {...stylex.props(styles.bigValue)}>{format(totalMl ?? 0)}</span>
             <span {...stylex.props(styles.bigUnit)}>ml</span>
-            <p {...stylex.props(styles.caption, styles.waterCaption)}>{waterProgress(connected, totalMl ?? 0, goalMl)}</p>
+            <p {...stylex.props(styles.caption, styles.waterCaption)}>{waterProgress(totalMl ?? 0, goalMl)}</p>
           </div>
           {/* The list keeps a fixed height and scrolls, so logging drinks never resizes the card. */}
           <ul {...stylex.props(styles.waterList)} aria-label="Logged water">

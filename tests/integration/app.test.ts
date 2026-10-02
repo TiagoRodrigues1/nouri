@@ -1,10 +1,10 @@
-import { createHarness } from "../harness.js";
+import { createHarness, publishableKey } from "../harness.js";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { test } from "node:test";
 import type { FoodInput } from "../../src/food/contract.js";
 
-const { app, otherApp, client, token, userId, headers, setup, cleanup } = createHarness();
+const { app, otherApp, client, userId, headers, signedInAs, setup, cleanup } = createHarness();
 
 const first: FoodInput = {
   occurredAt: "2026-09-24T23:30:00Z",
@@ -37,8 +37,8 @@ void test("food CRUD, stable retries, day totals, and concurrent writes", async 
     assert.equal(page.status, 200);
     const pageHtml = await page.text();
     assert.match(pageHtml, /<div id="root"><\/div>/);
-    assert.ok(pageHtml.includes(`<meta name="nouri-api-token" content="${token}" />`));
-    assert.match(page.headers.get("Content-Security-Policy") ?? "", /connect-src 'self'/);
+    assert.ok(pageHtml.includes(`<meta name="nouri-clerk-publishable-key" content="${publishableKey}" />`));
+    assert.match(page.headers.get("Content-Security-Policy") ?? "", /connect-src 'self' https:\/\/example\.clerk\.accounts\.dev;/);
 
     const scriptPath = pageHtml.match(/src="(\/assets\/[^" ]+\.js)"/)?.[1];
     assert.ok(scriptPath);
@@ -65,6 +65,14 @@ void test("food CRUD, stable retries, day totals, and concurrent writes", async 
 
     const unauthorized = await app.request("/v1/days/2026-09-25");
     assert.equal(unauthorized.status, 401);
+
+    // Someone new gets their own user on the first request, once, however many requests race to create it.
+    const newcomer = signedInAs("user_newcomer");
+    const visits = await Promise.all([1, 2, 3].map(async () => newcomer.request("/v1/days/2026-09-25", { headers })));
+    assert.deepEqual(visits.map((visit) => visit.status), [200, 200, 200]);
+    const newcomers = await client`SELECT id FROM users WHERE clerk_user_id = 'user_newcomer'`;
+    assert.equal(newcomers.length, 1);
+    assert.notEqual(newcomers[0]?.id, userId);
 
     const search = await app.request("/v1/foods/search?q=apple&locale=en", { headers });
     assert.equal(search.status, 200);

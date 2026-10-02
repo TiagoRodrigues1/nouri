@@ -13,6 +13,16 @@ fi
 runtime="/tmp/nouri-verify-${run_id}"
 container="nouri-verify-${run_id}"
 
+# Clerk keys come from the repository's .env and must belong to a development instance.
+clerk_setting() { sed -n "s/^$1=//p" "$root/.env" 2>/dev/null | tail -1; }
+clerk_secret=$(clerk_setting CLERK_SECRET_KEY)
+clerk_api() {
+  local args=(-fsS -X "$1" "https://api.clerk.com/v1$2" -H "Authorization: Bearer $clerk_secret" -H 'Content-Type: application/json')
+  if [[ -n ${3:-} ]]; then args+=(-d "$3"); fi
+  curl "${args[@]}"
+}
+json_field() { python3 -c "import json,sys; print(json.load(sys.stdin)['$1'])"; }
+
 case $action in
   browser)
     [[ -d $runtime ]] || { echo 'Run metadata missing.' >&2; exit 1; }
@@ -30,6 +40,11 @@ case $action in
       echo 'The built page is missing or older than the frontend sources. Run `pnpm build:web` first.' >&2
       exit 1
     fi
+    clerk_publishable=$(clerk_setting CLERK_PUBLISHABLE_KEY)
+    if [[ $clerk_secret != sk_test_* || $clerk_publishable != pk_test_* ]]; then
+      echo 'Set CLERK_SECRET_KEY and CLERK_PUBLISHABLE_KEY in .env to a Clerk development instance (sk_test_, pk_test_).' >&2
+      exit 1
+    fi
     mkdir -m 700 "$runtime"
     trap '"$0" cleanup "$run_id" >/dev/null || true' ERR
     docker run -d --rm --name "$container" \
@@ -44,18 +59,20 @@ case $action in
     db_url="postgresql://nouri:nouri@127.0.0.1:${db_port}/nouri"
     (cd "$root" && DATABASE_URL="$db_url" pnpm db:migrate) > "$runtime/migrate.log" 2>&1
     app_port=$(python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')
-    token=$(openssl rand -hex 32)
-    user_id=$(python3 -c 'import uuid; print(uuid.uuid4())')
+    # Each run signs in as its own throwaway Clerk user; +clerk_test addresses never send mail.
+    clerk_user=$(clerk_api POST /users "{\"email_address\":[\"nouri-${run_id,,}+clerk_test@example.com\"],\"skip_password_requirement\":true}" | json_field id)
+    echo "$clerk_user" > "$runtime/clerk-user-id"
     umask 077
     cat > "$runtime/env" <<EOF
 export DATABASE_URL='$db_url'
-export API_TOKEN='$token'
-export API_USER_ID='$user_id'
+export CLERK_SECRET_KEY='$clerk_secret'
+export CLERK_PUBLISHABLE_KEY='$clerk_publishable'
+export CLERK_AUTHORIZED_PARTIES='http://127.0.0.1:$app_port'
 export PORT='$app_port'
 export NOURI_RUN_ID='$run_id'
 export NOURI_BASE_URL='http://127.0.0.1:$app_port'
 EOF
-    (cd "$root"; setsid env DATABASE_URL="$db_url" API_TOKEN="$token" API_USER_ID="$user_id" PORT="$app_port" node --import tsx src/server.ts > "$runtime/server.log" 2>&1 & echo $! > "$runtime/app-pid")
+    (cd "$root"; source "$runtime/env"; setsid node --import tsx src/server.ts > "$runtime/server.log" 2>&1 & echo $! > "$runtime/app-pid")
     for _ in {1..60}; do
       if curl -fsS "http://127.0.0.1:$app_port/openapi.json" >/dev/null 2>&1; then break; fi
       sleep 1
@@ -75,8 +92,23 @@ EOF
     pg_isready -h 127.0.0.1 -p "$db_port" -U nouri >/dev/null
     curl -fsS "$NOURI_BASE_URL/" | grep -F 'Nouri · Food journal' >/dev/null
     curl -fsS "$NOURI_BASE_URL/openapi.json" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["info"]["title"] == "Nouri API" and d["info"]["version"] == "1.0.0"'
-    curl -fsS -H "Authorization: Bearer $API_TOKEN" "$NOURI_BASE_URL/v1/days/2026-09-25" | python3 -c 'import json,sys; assert json.load(sys.stdin)["date"] == "2026-09-25"'
+    # Signing in happens in the browser, so the API check here only proves it refuses anonymous requests.
+    [[ $(curl -s -o /dev/null -w '%{http_code}' "$NOURI_BASE_URL/v1/days/2026-09-25") == 401 ]] || { echo 'API answered an unauthenticated request.' >&2; exit 1; }
     echo "Healthy Nouri run $run_id at $NOURI_BASE_URL (app PID $app_pid, database $container)."
+    ;;
+  readback)
+    # GETs an API path with the signed-in browser's session. Clerk only accepts tokens minted for the page's origin, so they come from the page.
+    path=${3:?Usage: $0 readback RUN_ID /v1/PATH}
+    [[ $path =~ ^/v1/[A-Za-z0-9/_.-]+$ ]] || { echo 'Path must be a /v1 API path.' >&2; exit 2; }
+    "$0" browser "$run_id" eval "async () => JSON.stringify(await (await fetch('$path', { headers: { Authorization: 'Bearer ' + await window.Clerk.session.getToken() } })).json())"
+    ;;
+  sign-in-url)
+    # Opening this URL signs the browser in as the run's user through Clerk's sign-in token flow.
+    [[ -f $runtime/env ]] || { echo 'Run metadata missing.' >&2; exit 1; }
+    # shellcheck disable=SC1090
+    source "$runtime/env"
+    ticket=$(clerk_api POST /sign_in_tokens "{\"user_id\":\"$(cat "$runtime/clerk-user-id")\",\"expires_in_seconds\":300}" | json_field token)
+    echo "$NOURI_BASE_URL/?__clerk_ticket=$ticket"
     ;;
   cleanup)
     if [[ -d $runtime ]]; then
@@ -91,11 +123,14 @@ EOF
     if [[ -f $runtime/container-id ]] && [[ $(docker inspect -f '{{.Id}}' "$container" 2>/dev/null || true) == "$(cat "$runtime/container-id")" ]]; then
       docker rm -f "$container" >/dev/null
     fi
+    if [[ -f $runtime/clerk-user-id ]]; then
+      clerk_api DELETE "/users/$(cat "$runtime/clerk-user-id")" >/dev/null || echo 'Could not delete the Clerk test user; remove it in the Clerk dashboard.' >&2
+    fi
     rm -rf -- "$runtime"
     echo "Cleaned up run $run_id. Evidence is untouched."
     ;;
   *)
-    echo "Usage: $0 {launch|doctor|cleanup} RUN_ID | $0 browser RUN_ID PLAYWRIGHT_COMMAND [ARGS...]" >&2
+    echo "Usage: $0 {launch|doctor|sign-in-url|cleanup} RUN_ID | $0 readback RUN_ID /v1/PATH | $0 browser RUN_ID PLAYWRIGHT_COMMAND [ARGS...]" >&2
     exit 2
     ;;
 esac

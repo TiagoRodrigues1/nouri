@@ -14,15 +14,15 @@ import { queryStatus } from "./query-status";
 
 // Logs a saved meal at the dialog's date and time, with the amounts adjusted for this time only,
 // or edits the meal's name and usual amounts in place of the log form.
-export function SavedMealsTab({ token, date, time, onLogged }: { token: string; date: string; time: string; onLogged: () => void }) {
-  const query = useSavedMeals(token);
+export function SavedMealsTab({ date, time, onLogged }: { date: string; time: string; onLogged: () => void }) {
+  const query = useSavedMeals();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
-  const log = useLogMeal(token, onLogged);
-  const edit = useEditMeal(token, () => setEditing(false));
-  const remove = useDeleteMeal(token);
+  const log = useLogMeal(onLogged);
+  const edit = useEditMeal(() => setEditing(false));
+  const remove = useDeleteMeal();
   const meals = query.data;
-  const status = queryStatus(token, query, { disconnected: "Connect your food log to use saved meals.", loading: "Loading your saved meals…" });
+  const status = queryStatus(query, "Loading your saved meals…");
 
   if (status || !meals) return <p {...stylex.props(styles.searchMessage)}>{status}</p>;
 

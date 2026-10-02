@@ -16,10 +16,10 @@ import { useSaveMeal } from "./lib/use-saved-meals";
 export type MealSelection = { entryIds: string[]; name: string };
 
 // Offers every food of the day, with the chosen ones ticked, so a meal can gather foods from several times.
-export function SaveMealDialog({ token, date, selection, onClose }: { token: string; date: string; selection: MealSelection | null; onClose: () => void }) {
-  const day = useQuery({ ...dayQueryOptions(token, date), enabled: Boolean(token) && selection !== null });
+export function SaveMealDialog({ date, selection, onClose }: { date: string; selection: MealSelection | null; onClose: () => void }) {
+  const day = useQuery({ ...dayQueryOptions(date), enabled: selection !== null });
   const entries = day.data?.food.entries ?? [];
-  const save = useSaveMeal(token, onClose);
+  const save = useSaveMeal(onClose);
 
   return (
     <Dialog open={selection !== null && entries.length > 0} onOpenChange={(open) => { if (!open) onClose(); }}>

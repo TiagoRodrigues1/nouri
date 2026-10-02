@@ -10,7 +10,7 @@ type Refresh<Input> =
 
 // One key per distinct request, reused while it is retried. Serves creates and edits alike.
 export function useIdempotentWrite<Input>(
-  token: string, send: (input: Input, key: string) => Promise<object | void>,
+  send: (input: Input, key: string) => Promise<object | void>,
   options: Refresh<Input> & { success?: (input: Input) => string; onSuccess?: () => void; signature?: (input: Input) => string },
 ) {
   const client = useQueryClient();
@@ -19,7 +19,7 @@ export function useIdempotentWrite<Input>(
   const refresh = (input: Input) => {
     const names = "refreshFor" in options ? options.refreshFor(input) : options.refresh;
 
-    return Promise.all(names.map((name) => client.invalidateQueries({ queryKey: [name, token] })));
+    return Promise.all(names.map((name) => client.invalidateQueries({ queryKey: [name] })));
   };
 
   return useMutation({
@@ -50,10 +50,10 @@ export function useIdempotentWrite<Input>(
 }
 
 export function useIdempotentDelete<Entry extends { id: string; revision: number }>(
-  token: string, send: (entry: Entry, key: string) => Promise<object | void>,
+  send: (entry: Entry, key: string) => Promise<object | void>,
   options: Refresh<Entry> & { success?: (entry: Entry) => string },
 ) {
-  return useIdempotentWrite(token, send, {
+  return useIdempotentWrite(send, {
     ...options,
     signature: (entry) => JSON.stringify([entry.id, entry.revision]),
   });

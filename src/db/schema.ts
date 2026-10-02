@@ -170,3 +170,9 @@ export const mutationReceipts = pgTable("mutation_receipts", {
   body: jsonb("body").$type<unknown>(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [primaryKey({ columns: [table.userId, table.key] })]);
+
+export const users = pgTable("users", {
+  id: uuid("id").primaryKey(),
+  clerkUserId: text("clerk_user_id").notNull().unique(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});

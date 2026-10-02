@@ -5,7 +5,7 @@ This index is the maintained list of Nouri's user paths. Read the relevant file 
 ## Baseline preconditions
 
 - Launch a fresh run with `control-nouri launch RUN_ID`, source its `/tmp/nouri-verify-RUN_ID/env`, and run `control-nouri doctor RUN_ID`.
-- Open `$NOURI_BASE_URL/` in the run's own `"$CONTROL" browser "$RUN_ID"` session.
+- Sign in by opening `$("$CONTROL" sign-in-url "$RUN_ID")` in the run's own `"$CONTROL" browser "$RUN_ID"` session. The page shows Clerk's sign-in until then.
 - Start from an empty database and open the journal page.
 - The header date is a shadcn date picker, not a text input. Choose the `Choose log date` button (`Choose the last day of the week` on Review), use `Go to the Previous Month` or `Go to the Next Month` if needed, then choose the day button, named like `Friday, September 25th, 2026`.
 - Keep screenshots and redacted snapshots in `/tmp/nouri-verification-evidence/$RUN_ID`.
@@ -15,7 +15,7 @@ This index is the maintained list of Nouri's user paths. Read the relevant file 
 - Capture the page before the action and after the visible result. For mutations, capture the relevant day, Overview, or dashboard GET as an independent readback.
 - Cover every entry point listed for the selected behavior, or report which one was skipped and why.
 - A screenshot of a success notice alone is insufficient; show the food row or changed totals.
-- Never save the API token, authorization header, or browser storage in evidence.
+- Never save session tokens, sign-in URLs, authorization headers, cookies, or browser storage in evidence.
 
 ## Features
 

@@ -6,22 +6,26 @@ The first runnable slice records food and water entries and returns a daily summ
 
 Start the local PostgreSQL container with `docker compose up -d db`. Its data persists in the `nouri_postgres-data` Docker volume. Stop it with `docker compose down` when you are done. The container binds only to localhost and uses the development credentials in `compose.yaml`.
 
-Copy `.env.example` to `.env` and set a bearer `API_TOKEN` of at least 32 characters. The app and migration commands load `.env` automatically. Shell environment variables take precedence over values in the file.
+Nouri signs people in with [Clerk](https://clerk.com). Create a Clerk application, copy `.env.example` to `.env`, and set `CLERK_SECRET_KEY` and `CLERK_PUBLISHABLE_KEY` from the dashboard's API keys page. Use a development instance locally. `CLERK_AUTHORIZED_PARTIES` lists the origins that serve the web app; the server refuses session tokens minted for any other site, so add your production origin when you deploy. The app and migration commands load `.env` automatically. Shell environment variables take precedence over values in the file.
 
 ```sh
 pnpm install
 docker compose up -d db
 cp .env.example .env
-# Edit API_TOKEN in .env before starting the server.
+# Set the Clerk keys in .env before starting the server.
 pnpm db:migrate
 pnpm dev
 ```
 
 The root `package.json` contains the API dependencies and commands. `frontend/package.json` contains the web app dependencies and its Vite commands. `pnpm install` at the root installs both packages through `pnpm-workspace.yaml`; they share one lockfile. Run `pnpm --dir frontend dev` or `pnpm --dir frontend build` when working on the web app alone.
 
-The API listens on `127.0.0.1:3000` by default. `PORT` and `HOST` change it. Keep `HOST` on a loopback address: the web page includes `API_TOKEN`, so anyone who can load the page can use the API. The OpenAPI document is at `/openapi.json`.
+The API listens on `127.0.0.1:3000` by default. `PORT` and `HOST` change it. The OpenAPI document is at `/openapi.json`.
 
-Open `http://127.0.0.1:5173/` while developing the frontend. `pnpm dev` starts the API and Vite together. Vite updates the page when frontend files change and proxies `/v1` requests to the API on port 3000. Both servers add `API_TOKEN` from `.env` to their pages, so the app connects without asking for it.
+Open `http://127.0.0.1:5173/` while developing the frontend. `pnpm dev` starts the API and Vite together. Vite updates the page when frontend files change and proxies `/v1` requests to the API on port 3000. Both servers add `CLERK_PUBLISHABLE_KEY` from `.env` to their pages, so one build works with any Clerk instance. The page shows Clerk's sign-in and sign-up until someone signs in.
+
+Every `/v1` request needs a Clerk session token as a bearer token. The server creates a row in `users` the first time it sees a Clerk user, and every record belongs to that row's `id`. Session tokens expire after about a minute. For the `curl` examples below, sign in to the page and run `await Clerk.session.getToken()` in the browser console, then `export NOURI_TOKEN=<token>`.
+
+Data logged before sign-in existed belongs to the old `API_USER_ID`. To keep it, link that id to your Clerk user (`user_…`, shown in the Clerk dashboard) before you first sign in: `INSERT INTO users (id, clerk_user_id) VALUES ('<old API_USER_ID>', '<clerk user id>');`.
 
 The built page is also available at `http://localhost:3000/`. Run `pnpm build:web` before starting the API alone with `pnpm dev:api` or running the integration test.
 
@@ -31,16 +35,16 @@ Food search uses the pinned [Ciqual 2025 dataset](https://doi.org/10.57745/RDMHW
 
 ```sh
 curl -X POST http://localhost:3000/v1/food-entries \
-  -H "Authorization: Bearer $API_TOKEN" \
+  -H "Authorization: Bearer $NOURI_TOKEN" \
   -H 'Idempotency-Key: create-oats-1' \
   -H 'Content-Type: application/json' \
   -d '{"occurredAt":"2026-09-24T12:30:00Z","timeZone":"Europe/Lisbon","food":{"name":"Oats","quantity":{"amount":80,"unit":"g"},"nutrients":{"kcal":311,"proteinG":13,"carbsG":53,"fatG":5}}}'
 
 curl http://localhost:3000/v1/days/2026-09-24 \
-  -H "Authorization: Bearer $API_TOKEN"
+  -H "Authorization: Bearer $NOURI_TOKEN"
 
 curl 'http://localhost:3000/v1/foods/search?q=apple&locale=en' \
-  -H "Authorization: Bearer $API_TOKEN"
+  -H "Authorization: Bearer $NOURI_TOKEN"
 ```
 
 Choose a search result and send its `ref` with a quantity in grams. The server calculates and stores the portion nutrients, including `null` for missing values.
@@ -67,7 +71,7 @@ Water uses the same retry and revision rules. Log a drink in whole millilitres, 
 
 ```sh
 curl -X POST http://localhost:3000/v1/water-entries \
-  -H "Authorization: Bearer $API_TOKEN" \
+  -H "Authorization: Bearer $NOURI_TOKEN" \
   -H 'Idempotency-Key: water-1' \
   -H 'Content-Type: application/json' \
   -d '{"occurredAt":"2026-09-24T09:00:00Z","timeZone":"Europe/Lisbon","volumeMl":250}'
@@ -91,7 +95,7 @@ Upload a progress photo as multipart form data with `file`, `occurredAt`, and `t
 
 ```sh
 curl -X POST http://localhost:3000/v1/progress-photos \
-  -H "Authorization: Bearer $API_TOKEN" \
+  -H "Authorization: Bearer $NOURI_TOKEN" \
   -H 'Idempotency-Key: photo-1' \
   -F file=@progress.jpg -F occurredAt=2026-09-24T08:00:00Z -F timeZone=Europe/Lisbon
 ```

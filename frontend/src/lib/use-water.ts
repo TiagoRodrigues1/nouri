@@ -6,24 +6,18 @@ import { queryRefresh } from "./query-refresh";
 
 type PendingWater = { input: WaterInput; signature: string };
 
-export function useWater(token: string, onConnect: () => void) {
+export function useWater() {
   const refresh = queryRefresh.water;
 
-  const create = useIdempotentWrite<PendingWater>(token, (pending, key) => createRecord(token, key, { path: recordPaths.water, input: pending.input }), {
+  const create = useIdempotentWrite<PendingWater>((pending, key) => createRecord(key, { path: recordPaths.water, input: pending.input }), {
     refresh, success: () => "Water added to your log.", signature: (pending) => pending.signature,
   });
 
-  const remove = useIdempotentDelete<WaterEntry>(token, (entry, key) => deleteRecord(token, recordPaths.water, entry, key), { refresh, success: () => "Water removed from your log." });
+  const remove = useIdempotentDelete<WaterEntry>((entry, key) => deleteRecord(recordPaths.water, entry, key), { refresh, success: () => "Water removed from your log." });
 
   return {
     pending: create.isPending || remove.isPending,
     add: (input: WaterInput, onSuccess: () => void) => {
-      if (!token) {
-        onConnect();
-
-        return;
-      }
-
       create.mutate({ input, signature: JSON.stringify(input) }, { onSuccess });
     },
     remove: (entry: WaterEntry) => remove.mutate(entry),

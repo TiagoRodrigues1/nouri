@@ -10,11 +10,11 @@ export default defineConfig(({ mode }) => ({
     stylex.vite({ useCSSLayers: { before: ["properties", "theme", "base", "components", "utilities"] }, dev: process.env.NODE_ENV === "development", runtimeInjection: false }),
     tailwindcss(),
     react(),
-    // Only the dev server gets the token; the API adds it to the built page at request time.
+    // Only the dev server needs this; the API adds the publishable key to the built page at request time.
     {
-      name: "nouri-api-token",
+      name: "nouri-clerk-publishable-key",
       apply: "serve",
-      transformIndexHtml: () => [{ tag: "meta", attrs: { name: "nouri-api-token", content: loadEnv(mode, fileURLToPath(new URL("../", import.meta.url)), "").API_TOKEN ?? "" }, injectTo: "head" }],
+      transformIndexHtml: () => [{ tag: "meta", attrs: { name: "nouri-clerk-publishable-key", content: loadEnv(mode, fileURLToPath(new URL("../", import.meta.url)), "").CLERK_PUBLISHABLE_KEY ?? "" }, injectTo: "head" }],
     },
   ],
   resolve: {
@@ -38,6 +38,7 @@ export default defineConfig(({ mode }) => ({
           groups: [
             { name: "react", test: /node_modules[\\/](react|react-dom|scheduler)[\\/]/ },
             { name: "tanstack", test: /node_modules[\\/]@tanstack[\\/]/ },
+            { name: "clerk", test: /node_modules[\\/]@clerk[\\/]/ },
             { name: "ui", test: /node_modules[\\/](@radix-ui|radix-ui|@floating-ui|react-remove-scroll|sonner|lucide-react|tailwind-merge)/ },
             { name: "zod", test: /node_modules[\\/]zod[\\/]/ },
             { name: "vendor", test: /node_modules[\\/]/ },

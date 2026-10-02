@@ -21,13 +21,13 @@ const amountLabels = { g: "Amount in grams", ml: "Amount in millilitres", servin
 
 // Reads the entry from the day's log, so a refresh after a failed save shows what is saved now,
 // and an entry deleted meanwhile closes the dialog.
-export function EditFoodDialog({ token, date, entryId, onClose }: { token: string; date: string; entryId: string | null; onClose: () => void }) {
-  const day = useQuery({ ...dayQueryOptions(token, date), enabled: Boolean(token) && entryId !== null });
+export function EditFoodDialog({ date, entryId, onClose }: { date: string; entryId: string | null; onClose: () => void }) {
+  const day = useQuery({ ...dayQueryOptions(date), enabled: entryId !== null });
   const entry = day.data?.food.entries.find((candidate) => candidate.id === entryId) ?? null;
 
   // Lives outside the keyed form, so a save survives the form restarting on a new revision.
   // The signature names the revision edited, so a retry reuses its key and a later edit gets a new one.
-  const save = useIdempotentWrite<PendingEdit>(token, (pending, key) => updateFood(token, key, pending.entry, pending.input), {
+  const save = useIdempotentWrite<PendingEdit>((pending, key) => updateFood(key, pending.entry, pending.input), {
     refresh: queryRefresh.food, success: () => "Food updated.", onSuccess: onClose,
     signature: (pending) => JSON.stringify([pending.entry.id, pending.entry.revision, pending.input]),
   });

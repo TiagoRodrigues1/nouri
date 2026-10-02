@@ -24,14 +24,14 @@ function draftFrom(supplements: Supplement[]): Draft {
   return supplements.map(({ dose, ...supplement }) => ({ ...supplement, amount: String(dose.amount), unit: dose.unit }));
 }
 
-type SupplementsDialogProps = { open: boolean; onOpenChange: (open: boolean) => void; token: string };
+type SupplementsDialogProps = { open: boolean; onOpenChange: (open: boolean) => void };
 
-export function SupplementsDialog({ open, onOpenChange, token }: SupplementsDialogProps) {
+export function SupplementsDialog({ open, onOpenChange }: SupplementsDialogProps) {
   // Changes take effect today, so the form edits and saves the list in force on today's date.
   const today = localDate(new Date());
-  const query = useSupplementStack(token, today);
+  const query = useSupplementStack(today);
   const supplements = query.data?.supplements;
-  const status = supplements ? null : queryStatus(token, query, { disconnected: "Connect your log to edit your supplements.", loading: "Loading your supplements…" });
+  const status = supplements ? null : queryStatus(query, "Loading your supplements…");
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -44,18 +44,18 @@ export function SupplementsDialog({ open, onOpenChange, token }: SupplementsDial
           <p {...stylex.props(query.isError ? formStyles.connectionError : formStyles.dialogDescription)} role={query.isError ? "alert" : undefined}>{status}</p>
         )}
         {/* Keyed by day, so a form left open past midnight restarts from the new day's list. */}
-        {supplements && <SupplementsForm key={today} token={token} date={today} supplements={supplements} onSaved={() => onOpenChange(false)} />}
+        {supplements && <SupplementsForm key={today} date={today} supplements={supplements} onSaved={() => onOpenChange(false)} />}
       </DialogContent>
     </Dialog>
   );
 }
 
 // Mounted only while the dialog is open, so each opening starts from the list in force today.
-function SupplementsForm({ token, date, supplements, onSaved }: { token: string; date: string; supplements: Supplement[]; onSaved: () => void }) {
+function SupplementsForm({ date, supplements, onSaved }: { date: string; supplements: Supplement[]; onSaved: () => void }) {
   const [draft, setDraft] = useState(() => draftFrom(supplements));
   const [invalid, setInvalid] = useState("");
   const { add, remove, rowProps, busy } = useExitingRows();
-  const save = useSaveSupplementStack(token, date);
+  const save = useSaveSupplementStack(date);
 
   function change(id: string, patch: Partial<Draft[number]>) {
     setDraft((current) => current.map((row) => (row.id === id ? { ...row, ...patch } : row)));
