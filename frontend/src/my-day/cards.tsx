@@ -6,7 +6,7 @@ import { Button } from "../components/ui/button";
 import { colors } from "../theme.stylex";
 import { styles } from "../my-day-styles";
 import { clock, entryHour } from "../lib/time";
-import { overviewQueryOptions } from "../lib/day-query";
+import { workoutSummaryQueryOptions } from "../lib/day-query";
 import { format, type FoodEntry, type Targets, type WaterEntry } from "../lib/api";
 import { ActivityRings, Bottle, Donut, Ring, type ActivityRing } from "./charts";
 
@@ -140,11 +140,10 @@ export function MixCard({ kcal, proteinG, carbsG, fatG }: MixProps) {
 
 // The Move ring counts the estimates that were recorded; a workout without one adds nothing.
 export function ActivityCard({ token, date, targets }: { token: string; date: string; targets: Targets }) {
-  const sports = useQuery(overviewQueryOptions(token, date)).data?.sports;
-  const burnedKcal = sports?.entries.reduce((sum, workout) => sum + (workout.energyKcal ?? 0), 0);
+  const sports = useQuery(workoutSummaryQueryOptions(token, date)).data;
 
   const rings: ActivityRing[] = [
-    { label: "Move", value: burnedKcal ?? 0, goal: targets.burnedKcal, unit: "kcal", color: colors.move },
+    { label: "Move", value: sports?.burnedKcal ?? 0, goal: targets.burnedKcal, unit: "kcal", color: colors.move },
     { label: "Exercise", value: sports?.totalMinutes ?? 0, goal: targets.exerciseMinutes, unit: "min", color: colors.exercise },
     { label: "Workouts", value: sports?.entryCount ?? 0, goal: targets.workouts, unit: "", color: colors.workouts },
   ];

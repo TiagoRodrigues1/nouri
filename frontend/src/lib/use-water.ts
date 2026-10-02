@@ -7,7 +7,7 @@ import { queryRefresh } from "./query-refresh";
 type PendingWater = { input: WaterInput; signature: string };
 
 export function useWater(token: string, onConnect: () => void) {
-  const refresh = () => queryRefresh.water;
+  const refresh = queryRefresh.water;
 
   const create = useIdempotentWrite<PendingWater>(token, (pending, key) => createRecord(token, key, { path: recordPaths.water, input: pending.input }), {
     refresh, success: () => "Water added to your log.", signature: (pending) => pending.signature,

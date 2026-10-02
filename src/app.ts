@@ -37,8 +37,8 @@ import { targetsKind } from "./targets/targets.js";
 import { occurredAtSchema, timeZoneSchema } from "./time.js";
 import { waterInputSchema } from "./water/contract.js";
 import { waterRecords } from "./water/water.js";
-import { workoutInputSchema } from "./workouts/contract.js";
-import { workoutRecords } from "./workouts/workouts.js";
+import { workoutInputSchema, workoutSummarySchema } from "./workouts/contract.js";
+import { getWorkoutSummary, workoutRecords } from "./workouts/workouts.js";
 
 type MutationResult<Entry> =
   | { outcome: "created" | "updated"; entry: Entry }
@@ -298,6 +298,15 @@ export function createApp(db: AppDatabase, auth: { token: string; userId: string
   recordDeletion(recordPaths.sleep, sleepRecords);
   recordDeletion(recordPaths.photo, photoRecords);
   recordDeletion(recordPaths.supplementIntake, intakeRecords);
+
+  app.get(`${recordPaths.workout}/summary/:date`, async (context) => {
+    const date = z.iso.date().safeParse(context.req.param("date"));
+
+    if (!date.success) return error(400, "Invalid workout summary request");
+
+    return context.json(await getWorkoutSummary(db, context.get("userId"), date.data));
+  });
+  app.openAPIRegistry.registerPath({ method: "get", path: `${recordPaths.workout}/summary/{date}`, request: { params: z.object({ date: z.iso.date() }) }, responses: { 200: { description: "Workout count, minutes, and recorded energy estimates for the local day", ...json(workoutSummarySchema) } } });
 
   const uploadSchema = z.object({ file: z.instanceof(File), occurredAt: occurredAtSchema, timeZone: timeZoneSchema });
 

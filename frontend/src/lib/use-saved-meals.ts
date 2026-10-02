@@ -18,14 +18,14 @@ export function useSavedMeals(token: string) {
 
 export function useSaveMeal(token: string, onSaved: () => void) {
   return useIdempotentWrite<MealInput>(token, (input, key) => createSavedMeal(token, key, input), {
-    refresh: () => ["saved-meals"], success: (input) => `${input.name} saved.`, onSuccess: onSaved,
+    refresh: ["saved-meals"], success: (input) => `${input.name} saved.`, onSuccess: onSaved,
   });
 }
 
 // The revision is part of the request, so an edit made after another one gets its own key.
 export function useEditMeal(token: string, onSaved: () => void) {
   return useIdempotentWrite<PendingEdit>(token, (pending, key) => updateSavedMeal(token, key, pending.meal, pending.input), {
-    refresh: () => ["saved-meals"], success: (pending) => `${pending.input.name} saved.`, onSuccess: onSaved,
+    refresh: ["saved-meals"], success: (pending) => `${pending.input.name} saved.`, onSuccess: onSaved,
     signature: (pending) => JSON.stringify([pending.meal.id, pending.meal.revision, pending.input]),
   });
 }
@@ -33,13 +33,13 @@ export function useEditMeal(token: string, onSaved: () => void) {
 // A meal logs as one request, so a retry after a dropped response never adds its foods twice.
 export function useLogMeal(token: string, onLogged: () => void) {
   return useIdempotentWrite<PendingLog>(token, (pending, key) => logSavedMeal(token, key, pending.meal, pending.input), {
-    refresh: () => queryRefresh.food, success: (pending) => `${pending.meal.name} added to your log.`, onSuccess: onLogged,
+    refresh: queryRefresh.food, success: (pending) => `${pending.meal.name} added to your log.`, onSuccess: onLogged,
     signature: (pending) => JSON.stringify([pending.meal.id, pending.input]),
   });
 }
 
 export function useDeleteMeal(token: string) {
   return useIdempotentDelete<SavedMeal>(token, (meal, key) => deleteSavedMeal(token, meal, key), {
-    refresh: () => ["saved-meals"], success: (meal) => `${meal.name} removed from your saved meals.`,
+    refresh: ["saved-meals"], success: (meal) => `${meal.name} removed from your saved meals.`,
   });
 }

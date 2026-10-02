@@ -1,14 +1,14 @@
 import * as stylex from "@stylexjs/stylex";
 import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link, useSearch } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import { ChartColumn, LayoutDashboard } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Card } from "./components/ui/card";
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "./components/ui/table";
 import { useDashboardPage } from "./dashboard-page-context";
 import { format, getReview, type Review as ReviewData, type ReviewDay } from "./lib/api";
-import { localDate, shortDayLabel } from "./lib/time";
+import { shortDayLabel } from "./lib/time";
 import { duration } from "./overview/shared";
 import { queryStatus } from "./query-status";
 import { styles } from "./review-styles";
@@ -60,8 +60,7 @@ const metrics: Metric[] = [
 ];
 
 export function Review() {
-  const { token } = useDashboardPage();
-  const date = useSearch({ from: "/review", select: (search) => search.to }) ?? localDate(new Date());
+  const { token, date } = useDashboardPage();
 
   const query = useQuery({
     queryKey: ["review", token, date],

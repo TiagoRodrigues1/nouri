@@ -4,14 +4,23 @@ import { toast } from "sonner";
 import { ApiError } from "./api";
 import { PendingWrites } from "./pending-writes";
 
+type Refresh<Input> =
+  | { refresh: readonly string[] }
+  | { refreshFor: (input: Input) => readonly string[] };
+
 // One key per distinct request, reused while it is retried. Serves creates and edits alike.
 export function useIdempotentWrite<Input>(
   token: string, send: (input: Input, key: string) => Promise<object | void>,
-  options: { refresh: (input: Input) => readonly string[]; success?: (input: Input) => string; onSuccess?: () => void; signature?: (input: Input) => string },
+  options: Refresh<Input> & { success?: (input: Input) => string; onSuccess?: () => void; signature?: (input: Input) => string },
 ) {
   const client = useQueryClient();
   const pending = useRef(new PendingWrites<Input, object | void>());
-  const refresh = (input: Input) => Promise.all(options.refresh(input).map((name) => client.invalidateQueries({ queryKey: [name, token] })));
+
+  const refresh = (input: Input) => {
+    const names = "refreshFor" in options ? options.refreshFor(input) : options.refresh;
+
+    return Promise.all(names.map((name) => client.invalidateQueries({ queryKey: [name, token] })));
+  };
 
   return useMutation({
     mutationFn: (input: Input) => {
@@ -42,7 +51,7 @@ export function useIdempotentWrite<Input>(
 
 export function useIdempotentDelete<Entry extends { id: string; revision: number }>(
   token: string, send: (entry: Entry, key: string) => Promise<object | void>,
-  options: { refresh: (entry: Entry) => readonly string[]; success?: (entry: Entry) => string },
+  options: Refresh<Entry> & { success?: (entry: Entry) => string },
 ) {
   return useIdempotentWrite(token, send, {
     ...options,
