@@ -31,6 +31,8 @@ export const colors = stylex.defineVars({
   waterStrong: "#0369a1",
   meals: "#7c6cf2",
   activity: "#14b8a6",
+  // Lines and text on white need a darker teal than fills do.
+  activityStrong: "#0d9488",
   move: "#fa114f",
   exercise: "#78d916",
   workouts: "#12c8d8",

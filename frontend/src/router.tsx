@@ -35,6 +35,14 @@ const overviewRoute = createRoute({
   component: lazyRouteComponent(() => import("./overview"), "Overview"),
 });
 
+const progressRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/progress",
+  // The exercise is its key; without one the page shows the most recent exercise.
+  validateSearch: daySearch.extend({ exercise: z.string().max(80).optional().catch(undefined) }),
+  component: lazyRouteComponent(() => import("./progress"), "Progress"),
+});
+
 const reviewRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/review",
@@ -44,7 +52,7 @@ const reviewRoute = createRoute({
 });
 
 export const router = createRouter({
-  routeTree: rootRoute.addChildren([todayRoute, overviewRoute, reviewRoute, foodRoute]),
+  routeTree: rootRoute.addChildren([todayRoute, overviewRoute, progressRoute, reviewRoute, foodRoute]),
 });
 
 declare module "@tanstack/react-router" {

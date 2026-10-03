@@ -15,6 +15,7 @@ import {
   Ruler,
   SlidersHorizontal,
   Target,
+  TrendingUp,
   UtensilsCrossed,
   Watch,
 } from "lucide-react";
@@ -48,7 +49,7 @@ const now = () => localDate(new Date());
 
 type FoodInput = FoodSubmission["food"];
 
-type View = "today" | "overview" | "review";
+type View = "today" | "overview" | "progress" | "review";
 
 type PendingFood = { input: FoodSubmission; signature: string };
 
@@ -56,7 +57,7 @@ type RecordKind = "water" | "workout" | "sleep" | "measurement";
 
 export function Dashboard() {
   const path = useLocation({ select: (location) => location.pathname });
-  const view: View = path === "/overview" ? "overview" : path === "/review" ? "review" : "today";
+  const view: View = path === "/overview" ? "overview" : path === "/progress" ? "progress" : path === "/review" ? "review" : "today";
   const navigate = useNavigate();
   const search = useSearch({ strict: false });
   const today = now();
@@ -67,7 +68,7 @@ export function Dashboard() {
     () => sessionStorage.getItem(dateKey) || today,
   );
 
-  // Review owns its window end in the URL; Today and Overview share the remembered day.
+  // Review owns its window end in the URL; Today, Overview, and Progress share the remembered day.
   const reviewing = view === "review";
   const date = reviewing ? search.to ?? today : search.date ?? storedDate;
   const isToday = date === today;
@@ -108,6 +109,7 @@ export function Dashboard() {
 
   function pickDate(next: string) {
     if (reviewing) void navigate({ to: "/review", search: { to: next } });
+    else if (view === "progress") void navigate({ to: "/progress", search: { date: next, exercise: search.exercise } });
     else void navigate({ to: view === "overview" ? "/overview" : "/", search: { date: next } });
 
     toast.dismiss();
@@ -171,6 +173,13 @@ export function Dashboard() {
           >
             <ChartColumn size={17} {...stylex.props(view === "overview" && styles.iconAccent)} />
             Overview
+          </Link>
+          <Link
+            to="/progress"
+            {...stylex.props(styles.navItem, view === "progress" && styles.navItemActive)}
+          >
+            <TrendingUp size={17} {...stylex.props(view === "progress" && styles.iconAccent)} />
+            Progress
           </Link>
           <Link
             to="/review"

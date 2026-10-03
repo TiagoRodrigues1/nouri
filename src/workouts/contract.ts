@@ -59,7 +59,42 @@ export const workoutSummarySchema = workoutDaySchema.pick({ entryCount: true, to
   burnedKcal: z.number().int().nullable(),
 });
 
+// One spelling per exercise, so "Squat" and " squat" share a history. The page matches typed names with it too.
+export function exerciseKey(name: string): string {
+  return name.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+export const exerciseSessionSchema = z.object({
+  workoutId: z.uuid(),
+  date: z.iso.date(),
+  occurredAt: z.iso.datetime(),
+  // The exercise's rows in that workout, in logged order.
+  sets: z.array(strengthExerciseSchema.omit({ name: true })),
+  // Null when every row is bodyweight.
+  topWeightKg: z.number().nullable(),
+  totalReps: z.number().int(),
+  // Null when a row lacks a weight, so a partial sum is never shown as the volume.
+  volumeKg: z.number().nullable(),
+});
+
+export const exerciseHistorySchema = z.object({
+  key: z.string(),
+  // The most recent spelling.
+  name: z.string(),
+  // Oldest first.
+  sessions: z.array(exerciseSessionSchema),
+});
+
+// Most recently done first.
+export const exerciseHistoryListSchema = z.object({ exercises: z.array(exerciseHistorySchema) });
+
 export type WorkoutSummary = z.infer<typeof workoutSummarySchema>;
+
+export type ExerciseSession = z.infer<typeof exerciseSessionSchema>;
+
+export type ExerciseHistory = z.infer<typeof exerciseHistorySchema>;
+
+export type ExerciseHistoryList = z.infer<typeof exerciseHistoryListSchema>;
 
 export type Activity = z.infer<typeof workoutSchema>["activity"];
 

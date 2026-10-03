@@ -7,8 +7,8 @@ import type { MeasurementInput } from "../../../src/measurements/contract";
 import type { SleepInput } from "../../../src/sleep/contract";
 import type { IntakeInput } from "../../../src/supplements/contract";
 import type { WorkoutInput } from "../../../src/workouts/contract";
-import { workoutSummarySchema } from "../../../src/workouts/contract";
-import type { WorkoutSummary } from "../../../src/workouts/contract";
+import { exerciseHistoryListSchema, workoutSummarySchema } from "../../../src/workouts/contract";
+import type { ExerciseHistoryList, WorkoutSummary } from "../../../src/workouts/contract";
 import { dashboardSchema } from "../../../src/dashboard/contract";
 import type { Dashboard } from "../../../src/dashboard/contract";
 import { daySchema } from "../../../src/days/contract";
@@ -52,7 +52,7 @@ export type { Targets } from "../../../src/targets/contract";
 
 export type { CallbackResult, ConnectionStatus, ImportKind, WearableProvider } from "../../../src/wearables/contract";
 
-export type { Activity, Workout } from "../../../src/workouts/contract";
+export type { Activity, ExerciseHistory, ExerciseSession, Workout } from "../../../src/workouts/contract";
 
 export type RecordPath = (typeof recordPaths)[keyof typeof recordPaths];
 
@@ -181,6 +181,10 @@ export async function getOverview(date: string): Promise<Overview> {
 
 export async function getWorkoutSummary(date: string): Promise<WorkoutSummary> {
   return request(`${recordPaths.workout}/summary/${date}`, workoutSummarySchema);
+}
+
+export async function getExerciseHistory(): Promise<ExerciseHistoryList> {
+  return request(`${recordPaths.workout}/exercises`, exerciseHistoryListSchema);
 }
 
 export async function createRecord(key: string, command: RecordCommand): Promise<void> {
