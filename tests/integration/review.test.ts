@@ -5,10 +5,11 @@ import { test } from "node:test";
 import type { z } from "zod";
 import type { FoodInput } from "../../src/food/contract.js";
 import type { MeasurementInput } from "../../src/measurements/contract.js";
+import { defaultTargets } from "../../src/targets/contract.js";
 import type { SleepInput } from "../../src/sleep/contract.js";
 import type { workoutInputSchema } from "../../src/workouts/contract.js";
 
-const { app, otherApp, token, setup, cleanup } = createHarness();
+let { app, otherApp, token, setup, cleanup } = createHarness();
 
 const auth = { Authorization: `Bearer ${token}` };
 
@@ -51,8 +52,10 @@ void test("review lists seven days and leaves unrecorded ones null", async () =>
     assert.equal(empty.from, "2026-09-24");
     assert.equal(empty.to, "2026-09-30");
     assert.deepEqual(empty.days.map((day: { date: string }) => day.date), ["2026-09-24", "2026-09-25", "2026-09-26", "2026-09-27", "2026-09-28", "2026-09-29", "2026-09-30"]);
-    assert.deepEqual(empty.days[0], { date: "2026-09-24", food: { entryCount: 0, kcal: null, proteinG: null }, workouts: { entryCount: 0, totalMinutes: null }, sleep: { sessionCount: 0, totalMinutes: null }, weightKg: null });
+    assert.deepEqual(empty.days[0], { date: "2026-09-24", food: { entryCount: 0, kcal: null, proteinG: null }, workouts: { entryCount: 0, totalMinutes: null }, sleep: { sessionCount: 0, totalMinutes: null }, weightKg: null, targets: { kcal: 2000, proteinG: 50 } });
     assert.deepEqual(empty.recordedDays, { food: 0, workouts: 0, sleep: 0, weight: 0, any: 0 });
+    const nothing = { average: null, averageTarget: null, daysOnTarget: 0 };
+    assert.deepEqual(empty.nutrition, { completeDays: 0, kcal: nothing, proteinG: nothing });
 
     // Food on the 24th and 30th; the second food on the 30th lacks protein, so that total is unknown.
     await post("/v1/food-entries", food("2026-09-24T08:00:00Z", 300.5, 12));
@@ -108,6 +111,12 @@ void test("review lists seven days and leaves unrecorded ones null", async () =>
     assert.equal(d29.weightKg, null);
     assert.equal(d24.weightKg, null);
     assert.deepEqual(week.recordedDays, { food: 2, workouts: 1, sleep: 1, weight: 1, any: 5 });
+    // The 30th lacks a protein value, so only the 24th is compared, against the default targets.
+    assert.deepEqual(week.nutrition, {
+      completeDays: 1,
+      kcal: { average: 900.5, averageTarget: 2000, daysOnTarget: 0 },
+      proteinG: { average: 43.25, averageTarget: 50, daysOnTarget: 0 },
+    });
 
     // Moving the window drops days that fall out of it.
     const earlier = await review("2026-09-24");
@@ -119,6 +128,52 @@ void test("review lists seven days and leaves unrecorded ones null", async () =>
     const other = await review("2026-09-30", otherApp);
     assert.deepEqual(other.recordedDays, { food: 1, workouts: 0, sleep: 0, weight: 0, any: 1 });
     assert.deepEqual(other.days[3].food, { entryCount: 1, kcal: 700, proteinG: 40 });
+  } finally {
+    await cleanup();
+  }
+});
+
+void test("review compares each complete food day with the targets in force that day", async () => {
+  ({ app, otherApp, token, setup, cleanup } = createHarness());
+  await setup();
+
+  try {
+    const putTargets = async (date: string, kcal: number, proteinG: number) => {
+      const response = await app.request(`/v1/targets/${date}`, { method: "PUT", headers: { ...auth, "Content-Type": "application/json" }, body: JSON.stringify({ ...defaultTargets, kcal, proteinG }) });
+      assert.equal(response.status, 200);
+    };
+
+    // Set before the window, then changed from the 27th.
+    await putTargets("2026-09-20", 1800, 120);
+    await putTargets("2026-09-27", 2200, 100);
+
+    // Within 10% of 1,800 and above 120 g.
+    await post("/v1/food-entries", food("2026-09-25T12:00:00Z", 1700, 130));
+    // 300 over 2,200 and short of 100 g.
+    await post("/v1/food-entries", food("2026-09-28T12:00:00Z", 2500, 90));
+    // Within 10% of 2,200 and exactly 100 g.
+    await post("/v1/food-entries", food("2026-09-29T12:00:00Z", 2100, 100));
+    // A food without calories leaves the 30th incomplete, so it is not compared.
+    await post("/v1/food-entries", food("2026-09-30T12:00:00Z", null, 60));
+
+    const week = await review("2026-09-30");
+
+    assert.deepEqual(week.days.map((day: { targets: unknown }) => day.targets), [
+      { kcal: 1800, proteinG: 120 }, { kcal: 1800, proteinG: 120 }, { kcal: 1800, proteinG: 120 },
+      { kcal: 2200, proteinG: 100 }, { kcal: 2200, proteinG: 100 }, { kcal: 2200, proteinG: 100 }, { kcal: 2200, proteinG: 100 },
+    ]);
+    assert.equal(week.recordedDays.food, 4);
+    assert.equal(week.nutrition.completeDays, 3);
+    assert.equal(week.nutrition.kcal.average, 2100);
+    assert.equal(week.nutrition.kcal.averageTarget.toFixed(2), "2066.67");
+    assert.equal(week.nutrition.kcal.daysOnTarget, 2);
+    assert.equal(week.nutrition.proteinG.average.toFixed(2), "106.67");
+    assert.equal(week.nutrition.proteinG.averageTarget.toFixed(2), "106.67");
+    assert.equal(week.nutrition.proteinG.daysOnTarget, 2);
+
+    // Another user's targets stay at the defaults.
+    const other = await review("2026-09-30", otherApp);
+    assert.deepEqual(other.days[6].targets, { kcal: 2000, proteinG: 50 });
   } finally {
     await cleanup();
   }
