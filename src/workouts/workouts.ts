@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { and, between, count, eq, isNull, sum } from "drizzle-orm";
+import { and, between, count, eq, isNotNull, isNull, sum } from "drizzle-orm";
 import { workouts } from "../db/schema.js";
 import type { AppDatabase } from "../db/database.js";
 import type { RecordKind } from "../journal/records.js";
 import { localDate } from "../time.js";
-import { workoutSchema } from "./contract.js";
-import type { Workout, WorkoutDay, WorkoutInput, WorkoutSummary } from "./contract.js";
+import { exerciseKey, workoutSchema } from "./contract.js";
+import type { ExerciseHistory, ExerciseHistoryList, ExerciseSession, Workout, WorkoutDay, WorkoutInput, WorkoutSummary } from "./contract.js";
 
 type WorkoutRow = typeof workouts.$inferSelect;
 
@@ -89,4 +89,49 @@ export async function getWorkoutRange(db: AppDatabase, userId: string, from: str
   )).groupBy(workouts.localDate);
 
   return new Map(rows.map((row) => [row.localDate, { entryCount: row.entryCount, totalMinutes: Number(row.totalMinutes) }]));
+}
+
+// Every exercise the user has logged, with one session per workout that included it.
+export async function getExerciseHistory(db: AppDatabase, userId: string): Promise<ExerciseHistoryList> {
+  const rows = await db.select({ id: workouts.id, localDate: workouts.localDate, occurredAt: workouts.occurredAt, strengthExercises: workouts.strengthExercises }).from(workouts).where(and(
+    eq(workouts.userId, userId), isNull(workouts.deletedAt), isNotNull(workouts.strengthExercises),
+  )).orderBy(workouts.localDate, workouts.occurredAt, workouts.id);
+
+  const history = new Map<string, ExerciseHistory>();
+
+  for (const row of rows) {
+    // An exercise logged twice in one workout, say a lighter back-off set, is one session with two rows.
+    const sessions = new Map<string, { name: string; session: ExerciseSession }>();
+
+    for (const { name, ...set } of row.strengthExercises ?? []) {
+      const key = exerciseKey(name);
+      const current = sessions.get(key) ?? { name, session: { workoutId: row.id, date: row.localDate, occurredAt: row.occurredAt.toISOString(), sets: [], topWeightKg: null, totalReps: 0, volumeKg: null } };
+
+      current.session.sets.push(set);
+      sessions.set(key, current);
+    }
+
+    for (const [key, { name, session }] of sessions) {
+      const weights = session.sets.flatMap((set) => (set.weightKg === null ? [] : [set.weightKg]));
+
+      session.topWeightKg = weights.length === 0 ? null : Math.max(...weights);
+      session.totalReps = session.sets.reduce((sum, set) => sum + set.sets * set.reps, 0);
+      session.volumeKg = weights.length < session.sets.length ? null : session.sets.reduce((sum, set) => sum + set.sets * set.reps * (set.weightKg ?? 0), 0);
+
+      const exercise = history.get(key) ?? { key, name, sessions: [] };
+
+      // Later workouts come last, so the latest spelling wins.
+      exercise.name = name;
+      exercise.sessions.push(session);
+      history.set(key, exercise);
+    }
+  }
+
+  // The sort is stable, so exercises from one workout keep their logged order.
+  return { exercises: [...history.values()].sort((a, b) => {
+    const recentA = a.sessions.at(-1)!;
+    const recentB = b.sessions.at(-1)!;
+
+    return recentB.date.localeCompare(recentA.date) || recentB.occurredAt.localeCompare(recentA.occurredAt);
+  }) };
 }

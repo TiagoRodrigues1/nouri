@@ -1,5 +1,6 @@
 import * as stylex from "@stylexjs/stylex";
 import { useState, type FormEvent, type ReactNode } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "./components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "./components/ui/dialog";
 import { Input } from "./components/ui/input";
@@ -7,7 +8,9 @@ import { Label } from "./components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
 import { TimePicker } from "./components/ui/time-picker";
 import { styles as formStyles } from "./form-styles";
+import { colors } from "./theme.stylex";
 import { useExitingRows } from "./lib/use-exiting-rows";
+import { exerciseHistoryQueryOptions, lastSession, setsLabel } from "./lib/exercise-history";
 import { selectValue } from "./lib/select-value";
 import type { MeasurementInput } from "../../src/measurements/contract";
 import type { StrengthExercise, WorkoutInput } from "../../src/workouts/contract";
@@ -15,8 +18,8 @@ import type { SleepInput } from "../../src/sleep/contract";
 import type { WaterInput } from "../../src/water/contract";
 import { activities } from "../../src/workouts/contract";
 import { measurementKinds, measurementLimits } from "../../src/measurements/contract";
-import type { Activity, MeasurementKind } from "./lib/api";
-import { currentTime, dateLabel, occurredAt, shiftDate, timeZone } from "./lib/time";
+import type { Activity, ExerciseSession, MeasurementKind } from "./lib/api";
+import { currentTime, dateLabel, occurredAt, shiftDate, shortDayLabel, timeZone } from "./lib/time";
 
 const waterPresets = [
   { volumeMl: 250, label: "Glass" },
@@ -180,6 +183,7 @@ function WorkoutForm({ date, pending, onSave }: FormProps<WorkoutInput>) {
   const [time, setTime] = useState(currentTime);
   const [exercises, setExercises] = useState(() => [{ id: crypto.randomUUID(), name: "", sets: "", reps: "", weight: "" }]);
   const { add, remove, rowProps, busy } = useExitingRows();
+  const history = useQuery({ ...exerciseHistoryQueryOptions(), enabled: activity === "strength" });
 
   function addExercise() {
     const id = crypto.randomUUID();
@@ -191,8 +195,8 @@ function WorkoutForm({ date, pending, onSave }: FormProps<WorkoutInput>) {
     remove(id, () => setExercises((current) => current.filter((exercise) => exercise.id !== id)));
   }
 
-  function updateExercise(id: string, field: "name" | "sets" | "reps" | "weight", value: string) {
-    setExercises((current) => current.map((exercise) => exercise.id === id ? { ...exercise, [field]: value } : exercise));
+  function updateExercise(id: string, fields: Partial<Record<"name" | "sets" | "reps" | "weight", string>>) {
+    setExercises((current) => current.map((exercise) => exercise.id === id ? { ...exercise, ...fields } : exercise));
   }
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -262,20 +266,24 @@ function WorkoutForm({ date, pending, onSave }: FormProps<WorkoutInput>) {
               </div>
               <div>
                 <Label htmlFor={`exercise-name-${exercise.id}`} {...stylex.props(formStyles.formLabel)}>Exercise name</Label>
-                <Input id={`exercise-name-${exercise.id}`} placeholder="e.g. Squat" maxLength={80} value={exercise.name} onChange={(event) => updateExercise(exercise.id, "name", event.target.value)} required />
+                <Input id={`exercise-name-${exercise.id}`} placeholder="e.g. Squat" maxLength={80} value={exercise.name} onChange={(event) => updateExercise(exercise.id, { name: event.target.value })} required />
+                <LastTime
+                  session={history.data ? lastSession(history.data.exercises, exercise.name, date) : null}
+                  onRepeat={({ sets, reps, weightKg }) => updateExercise(exercise.id, { sets: String(sets), reps: String(reps), weight: weightKg === null ? "" : String(weightKg) })}
+                />
               </div>
               <div {...stylex.props(styles.exerciseFields)}>
                 <div>
                   <Label htmlFor={`exercise-sets-${exercise.id}`} {...stylex.props(formStyles.formLabel)}>Sets</Label>
-                  <Input id={`exercise-sets-${exercise.id}`} type="number" inputMode="numeric" min={1} max={100} step={1} value={exercise.sets} onChange={(event) => updateExercise(exercise.id, "sets", event.target.value)} required />
+                  <Input id={`exercise-sets-${exercise.id}`} type="number" inputMode="numeric" min={1} max={100} step={1} value={exercise.sets} onChange={(event) => updateExercise(exercise.id, { sets: event.target.value })} required />
                 </div>
                 <div>
                   <Label htmlFor={`exercise-reps-${exercise.id}`} {...stylex.props(formStyles.formLabel)}>Reps per set</Label>
-                  <Input id={`exercise-reps-${exercise.id}`} type="number" inputMode="numeric" min={1} max={1000} step={1} value={exercise.reps} onChange={(event) => updateExercise(exercise.id, "reps", event.target.value)} required />
+                  <Input id={`exercise-reps-${exercise.id}`} type="number" inputMode="numeric" min={1} max={1000} step={1} value={exercise.reps} onChange={(event) => updateExercise(exercise.id, { reps: event.target.value })} required />
                 </div>
                 <div>
                   <Label htmlFor={`exercise-weight-${exercise.id}`} {...stylex.props(formStyles.formLabel)}>Weight (kg, optional)</Label>
-                  <Input id={`exercise-weight-${exercise.id}`} type="number" inputMode="decimal" min={0} max={1000} step={0.1} value={exercise.weight} onChange={(event) => updateExercise(exercise.id, "weight", event.target.value)} />
+                  <Input id={`exercise-weight-${exercise.id}`} type="number" inputMode="decimal" min={0} max={1000} step={0.1} value={exercise.weight} onChange={(event) => updateExercise(exercise.id, { weight: event.target.value })} />
                 </div>
               </div>
             </div>
@@ -291,6 +299,20 @@ function WorkoutForm({ date, pending, onSave }: FormProps<WorkoutInput>) {
         <Button type="submit" disabled={pending || busy}>{pending ? "Saving…" : "Save workout"}</Button>
       </div>
     </form>
+  );
+}
+
+// What the exercise a name matches was last done with. Repeat copies the session's first row, usually the working sets.
+function LastTime({ session, onRepeat }: { session: ExerciseSession | null; onRepeat: (set: ExerciseSession["sets"][number]) => void }) {
+  const first = session?.sets[0];
+
+  if (!session || !first) return null;
+
+  return (
+    <div {...stylex.props(styles.lastTime)}>
+      <span {...stylex.props(styles.lastTimeText)}>Last time, {shortDayLabel(session.date)}: {setsLabel(session)}</span>
+      <Button type="button" variant="ghost" size="sm" onClick={() => onRepeat(first)}>Repeat</Button>
+    </div>
   );
 }
 
@@ -374,6 +396,8 @@ const styles = stylex.create({
   exerciseList: { display: "grid", gap: 12 },
   exerciseCard: { display: "grid", gap: 12, padding: 14, borderWidth: 1, borderStyle: "solid", borderColor: "#e1e4e5", borderRadius: 8 },
   exerciseHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13 },
+  lastTime: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 6, fontSize: 12, color: colors.mutedForeground },
+  lastTimeText: { minWidth: 0, fontVariantNumeric: "tabular-nums" },
   exerciseFields: { display: "grid", gridTemplateColumns: { default: "repeat(3, minmax(0, 1fr))", "@media (max-width: 520px)": "1fr 1fr" }, gap: 10 },
   presets: { display: "grid", gridTemplateColumns: { default: "minmax(0, 1fr) auto auto", "@media (max-width: 520px)": "1fr 1fr" }, gap: 8 },
   times: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: "12px 20px" },

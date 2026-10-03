@@ -104,6 +104,7 @@ export const styles = stylex.create({
   }),
   listText: { flex: 1, display: "flex", flexDirection: "column", gap: 2, minWidth: 0 },
   listName: { fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  inlineLink: { color: "inherit", textDecoration: { default: "underline", ":hover": "underline" }, textDecorationColor: { default: colors.border, ":hover": "currentColor" }, textUnderlineOffset: 2 },
   listMeta: { color: colors.mutedForeground, fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   delete: {
     width: 28,

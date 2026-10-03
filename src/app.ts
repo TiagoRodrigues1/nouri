@@ -38,8 +38,8 @@ import { targetsKind } from "./targets/targets.js";
 import { occurredAtSchema, timeZoneSchema } from "./time.js";
 import { waterInputSchema } from "./water/contract.js";
 import { waterRecords } from "./water/water.js";
-import { workoutInputSchema, workoutSummarySchema } from "./workouts/contract.js";
-import { getWorkoutSummary, workoutRecords } from "./workouts/workouts.js";
+import { exerciseHistoryListSchema, workoutInputSchema, workoutSummarySchema } from "./workouts/contract.js";
+import { getExerciseHistory, getWorkoutSummary, workoutRecords } from "./workouts/workouts.js";
 
 type MutationResult<Entry> =
   | { outcome: "created" | "updated"; entry: Entry }
@@ -106,7 +106,7 @@ export function createApp(db: AppDatabase, identity: Identity, wearables?: Weara
     }
   }
 
-  for (const path of ["/", "/food", "/overview", "/review"]) {
+  for (const path of ["/", "/food", "/overview", "/progress", "/review"]) {
     app.get(path, async () => new Response(await indexPage(), {
       headers: { ...pageHeaders, "Content-Type": "text/html; charset=utf-8" },
     }));
@@ -339,6 +339,9 @@ export function createApp(db: AppDatabase, identity: Identity, wearables?: Weara
     return context.json(await getWorkoutSummary(db, context.get("userId"), date.data));
   });
   app.openAPIRegistry.registerPath({ method: "get", path: `${recordPaths.workout}/summary/{date}`, request: { params: z.object({ date: z.iso.date() }) }, responses: { 200: { description: "Workout count, minutes, and recorded energy estimates for the local day", ...json(workoutSummarySchema) } } });
+
+  app.get(`${recordPaths.workout}/exercises`, async (context) => context.json(await getExerciseHistory(db, context.get("userId"))));
+  app.openAPIRegistry.registerPath({ method: "get", path: `${recordPaths.workout}/exercises`, responses: { 200: { description: "Every strength exercise logged, most recently done first, with its sessions oldest first. Names that differ only in case or spacing are one exercise", ...json(exerciseHistoryListSchema) } } });
 
   const uploadSchema = z.object({ file: z.instanceof(File), thumbnail: z.instanceof(File).optional(), occurredAt: occurredAtSchema, timeZone: timeZoneSchema });
 

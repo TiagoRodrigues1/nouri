@@ -79,7 +79,7 @@ curl -X POST http://localhost:3000/v1/water-entries \
 
 Remove one with `DELETE /v1/water-entries/{id}` and `If-Match: "<revision>"`. The day response has a `water` object with `entries`, `entryCount`, and `totalMl`. `totalMl` is `null` when nothing was logged, so an unrecorded day is not reported as zero.
 
-Run `pnpm db:migrate` after pulling this change. It applies `db/schema.sql`, which holds the whole database schema. The app is not deployed yet, so change that file directly instead of adding migrations. Every statement uses `IF NOT EXISTS`, so a changed column does not reach an existing local database; recreate it with `docker compose down -v` and `docker compose up -d db`.
+Run `pnpm db:migrate` on a fresh database. It applies `db/schema.sql`, which holds the whole database schema. The app is not deployed yet, so change that file directly instead of adding migrations. To apply schema changes to an existing local database, recreate it with `docker compose down -v` and `docker compose up -d db`, then run `pnpm db:migrate` again. This deletes local data.
 
 `GET /v1/review/{date}` returns calories, protein, workout minutes, sleep minutes, and weight for the seven local days ending on the date, oldest first, with `recordedDays` counting the days that have each kind of record. A day without a record of a kind reads `null`, never zero. Food totals are also `null` when a logged food lacks the value, and `food.entryCount` tells the two apart. Weight is the last one recorded that day and does not carry forward. The web app shows it on the Review page. [docs/review-design.md](docs/review-design.md) explains the design.
 

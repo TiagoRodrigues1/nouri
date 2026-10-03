@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS food_entries (
+CREATE TABLE food_entries (
   id uuid PRIMARY KEY,
   user_id uuid NOT NULL,
   occurred_at timestamptz NOT NULL,
@@ -17,9 +17,9 @@ CREATE TABLE IF NOT EXISTS food_entries (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS food_entries_user_day_active_idx ON food_entries (user_id, local_date) WHERE deleted_at IS NULL;
+CREATE INDEX food_entries_user_day_active_idx ON food_entries (user_id, local_date) WHERE deleted_at IS NULL;
 
-CREATE TABLE IF NOT EXISTS mutation_receipts (
+CREATE TABLE mutation_receipts (
   user_id uuid NOT NULL,
   key text NOT NULL,
   request_hash text NOT NULL,
@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS mutation_receipts (
 );
 
 -- A named group of foods copied from logged entries. Items are read and written whole, so they stay one document.
-CREATE TABLE IF NOT EXISTS saved_meals (
+CREATE TABLE saved_meals (
   id uuid PRIMARY KEY,
   user_id uuid NOT NULL,
   name text NOT NULL CHECK (length(name) BETWEEN 1 AND 80),
@@ -46,9 +46,9 @@ CREATE TABLE IF NOT EXISTS saved_meals (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS saved_meals_user_active_idx ON saved_meals (user_id, created_at) WHERE deleted_at IS NULL;
+CREATE INDEX saved_meals_user_active_idx ON saved_meals (user_id, created_at) WHERE deleted_at IS NULL;
 
-CREATE TABLE IF NOT EXISTS water_entries (
+CREATE TABLE water_entries (
   id uuid PRIMARY KEY,
   user_id uuid NOT NULL,
   occurred_at timestamptz NOT NULL,
@@ -61,16 +61,16 @@ CREATE TABLE IF NOT EXISTS water_entries (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS water_entries_user_day_active_idx ON water_entries (user_id, local_date) WHERE deleted_at IS NULL;
+CREATE INDEX water_entries_user_day_active_idx ON water_entries (user_id, local_date) WHERE deleted_at IS NULL;
 
-CREATE TABLE IF NOT EXISTS dashboard_layouts (
+CREATE TABLE dashboard_layouts (
   user_id uuid PRIMARY KEY,
   cards text[] NOT NULL,
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
 -- One row per change; a day uses the latest row that took effect on or before it.
-CREATE TABLE IF NOT EXISTS user_targets (
+CREATE TABLE user_targets (
   user_id uuid NOT NULL,
   effective_from date NOT NULL,
   kcal integer NOT NULL CHECK (kcal > 0),
@@ -89,7 +89,7 @@ CREATE TABLE IF NOT EXISTS user_targets (
   PRIMARY KEY (user_id, effective_from)
 );
 
-CREATE TABLE IF NOT EXISTS body_measurements (
+CREATE TABLE body_measurements (
   id uuid PRIMARY KEY,
   user_id uuid NOT NULL,
   occurred_at timestamptz NOT NULL,
@@ -103,9 +103,9 @@ CREATE TABLE IF NOT EXISTS body_measurements (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS body_measurements_user_kind_active_idx ON body_measurements (user_id, kind, local_date) WHERE deleted_at IS NULL;
+CREATE INDEX body_measurements_user_kind_active_idx ON body_measurements (user_id, kind, local_date) WHERE deleted_at IS NULL;
 
-CREATE TABLE IF NOT EXISTS workouts (
+CREATE TABLE workouts (
   id uuid PRIMARY KEY,
   user_id uuid NOT NULL,
   occurred_at timestamptz NOT NULL,
@@ -115,18 +115,29 @@ CREATE TABLE IF NOT EXISTS workouts (
   duration_minutes integer NOT NULL CHECK (duration_minutes BETWEEN 1 AND 1440),
   distance_m integer CHECK (distance_m BETWEEN 1 AND 1000000),
   energy_kcal integer CHECK (energy_kcal BETWEEN 0 AND 10000),
+  strength_exercises jsonb,
+  -- Imported workouts keep their provider identity; manual workouts use the defaults.
+  source text NOT NULL DEFAULT 'manual' CHECK (source IN ('manual', 'google-health')),
+  source_id text,
+  source_fingerprint text,
+  source_device text,
+  source_title text,
   revision integer NOT NULL DEFAULT 1 CHECK (revision >= 1),
   deleted_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT workouts_source_identity CHECK (
+    (source = 'manual' AND source_id IS NULL AND source_fingerprint IS NULL AND source_title IS NULL)
+    OR (source <> 'manual' AND source_id IS NOT NULL AND source_fingerprint IS NOT NULL)
+  )
 );
 
-ALTER TABLE workouts ADD COLUMN IF NOT EXISTS strength_exercises jsonb;
-
-CREATE INDEX IF NOT EXISTS workouts_user_day_active_idx ON workouts (user_id, local_date) WHERE deleted_at IS NULL;
+CREATE INDEX workouts_user_day_active_idx ON workouts (user_id, local_date) WHERE deleted_at IS NULL;
+-- Deleted imports keep their row, so a record the source restores revives instead of duplicating.
+CREATE UNIQUE INDEX workouts_user_source_idx ON workouts (user_id, source, source_id) WHERE source_id IS NOT NULL;
 
 -- A night belongs to the local date on which it ends.
-CREATE TABLE IF NOT EXISTS sleep_sessions (
+CREATE TABLE sleep_sessions (
   id uuid PRIMARY KEY,
   user_id uuid NOT NULL,
   started_at timestamptz NOT NULL,
@@ -137,17 +148,27 @@ CREATE TABLE IF NOT EXISTS sleep_sessions (
   light_minutes integer CHECK (light_minutes >= 0),
   deep_minutes integer CHECK (deep_minutes >= 0),
   rem_minutes integer CHECK (rem_minutes >= 0),
+  -- Imported sleep keeps its provider identity; manual sleep uses the defaults.
+  source text NOT NULL DEFAULT 'manual' CHECK (source IN ('manual', 'google-health')),
+  source_id text,
+  source_fingerprint text,
+  source_device text,
   revision integer NOT NULL DEFAULT 1 CHECK (revision >= 1),
   deleted_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   CHECK (ended_at > started_at AND ended_at - started_at <= interval '24 hours'),
-  CHECK (num_nulls(awake_minutes, light_minutes, deep_minutes, rem_minutes) IN (0, 4))
+  CHECK (num_nulls(awake_minutes, light_minutes, deep_minutes, rem_minutes) IN (0, 4)),
+  CONSTRAINT sleep_sessions_source_identity CHECK (
+    (source = 'manual' AND source_id IS NULL AND source_fingerprint IS NULL)
+    OR (source <> 'manual' AND source_id IS NOT NULL AND source_fingerprint IS NOT NULL)
+  )
 );
 
-CREATE INDEX IF NOT EXISTS sleep_sessions_user_day_active_idx ON sleep_sessions (user_id, local_date) WHERE deleted_at IS NULL;
+CREATE INDEX sleep_sessions_user_day_active_idx ON sleep_sessions (user_id, local_date) WHERE deleted_at IS NULL;
+CREATE UNIQUE INDEX sleep_sessions_user_source_idx ON sleep_sessions (user_id, source, source_id) WHERE source_id IS NOT NULL;
 
-CREATE TABLE IF NOT EXISTS progress_photos (
+CREATE TABLE progress_photos (
   id uuid PRIMARY KEY,
   user_id uuid NOT NULL,
   occurred_at timestamptz NOT NULL,
@@ -156,19 +177,18 @@ CREATE TABLE IF NOT EXISTS progress_photos (
   content_type text NOT NULL CHECK (content_type IN ('image/jpeg', 'image/png', 'image/webp')),
   byte_size integer NOT NULL CHECK (byte_size BETWEEN 1 AND 8388608),
   image bytea NOT NULL,
+  -- A small JPEG the page makes before uploading. Older local photos may have none.
+  thumbnail bytea CHECK (octet_length(thumbnail) BETWEEN 1 AND 262144),
   revision integer NOT NULL DEFAULT 1 CHECK (revision >= 1),
   deleted_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS progress_photos_user_day_active_idx ON progress_photos (user_id, local_date) WHERE deleted_at IS NULL;
-
--- A small JPEG the page makes before uploading, so the photo grid never downloads originals. Photos uploaded before it have none.
-ALTER TABLE progress_photos ADD COLUMN IF NOT EXISTS thumbnail bytea CHECK (octet_length(thumbnail) BETWEEN 1 AND 262144);
+CREATE INDEX progress_photos_user_day_active_idx ON progress_photos (user_id, local_date) WHERE deleted_at IS NULL;
 
 -- One row per change; a day uses the latest list that took effect on or before it.
-CREATE TABLE IF NOT EXISTS supplement_stacks (
+CREATE TABLE supplement_stacks (
   user_id uuid NOT NULL,
   effective_from date NOT NULL,
   supplements jsonb NOT NULL CHECK (jsonb_typeof(supplements) = 'array'),
@@ -176,7 +196,7 @@ CREATE TABLE IF NOT EXISTS supplement_stacks (
   PRIMARY KEY (user_id, effective_from)
 );
 
-CREATE TABLE IF NOT EXISTS supplement_intakes (
+CREATE TABLE supplement_intakes (
   id uuid PRIMARY KEY,
   user_id uuid NOT NULL,
   occurred_at timestamptz NOT NULL,
@@ -192,45 +212,10 @@ CREATE TABLE IF NOT EXISTS supplement_intakes (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS supplement_intakes_user_day_active_idx ON supplement_intakes (user_id, local_date) WHERE deleted_at IS NULL;
-
--- Imported sleep keeps its provider identity; manual sleep has no source columns.
--- Add a provider to this list when its adapter lands.
-ALTER TABLE sleep_sessions ADD COLUMN IF NOT EXISTS source text NOT NULL DEFAULT 'manual' CHECK (source IN ('manual', 'google-health'));
-ALTER TABLE sleep_sessions ADD COLUMN IF NOT EXISTS source_id text;
-ALTER TABLE sleep_sessions ADD COLUMN IF NOT EXISTS source_fingerprint text;
-ALTER TABLE sleep_sessions ADD COLUMN IF NOT EXISTS source_device text;
-
-DO $$ BEGIN
-  ALTER TABLE sleep_sessions ADD CONSTRAINT sleep_sessions_source_identity CHECK (
-    (source = 'manual' AND source_id IS NULL AND source_fingerprint IS NULL)
-    OR (source <> 'manual' AND source_id IS NOT NULL AND source_fingerprint IS NOT NULL)
-  );
-EXCEPTION WHEN duplicate_object THEN NULL;
-END $$;
-
--- Deleted imports keep their row, so a record the source restores revives instead of duplicating.
-CREATE UNIQUE INDEX IF NOT EXISTS sleep_sessions_user_source_idx ON sleep_sessions (user_id, source, source_id) WHERE source_id IS NOT NULL;
-
--- Imported workouts keep their provider identity the same way; the title is the provider's name for the session.
-ALTER TABLE workouts ADD COLUMN IF NOT EXISTS source text NOT NULL DEFAULT 'manual' CHECK (source IN ('manual', 'google-health'));
-ALTER TABLE workouts ADD COLUMN IF NOT EXISTS source_id text;
-ALTER TABLE workouts ADD COLUMN IF NOT EXISTS source_fingerprint text;
-ALTER TABLE workouts ADD COLUMN IF NOT EXISTS source_device text;
-ALTER TABLE workouts ADD COLUMN IF NOT EXISTS source_title text;
-
-DO $$ BEGIN
-  ALTER TABLE workouts ADD CONSTRAINT workouts_source_identity CHECK (
-    (source = 'manual' AND source_id IS NULL AND source_fingerprint IS NULL AND source_title IS NULL)
-    OR (source <> 'manual' AND source_id IS NOT NULL AND source_fingerprint IS NOT NULL)
-  );
-EXCEPTION WHEN duplicate_object THEN NULL;
-END $$;
-
-CREATE UNIQUE INDEX IF NOT EXISTS workouts_user_source_idx ON workouts (user_id, source, source_id) WHERE source_id IS NOT NULL;
+CREATE INDEX supplement_intakes_user_day_active_idx ON supplement_intakes (user_id, local_date) WHERE deleted_at IS NULL;
 
 -- One row per cloud provider the person connected, such as Google Health.
-CREATE TABLE IF NOT EXISTS wearable_connections (
+CREATE TABLE wearable_connections (
   user_id uuid NOT NULL,
   provider text NOT NULL,
   scope text NOT NULL,
@@ -245,7 +230,7 @@ CREATE TABLE IF NOT EXISTS wearable_connections (
 );
 
 -- One row per sign-in attempt; the callback consumes it, so a state works once.
-CREATE TABLE IF NOT EXISTS wearable_oauth_states (
+CREATE TABLE wearable_oauth_states (
   state_hash text PRIMARY KEY,
   user_id uuid NOT NULL,
   provider text NOT NULL,
@@ -255,7 +240,7 @@ CREATE TABLE IF NOT EXISTS wearable_oauth_states (
 );
 
 -- One row per person. Every user_id above refers to users.id; Clerk owns sign-in and is named only here.
-CREATE TABLE IF NOT EXISTS users (
+CREATE TABLE users (
   id uuid PRIMARY KEY,
   clerk_user_id text NOT NULL UNIQUE,
   created_at timestamptz NOT NULL DEFAULT now()

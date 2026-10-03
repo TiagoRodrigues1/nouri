@@ -1,5 +1,6 @@
 import * as stylex from "@stylexjs/stylex";
 import type { ReactNode } from "react";
+import { Link } from "@tanstack/react-router";
 import { Activity as ActivityIcon, Bike, Dumbbell, Footprints, PersonStanding, Waves } from "lucide-react";
 import { Badge } from "../components/ui/badge";
 import { activityLabels } from "../overview-dialogs";
@@ -9,6 +10,7 @@ import { colors } from "../theme.stylex";
 import { DeleteButton, Empty, Section, Tile, Value, duration } from "./shared";
 import { clock } from "../lib/time";
 import { providerDetails } from "../lib/wearables";
+import { exerciseKey } from "../../../src/workouts/contract";
 
 const activityIcons: Record<Activity, ReactNode> = {
   strength: <Dumbbell size={16} />,
@@ -63,7 +65,7 @@ export function SportsSection({ sports, busy, onDelete }: SportsProps) {
                   </small>
                   {entry.strengthExercises?.map((exercise, index) => (
                     <small key={index} {...stylex.props(styles.listMeta)}>
-                      {exercise.name} · {exercise.sets} × {exercise.reps}{exercise.weightKg === null ? "" : ` · ${format(exercise.weightKg, 1)} kg`}
+                      <Link to="/progress" search={{ date: entry.localDate, exercise: exerciseKey(exercise.name) }} title={`See ${exercise.name} progress`} {...stylex.props(styles.inlineLink)}>{exercise.name}</Link> · {exercise.sets} × {exercise.reps}{exercise.weightKg === null ? "" : ` · ${format(exercise.weightKg, 1)} kg`}
                     </small>
                   ))}
                 </span>
