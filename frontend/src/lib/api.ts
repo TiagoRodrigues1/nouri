@@ -20,11 +20,11 @@ import { reviewSchema } from "../../../src/review/contract";
 import type { Review } from "../../../src/review/contract";
 import { mealLogSchema, savedMealListSchema, savedMealSchema } from "../../../src/meals/contract";
 import type { MealEdit, MealInput, MealLogInput, SavedMeal } from "../../../src/meals/contract";
-import { authorizationSchema, callbackResults, connectionStatusSchema, importKinds, disconnectResultSchema, syncResultSchema } from "../../../src/wearables/contract";
+import { authorizationSchema, callbackResults, connectionStatusSchema, importKindNames, importKinds, disconnectResultSchema, syncResultSchema } from "../../../src/wearables/contract";
 import type { ConnectionStatus, DisconnectResult, SyncResult, WearableProvider } from "../../../src/wearables/contract";
 import type { Overview } from "../../../src/overview/contract";
 
-export { callbackResults, importKinds };
+export { callbackResults, importKindNames, importKinds };
 
 export type { CardId, Dashboard } from "../../../src/dashboard/contract";
 

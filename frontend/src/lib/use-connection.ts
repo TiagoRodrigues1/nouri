@@ -13,7 +13,7 @@ function useConnectionStatus(provider: WearableProvider, enabled: boolean) {
   });
 }
 
-// Connect, Sync, and Disconnect for one cloud provider. Imported sleep and workouts show up through the overview query.
+// Connect, Sync, and Disconnect for one cloud provider. Imports show up through the overview query.
 // The page shell mounts it once, so the OAuth callback is handled whichever page it lands on.
 // The status is read only while `showing`, since counting imports costs the server queries no page needs.
 export function useConnection(provider: WearableProvider, showing: boolean) {
