@@ -27,6 +27,10 @@ export function BarcodeScanner({ onDetected, onCancel }: { onDetected: (barcode:
     let stream: MediaStream | null = null;
     let timer: ReturnType<typeof setTimeout> | undefined;
 
+    function releaseCamera() {
+      stream?.getTracks().forEach((track) => track.stop());
+    }
+
     async function start() {
       // Browsers only offer cameras to secure pages: HTTPS, or localhost while developing.
       if (!navigator.mediaDevices?.getUserMedia) {
@@ -47,7 +51,7 @@ export function BarcodeScanner({ onDetected, onCancel }: { onDetected: (barcode:
 
       // Closed while the browser asked for the camera, after cleanup ran, so the camera is released here.
       if (stopped || !element) {
-        stream.getTracks().forEach((track) => track.stop());
+        releaseCamera();
 
         return;
       }
@@ -56,6 +60,8 @@ export function BarcodeScanner({ onDetected, onCancel }: { onDetected: (barcode:
       const loaded = await Promise.all([element.play(), import("./lib/barcode-detector")]).catch(() => null);
 
       if (!loaded) {
+        releaseCamera();
+
         if (!stopped) setProblem("The scanner could not load. Type the barcode instead.");
 
         return;
@@ -65,7 +71,16 @@ export function BarcodeScanner({ onDetected, onCancel }: { onDetected: (barcode:
 
       async function scan() {
         if (stopped || !element) return;
-        const codes = await detector.detect(element).catch(() => []);
+        const codes = await detector.detect(element).catch(() => null);
+
+        if (!codes) {
+          releaseCamera();
+
+          if (!stopped) setProblem("The scanner could not read the camera. Type the barcode instead.");
+
+          return;
+        }
+
         const code = codes.map((found) => found.rawValue).find(isBarcode);
 
         if (stopped) return;
@@ -82,7 +97,7 @@ export function BarcodeScanner({ onDetected, onCancel }: { onDetected: (barcode:
     return () => {
       stopped = true;
       clearTimeout(timer);
-      stream?.getTracks().forEach((track) => track.stop());
+      releaseCamera();
     };
   }, []);
 
