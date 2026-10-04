@@ -4,15 +4,13 @@ import { Link2, RefreshCw, Unplug } from "lucide-react";
 import { Badge } from "./components/ui/badge";
 import { Button } from "./components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./components/ui/dialog";
-import type { ConnectionStatus, ImportKind } from "./lib/api";
+import { importKinds, type ConnectionStatus } from "./lib/api";
 import type { useConnection } from "./lib/use-connection";
-import { connectionBadges, countOf, importNouns, lastSync, providerDetails } from "./lib/wearables";
+import { connectionBadges, countOf, importNouns, lastSync, listCounts, providerDetails } from "./lib/wearables";
 import { styles as formStyles } from "./form-styles";
 import { styles as overviewStyles } from "./overview-styles";
 import { Stat } from "./overview/shared";
 import { colors } from "./theme.stylex";
-
-const kinds: ImportKind[] = ["sleep", "workouts"];
 
 type Action = "connect" | "reconnect" | "sync" | "disconnect";
 
@@ -67,7 +65,7 @@ function ProviderPanel({ connection }: { connection: ReturnType<typeof useConnec
   const view = data && views[data.connection];
   const badge = data && connectionBadges[data.connection];
   // A grant from before workouts, or one with a box unticked, imports only some kinds until the person connects again.
-  const missing = data?.connection === "connected" ? kinds.filter((kind) => !data.granted.includes(kind)) : [];
+  const missing = data?.connection === "connected" ? importKinds.filter((kind) => !data.granted.includes(kind)) : [];
   const actions = view && missing.length > 0 ? ["reconnect" as const, ...view.actions] : view?.actions;
 
   return (
@@ -83,8 +81,7 @@ function ProviderPanel({ connection }: { connection: ReturnType<typeof useConnec
       {data && view?.showStats && (
         <div {...stylex.props(overviewStyles.rows)}>
           <Stat label="Last successful sync" value={lastSync(data.lastSyncedAt)} />
-          <Stat label="Imported sleep" value={countOf("sleep", data.imported.sleep)} />
-          <Stat label="Imported workouts" value={countOf("workouts", data.imported.workouts)} />
+          {importKinds.map((kind) => <Stat key={kind} label={`Imported ${importNouns[kind][1]}`} value={countOf(kind, data.imported[kind])} />)}
         </div>
       )}
       {data?.lastError && <p role="alert" {...stylex.props(overviewStyles.alert)}>{data.lastError}</p>}
@@ -115,7 +112,7 @@ function ProviderPanel({ connection }: { connection: ReturnType<typeof useConnec
           <DialogHeader>
             <DialogTitle>Disconnect {name}?</DialogTitle>
             <DialogDescription>
-              Nouri revokes its access and removes the {countOf("sleep", data?.imported.sleep ?? 0)} and {countOf("workouts", data?.imported.workouts ?? 0)} it imported. Your data stays in {name}, and sleep and workouts you logged by hand stay in Nouri.
+              Nouri revokes its access and removes what it imported: {data ? listCounts(data.imported) : "nothing"}. Your data stays in {name}, and sleep and workouts you logged by hand stay in Nouri.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

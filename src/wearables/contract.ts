@@ -24,7 +24,8 @@ export type ImportKind = (typeof importKinds)[number];
 
 export const importKindSchema = z.enum(importKinds);
 
-const perKind = <T extends z.ZodType>(schema: T) => z.object({ sleep: schema, workouts: schema });
+// The compiler checks the keys against importKinds, so a new kind cannot be left out of the API.
+const perKind = <T extends z.ZodType>(schema: T) => z.object({ sleep: schema, workouts: schema } satisfies Record<ImportKind, T>);
 
 export const connectionStates = ["not-configured", "not-connected", "connected", "reauthorize"] as const;
 

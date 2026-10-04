@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { and, count, eq, gte, inArray, isNull, or, sql } from "drizzle-orm";
 import { sleepSessions, workouts } from "../db/schema.js";
 import type { AppDatabase, Transaction } from "../db/database.js";
+import { importKinds } from "./contract.js";
 import type { ImportCounts, ImportKind, WearableProvider } from "./contract.js";
 import type { ImportRecords, Pull, SleepRecord, SyncWindow, WorkoutRecord } from "./provider.js";
 
@@ -144,13 +145,19 @@ export async function applyBatch<K extends ImportKind>(tx: Transaction, kind: K,
   return counts;
 }
 
-// Used when a person disconnects a provider: its imports leave the journal.
-export async function removeImports(tx: Transaction, owner: Owner): Promise<Record<ImportKind, number>> {
-  return { sleep: await stores.sleep.removeAll(tx, owner), workouts: await stores.workouts.removeAll(tx, owner) };
+// Runs one step per import kind and keys the results by kind. Inside a transaction the queries still run one at a time.
+export async function eachKind<T>(run: (kind: ImportKind) => Promise<T>): Promise<Record<ImportKind, T>> {
+  const results = await Promise.all(importKinds.map(async (kind) => [kind, await run(kind)] as const));
+
+  // SAFETY: results holds one entry for every import kind.
+  return Object.fromEntries(results) as Record<ImportKind, T>;
 }
 
-export async function countImports(db: AppDatabase, owner: Owner): Promise<Record<ImportKind, number>> {
-  const [sleep, workoutCount] = await Promise.all([stores.sleep.countLive(db, owner), stores.workouts.countLive(db, owner)]);
+// Used when a person disconnects a provider: its imports leave the journal.
+export function removeImports(tx: Transaction, owner: Owner): Promise<Record<ImportKind, number>> {
+  return eachKind((kind) => stores[kind].removeAll(tx, owner));
+}
 
-  return { sleep, workouts: workoutCount };
+export function countImports(db: AppDatabase, owner: Owner): Promise<Record<ImportKind, number>> {
+  return eachKind((kind) => stores[kind].countLive(db, owner));
 }

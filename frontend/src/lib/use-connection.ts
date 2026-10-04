@@ -1,18 +1,9 @@
 import { useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { callbackResults, disconnectConnection, getConnection, startConnection, syncConnection, type ImportKind, type WearableProvider } from "./api";
-import { callbackMessages, countOf, noun, providerDetails } from "./wearables";
+import { callbackResults, disconnectConnection, getConnection, importKinds, startConnection, syncConnection, type WearableProvider } from "./api";
+import { callbackMessages, countOf, listCounts, noun, providerDetails } from "./wearables";
 import { queryRefresh } from "./query-refresh";
-
-const kinds: ImportKind[] = ["sleep", "workouts"];
-
-// "2 sleep sessions and 1 workout", or "nothing" when every count is zero.
-function listCounts(counts: Record<ImportKind, number>): string {
-  const parts = kinds.flatMap((kind) => counts[kind] > 0 ? [countOf(kind, counts[kind])] : []);
-
-  return parts.length ? parts.join(" and ") : "nothing";
-}
 
 function useConnectionStatus(provider: WearableProvider, enabled: boolean) {
   return useQuery({
@@ -45,7 +36,7 @@ export function useConnection(provider: WearableProvider, showing: boolean) {
     onSuccess: async (result) => {
       await refresh();
 
-      const changes = kinds.flatMap((kind) => {
+      const changes = importKinds.flatMap((kind) => {
         const { created, updated, removed } = result[kind];
 
         return [created && `${created} new ${noun(kind, created)}`, updated && `${countOf(kind, updated)} updated`, removed && `${countOf(kind, removed)} removed`].filter(Boolean);

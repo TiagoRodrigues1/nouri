@@ -1,4 +1,4 @@
-import type { CallbackResult, ConnectionStatus, ImportKind, WearableProvider } from "./api";
+import { importKinds, type CallbackResult, type ConnectionStatus, type ImportKind, type WearableProvider } from "./api";
 
 // What the page calls each provider and where its data can be edited. Add an entry with each new provider.
 export const providerDetails: Record<WearableProvider, { name: string; description: string; revokeHelp: string }> = {
@@ -35,6 +35,15 @@ export function noun(kind: ImportKind, count: number): string {
 
 export function countOf(kind: ImportKind, count: number): string {
   return `${count} ${noun(kind, count)}`;
+}
+
+const and = new Intl.ListFormat(undefined, { type: "conjunction" });
+
+// "2 sleep sessions and 1 workout". Kinds with no records are left out, and an empty list reads "nothing".
+export function listCounts(counts: Record<ImportKind, number>): string {
+  const parts = importKinds.flatMap((kind) => counts[kind] > 0 ? [countOf(kind, counts[kind])] : []);
+
+  return parts.length ? and.format(parts) : "nothing";
 }
 
 const when = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
