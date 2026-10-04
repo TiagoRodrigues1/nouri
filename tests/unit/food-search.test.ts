@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { searchResultSchema, nutrientsSchema } from "../../src/food/contract.js";
 import { searchFoods } from "../../src/food/catalog.js";
 import { portugueseTerms, readQuery } from "../../src/food/portuguese.js";
 
@@ -54,4 +55,50 @@ void test("a misspelled Portuguese word still translates", () => {
 void test("English and French searches are unchanged", () => {
   assert.equal(first("apple"), "Apple, flesh and skin, raw");
   assert.equal(first("pomme de terre", "fr"), "Pomme de terre nouvelle ou primeur, crue");
+});
+
+void test("literal searches keep English negation and French connecting words", () => {
+  for (const words of [["no", "sugar"], ["pomme", "de", "terre"]]) {
+    assert.deepEqual(readQuery(words), words.map((typed) => ({ kind: "word", typed })));
+  }
+
+  assert.equal(first("no sugar"), "Tea, brewed, no added sugars");
+  assert.ok(!searchFoods("tea no sugar", "en").items.some((item) => item.name.includes("with sugar(s)")));
+});
+
+void test("irregular feminine and plural forms resolve without typo recovery", () => {
+  for (const adjective of ["crua", "cruas"]) {
+    assert.deepEqual(readQuery(["macas", adjective]), [
+      { kind: "term", typed: ["macas"], english: ["apple"] },
+      { kind: "term", typed: [adjective], english: ["raw"] },
+    ]);
+  }
+
+  assert.deepEqual(readQuery(["couves", "flores"]), [
+    { kind: "term", typed: ["couves", "flores"], english: ["cauliflower"] },
+  ]);
+  assert.deepEqual(searchFoods("maçãs cruas", "en"), searchFoods("maçã cru", "en"));
+  assert.ok(searchFoods("maçãs cruas", "en").items.some((item) => item.name === "Apple, flesh and skin, raw"));
+  assert.equal(first("couves-flores"), "Cauliflower, raw");
+});
+
+void test("food words rank ahead of incidental ingredients with the same rule after typo recovery", () => {
+  assert.equal(first("frango cru"), "Chicken, meat, raw");
+  assert.deepEqual(searchFoods("frango cru", "en"), searchFoods("frnago cru", "en"));
+  assert.equal(first("raw chicken"), "Chicken, meat, raw");
+});
+
+void test("every matching translation contributes to ranking", () => {
+  // The second reading of abobrinha is courgette; the catalog uses it in the food's leading words.
+  assert.equal(first("abobrinha"), first("curgete"));
+  assert.equal(first("appl"), "Apple, flesh and skin, raw");
+  assert.equal(first("pear"), "Pear, flesh and skin, raw");
+});
+
+void test("search responses retain catalog precision without loosening journal inputs", () => {
+  const result = searchFoods("no sugar", "en");
+
+  assert.deepEqual(searchResultSchema.parse(result), result);
+  assert.ok(result.items.some((item) => !nutrientsSchema.safeParse(item.nutrients).success));
+  assert.equal(nutrientsSchema.safeParse({ kcal: 1, proteinG: 0.0015, carbsG: 0, fatG: 0 }).success, false);
 });

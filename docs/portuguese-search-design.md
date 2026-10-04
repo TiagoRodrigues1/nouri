@@ -41,7 +41,7 @@ export function readQuery(words: string[]): QueryPhrase[];
 type Reading = Set<string>[];
 
 // A plain word matches anywhere in a name, as typed. A term matches whole words only.
-type Part = { kind: "word"; typed: string } | { kind: "term"; english: string; readings: Reading[] };
+type Part = { kind: "word"; typed: string } | { kind: "term"; readings: Reading[] };
 
 export function searchFoods(query: string, locale: string): SearchResult; // unchanged signature
 ```
@@ -49,11 +49,11 @@ export function searchFoods(query: string, locale: string): SearchResult; // unc
 Load-bearing decisions:
 
 - **Translate the query, not the catalog.** The glossary only widens what a query matches. Result names, ids, nutrients and attribution come straight from Ciqual, so no displayed fact is invented (per the source decision in the food search design).
-- **Portuguese grammar and catalog matching stay apart.** `portuguese.ts` owns the table and how a Portuguese query reads. `catalog.ts` turns English readings into catalog words, then matches, ranks and handles typos. Removing or replacing the glossary touches one import. Callers learn nothing new, and the HTTP and frontend contracts stay the same (per deep modules).
+- **Portuguese grammar and catalog matching stay apart.** `portuguese.ts` owns the table and how a Portuguese query reads. `catalog.ts` turns English readings into catalog words, then matches and ranks. The Portuguese module also supplies glossary typo suggestions; the catalog supplies the shared edit-distance rule. Callers learn nothing new, and the HTTP and frontend contracts stay the same (per deep modules).
 - **A glossary term matches whole words.** Plain words keep the existing substring match, so typing `appl` still works. A translated word is complete, so it matches whole catalog words and their plurals. Otherwise `pera` would find pearled barley, `sal` salmon and `cabrito` kidney. Matching stays locale-independent because the page always sends `en`.
-- **Portuguese grammar is handled at lookup, not in the table.** A miss retries the singular and masculine form (`assadas` → `assada` → `assado`, `camarões` → `camarao`), so the glossary lists each word once.
-- **Ranking tries the English reading in both orders.** Portuguese names the food first (`sumo de laranja`), while English puts it last (`orange juice`). Ranking scores the query as typed, its English reading, and that reading reversed, then keeps the best. Ranking also ignores punctuation, so `chicken breast` ranks "Chicken, breast, raw" as a whole-word match.
-- **Typos reuse the same rule.** The fallback compares each word with catalog words and with glossary keys, so a misspelled Portuguese word still translates.
+- **Portuguese grammar is handled at lookup.** Each word independently tries its singular and masculine forms (`assadas` → `assada` → `assado`, `camarões` → `camarao`). Explicit irregular forms handle `crua` → `cru` and `flores` → `flor`. Connectives are skipped only when the query contains a recognized Portuguese term, so literal English `no sugar` retains `no`.
+- **Matching and ranking share the same alternatives.** Each matched query part contributes its matching catalog words, including every matching translation. Ranking prefers names fully covered by those words, then the number of distinct covered words at the start of the name, then raw foods and the existing length/id tie-breaks. Word order and punctuation need no Portuguese-specific ranking rules. Repeated connecting words do not increase the prefix score.
+- **Typos reuse the same matching and ranking flow.** The fallback replaces unknown words with nearby catalog words and glossary readings, then ranks those alternatives exactly as it ranks an exact query.
 - **Every glossary target must exist in the catalog.** Loading the catalog throws if a reading word appears in no Ciqual name, the same way the snapshot is validated at load. A glossary typo or a catalog update that drops a word cannot ship silently.
 
 ## Synthesis decision
@@ -77,7 +77,7 @@ Two whole shapes were compared. A data-side shape adds a `namePt` to Ciqual rows
 
 - Has anyone written to `tabela.alimentos@insa.min-saude.pt` about PortFIR reuse? Portuguese result names depend on the answer.
 - Should the page send `locale=pt-PT` once a Portuguese source exists, so results can come back in Portuguese?
-- Single-word queries still use the shared tie-breaks, so `manteiga` lists "Butter bean, raw" before butter, as English `butter` does. Should ranking prefer a name whose first word is the query over the raw-food bonus?
+- Ranking still uses the catalog names rather than a semantic model of food, preparation, and ingredients. It cannot infer that a modifier belongs to one ingredient in a mixed dish.
 - The glossary covers European Portuguese with a few Brazilian words (`abacaxi`, `abobrinha`). Does it need more Brazilian vocabulary?
 
 ## Next implementation step

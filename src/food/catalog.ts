@@ -1,11 +1,9 @@
 import { readFileSync } from "node:fs";
 import { z } from "zod";
-import type { CatalogSelection, FoodInput } from "./contract.js";
-import { portugueseTerms, readQuery, type QueryPhrase } from "./portuguese.js";
+import { catalogNutrientsSchema, type CatalogSelection, type FoodInput } from "./contract.js";
+import { portugueseTerms, readQuery, nearbyPortugueseReadings, type QueryPhrase } from "./portuguese.js";
 
-const nutrients = z.object({ kcal: z.number().nonnegative().nullable(), proteinG: z.number().nonnegative().nullable(), carbsG: z.number().nonnegative().nullable(), fatG: z.number().nonnegative().nullable() });
-
-const row = z.object({ id: z.string(), nameFr: z.string(), nameEn: z.string(), nutrientsPer100: nutrients });
+const row = z.object({ id: z.string(), nameFr: z.string(), nameEn: z.string(), nutrientsPer100: catalogNutrientsSchema });
 
 const snapshot = z.object({ version: z.string(), foods: z.array(row) });
 
@@ -17,7 +15,7 @@ export type CatalogCandidate = {
   language: "fr" | "en";
   kind: "generic";
   basis: "per-100-g";
-  nutrients: z.infer<typeof nutrients>;
+  nutrients: z.infer<typeof catalogNutrientsSchema>;
 };
 
 const byId = new Map(data.foods.map((food) => [food.id, food]));
@@ -28,22 +26,22 @@ function normalize(value: string): string {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase().trim();
 }
 
-function plain(value: string): string {
-  return value.replace(/[^a-z0-9]+/g, " ").trim();
+function words(value: string): string[] {
+  return value.split(/[^a-z0-9]+/).filter(Boolean);
 }
 
 const indexed = data.foods.map((food) => {
   const french = normalize(food.nameFr);
   const english = normalize(food.nameEn);
 
-  return { food, french, english, tokens: [...new Set(`${english} ${french}`.split(/[^a-z0-9]+/).filter(Boolean))] };
+  return { food, french, english, tokens: [...new Set(words(`${english} ${french}`))] };
 });
 
 // Searches compare names in the reader's language first, so each language keeps its own ordering of the two names.
-// Ranking compares the name's words without punctuation, so "chicken breast" ranks "Chicken, breast, raw" first.
+// Keep name tokens in order for ranking; the shared tokens cover both catalog languages.
 const byLanguage = {
-  fr: indexed.map(({ food, french, english, tokens }) => ({ food, name: french, plainName: plain(french), other: english, tokens })),
-  en: indexed.map(({ food, french, english, tokens }) => ({ food, name: english, plainName: plain(english), other: french, tokens })),
+  fr: indexed.map(({ food, french, english, tokens }) => ({ food, name: french, nameTokens: words(french), other: english, tokens })),
+  en: indexed.map(({ food, french, english, tokens }) => ({ food, name: english, nameTokens: words(english), other: french, tokens })),
 };
 
 type Entry = (typeof byLanguage)["en"][number];
@@ -139,82 +137,93 @@ function reading(term: string, english: string): Reading {
 // Every glossary reading as catalog words, built once so a glossary mistake fails at startup.
 const readings = new Map(Object.entries(portugueseTerms).flatMap(([term, english]) => english.map((text) => [text, reading(term, text)] as const)));
 
-const readingOf = (text: string): Reading => readings.get(text) ?? [];
+function readingOf(text: string): Reading {
+  const result = readings.get(text);
+
+  if (!result) throw new Error(`Uncompiled glossary reading "${text}"`);
+
+  return result;
+}
 
 // A word matches anywhere in a name, as typed, so "appl" still finds apples. A Portuguese term matches whole words only,
 // as typed or as any English reading, because a translated word is complete: "pera" means pear, not pearled barley.
-type Part = { kind: "word"; typed: string } | { kind: "term"; english: string; readings: Reading[] };
+type Part = { kind: "word"; typed: string } | { kind: "term"; readings: Reading[] };
 
 function part(phrase: QueryPhrase): Part {
   if (phrase.kind === "word") return phrase;
 
-  return { kind: "term", english: phrase.english[0], readings: [phrase.typed.map(forms), ...phrase.english.map(readingOf)] };
+  return { kind: "term", readings: [phrase.typed.map(forms), ...phrase.english.map(readingOf)] };
 }
 
 function hasReading(tokens: string[], reading: Reading): boolean {
   return reading.every((words) => tokens.some((token) => words.has(token)));
 }
 
-function matchesPart({ name, other, tokens }: Entry, part: Part): boolean {
-  return part.kind === "word"
-    ? name.includes(part.typed) || other.includes(part.typed)
-    : part.readings.some((reading) => hasReading(tokens, reading));
+// The alternatives that actually matched also supply the words used for ranking.
+function matchedWords({ name, other, tokens }: Entry, part: Part): Set<string> | null {
+  if (part.kind === "word") {
+    return name.includes(part.typed) || other.includes(part.typed) ? new Set([part.typed]) : null;
+  }
+
+  const matches = part.readings.filter((reading) => hasReading(tokens, reading));
+
+  return matches.length > 0 ? new Set(matches.flatMap((reading) => reading.flatMap((forms) => [...forms]))) : null;
 }
 
-// Whole-word matches rank above a name that only starts with the query, so "pear" lists pears before pearled barley.
-function score(name: string, query: string): number {
-  const whole = name.startsWith(query) && !/[a-z0-9]/.test(name[query.length] ?? "");
+function rank(foods: Entry[], parts: Part[]) {
+  return foods.flatMap((entry) => {
+    const matched = new Set<string>();
 
-  return name === query ? 0
-    : whole && /\braw\b|\bcru\b/.test(name) ? 1
-    : whole ? 2
-    : name.startsWith(query) ? 3
-    : name.includes(query) ? 4 : 5;
+    for (const part of parts) {
+      const words = matchedWords(entry, part);
+
+      if (!words) return [];
+
+      for (const word of words) matched.add(word);
+    }
+
+    const firstUnmatched = entry.nameTokens.findIndex((token) => !matched.has(token));
+    const prefixTokens = firstUnmatched === -1 ? entry.nameTokens : entry.nameTokens.slice(0, firstUnmatched);
+
+    return [{
+      food: entry.food,
+      whole: firstUnmatched === -1,
+      prefix: new Set(prefixTokens).size,
+      raw: /\braw\b|\bcru\b/.test(entry.name),
+    }];
+  });
 }
 
 export function searchFoods(query: string, locale: string) {
   const normalizedQuery = normalize(query);
   const parts = readQuery(normalizedQuery.split(/[\s-]+/).filter(Boolean)).map(part);
 
-  // Rank against the query as typed and in English, so "mel" puts honey ahead of melon. Portuguese names the food
-  // before what describes it, so the English is also tried reversed: "sumo de laranja" ranks as orange juice.
-  const english = parts.map((part) => part.kind === "word" ? part.typed : part.english);
-  const translations = parts.some((part) => part.kind === "term") ? [english.join(" "), english.toReversed().join(" ")] : [];
-  const phrasings = [...new Set([normalizedQuery, ...translations].map(plain))];
-
   const foods = byLanguage[locale.startsWith("fr") ? "fr" : "en"];
+  const exact = rank(foods, parts);
 
-  const exact = foods.flatMap((entry) => {
-    if (!parts.every((part) => matchesPart(entry, part))) return [];
+  // Typo recovery changes the query alternatives, not the ranking policy.
+  const matches = exact.length > 0 ? exact : rank(foods, parts.map(typoPart));
 
-    return [{ food: entry.food, score: Math.min(...phrasings.map((phrasing) => score(entry.plainName, phrasing))) }];
-  });
-
-  // Fall back to typo-tolerant matching only when nothing matches as typed.
-  const matches = exact.length > 0 ? exact : typoMatches(foods, parts);
-
-  matches.sort((left, right) => left.score - right.score || left.food.nameEn.length - right.food.nameEn.length || left.food.id.localeCompare(right.food.id));
+  matches.sort((left, right) => Number(right.whole) - Number(left.whole)
+    || right.prefix - left.prefix
+    || Number(right.raw) - Number(left.raw)
+    || left.food.nameEn.length - right.food.nameEn.length
+    || left.food.id.localeCompare(right.food.id));
 
   return { items: matches.slice(0, 20).map(({ food }) => candidate(food, locale)), attribution: [attribution] };
 }
 
-// A misspelled word reads as the catalog words it nearly matches, or as a glossary term it nearly matches.
-function typoReadings(part: Part): Reading[] {
-  if (part.kind === "term") return part.readings;
+// A misspelled word reads as the catalog words or Portuguese terms it nearly matches.
+function typoPart(part: Part): Part {
+  if (part.kind === "term") return part;
 
-  const misspelled = Object.entries(portugueseTerms).filter(([term]) => !term.includes(" ") && nearlyMatches(part.typed, term));
-
-  return [[new Set(vocabulary.filter((token) => nearlyMatches(part.typed, token)))], ...misspelled.flatMap(([, english]) => english.map(readingOf))];
-}
-
-function typoMatches(foods: Entry[], parts: Part[]) {
-  const options = parts.map(typoReadings);
-
-  return foods.flatMap(({ food, name, tokens }) => {
-    if (!options.every((readings) => readings.some((reading) => hasReading(tokens, reading)))) return [];
-
-    return [{ food, score: /\braw\b|\bcru\b/.test(name) ? 6 : 7 }];
-  });
+  return {
+    kind: "term",
+    readings: [
+      [new Set(vocabulary.filter((token) => nearlyMatches(part.typed, token)))],
+      ...nearbyPortugueseReadings(part.typed, nearlyMatches).map(readingOf),
+    ],
+  };
 }
 
 export function resolveFood(ref: CatalogSelection, amountG: number, occurredAt: string, timeZone: string): FoodInput | null {

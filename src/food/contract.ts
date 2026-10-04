@@ -14,6 +14,16 @@ export const nutrientsSchema = z.object({
   fatG: amount.nullable(),
 }).strict();
 
+// Catalog values retain the source's precision; journal writes round scaled portions to three decimals.
+const catalogNutrient = z.number().nonnegative().nullable();
+
+export const catalogNutrientsSchema = z.object({
+  kcal: catalogNutrient,
+  proteinG: catalogNutrient,
+  carbsG: catalogNutrient,
+  fatG: catalogNutrient,
+}).strict();
+
 const quantitySchema = z.union([
   z.object({ amount: positiveAmount, unit: z.enum(["g", "ml"]) }).strict(),
   z.object({ amount: positiveAmount, unit: z.literal("serving"), servingSize: z.object({ amount: positiveAmount, unit: z.enum(["g", "ml"]) }).strict() }).strict(),
@@ -91,7 +101,7 @@ export const searchResultSchema = z.object({
     language: z.enum(["fr", "en"]),
     kind: z.literal("generic"),
     basis: z.literal("per-100-g"),
-    nutrients: nutrientsSchema,
+    nutrients: catalogNutrientsSchema,
   })),
   attribution: z.array(attributionSchema),
 });

@@ -1,3 +1,5 @@
 # Search foods
 
 From any page, choose `+ Log` in the sidebar, then `Food`. Use the `Search foods` tab. Fill `#search-query` with `apple` and press Enter. Search for a misspelling such as `chiken` to check that typo-tolerant results appear. Search for `peito de frango` to check Portuguese search: the first result is `Chicken, breast, without skin, raw`, shown under its English Ciqual name. The `Food search results` list includes `Apple, flesh and skin, raw`, and the dialog includes the Anses source link. Search for `zzzznotfood` to check the no-match message. Capture screenshots before and after the action and use the authenticated search API as a second read if needed.
+
+Regression checks: `no sugar` must rank "Tea, brewed, no added sugars" first; `frango cru` and `frnago cru` must both rank "Chicken, meat, raw" first. `maçãs cruas` must include "Apple, flesh and skin, raw", and `couves-flores` must rank "Cauliflower, raw" first.
