@@ -18,7 +18,6 @@ void test("a product carries its label per 100 g, its serving, and its first bra
   assert.ok(found.outcome === "found");
   assert.deepEqual(found.result.product, {
     barcode: "3017620422003",
-    name: "Nutella",
     brand: "Nutella",
     food: {
       name: "Nutella",
@@ -65,7 +64,7 @@ void test("missing, impossible, and kJ-only values map to what the label support
   const found = await openFoodFacts(fake.fetch).lookup("96385074");
 
   assert.ok(found.outcome === "found");
-  assert.equal(found.result.product.name, "Granola");
+  assert.equal(found.result.product.food.name, "Granola");
   assert.equal(found.result.product.brand, null);
   // A serving in the other unit would need a density, so it is dropped.
   assert.equal(found.result.product.serving, null);

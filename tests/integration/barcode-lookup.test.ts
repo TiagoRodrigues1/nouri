@@ -1,7 +1,7 @@
 import { createHarness } from "../harness.js";
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
-import { scaleFood, type BarcodeLookup } from "../../src/food/contract.js";
+import { manualFood, scaleFood, type BarcodeLookup } from "../../src/food/contract.js";
 
 const { app, headers, products, setup, cleanup } = createHarness();
 
@@ -17,15 +17,13 @@ void test("a barcode finds a packaged food that logs and repeats as a recorded f
   const response = await lookup("5449000000996");
   assert.equal(response.status, 200);
   const { product, attribution }: BarcodeLookup = await response.json();
-  assert.equal(product.name, "Coca-Cola Original");
+  assert.equal(product.food.name, "Coca-Cola Original");
   assert.equal(product.brand, "COCA-COLA SERVICES SA/NV");
   assert.deepEqual(product.serving, { amount: 330, unit: "ml" });
   assert.deepEqual(attribution.map((source) => source.provider), ["open-food-facts"]);
 
   // The page scales the per-100 food to the amount and logs it with its reference.
-  const { catalogRef, ...food } = scaleFood(product.food, 330);
-  assert.ok(catalogRef);
-  const body = { occurredAt: "2026-09-26T12:00:00Z", timeZone: "Europe/Lisbon", food: { ...food, catalogRef } };
+  const body = { occurredAt: "2026-09-26T12:00:00Z", timeZone: "Europe/Lisbon", food: manualFood(scaleFood(product.food, 330)) };
   const created = await app.request("/v1/food-entries", { method: "POST", headers: { ...headers, "Idempotency-Key": "coke-1" }, body: JSON.stringify(body) });
   assert.equal(created.status, 201);
   const entry = await created.json();

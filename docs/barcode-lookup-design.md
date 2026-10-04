@@ -12,7 +12,7 @@ In the **Search foods** tab, a person types a barcode into the search field or c
 
 ```http
 GET /v1/foods/barcodes/3017620422003
-→ 200 {"product":{"barcode":"3017620422003","name":"Nutella","brand":"Nutella",
+→ 200 {"product":{"barcode":"3017620422003","brand":"Nutella",
         "food":{"name":"Nutella","quantity":{"amount":100,"unit":"g"},
                 "nutrients":{"kcal":539,"proteinG":6.3,"carbsG":57.5,"fatG":30.9},
                 "catalogRef":{"provider":"open-food-facts","id":"3017620422003","version":"1791077660"}},
@@ -27,7 +27,7 @@ The page logs the product through the existing manual body, scaled with the shar
 
 ```ts
 const { product } = await lookupBarcode("3017620422003");
-createFood(key, { occurredAt, timeZone, food: manualFood(scaleFood(product.food, 40)) });
+createFood(key, { occurredAt, timeZone, food: manualFood(scaleFood(product.food, 40)) });   // manualFood is shared with insertFoods
 ```
 
 Editing, logging again, recent foods and saved meals treat the entry as any manual food with a reference. They already keep a non-Ciqual reference.
@@ -37,7 +37,8 @@ Editing, logging again, recent foods and saved meals treat the entry as any manu
 ```ts
 // src/food/contract.ts: shared with the page
 function isBarcode(code: string): boolean;          // 8, 12, 13 or 14 digits with a valid GS1 check digit
-const packagedProductSchema: { barcode; name; brand: string | null; food: RecordedFood; serving: { amount; unit } | null };
+const packagedProductSchema: { barcode; brand: string | null; food: RecordedFood; serving: { amount; unit } | null };
+function manualFood(food: RecordedFood): ManualFood;  // the manual write body for a recorded food
 const barcodeLookupSchema: { product: PackagedProduct; attribution: Attribution[] };   // BarcodeLookup
 
 // src/food/packaged.ts: owns the Open Food Facts wire format

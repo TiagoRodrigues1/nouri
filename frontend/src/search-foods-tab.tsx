@@ -7,10 +7,10 @@ import { BarcodeScanner } from "./barcode-scanner";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Label } from "./components/ui/label";
-import { ApiError, lookupBarcode, searchFoods, type Candidate, type PackagedProduct } from "./lib/api";
+import { ApiError, lookupBarcode, searchFoods, type Candidate, type PackagedProduct, type SearchResult } from "./lib/api";
 import { nutrientLine, unitLabels } from "./lib/food-text";
 import { typedAmount } from "./lib/typed-amount";
-import { isBarcode, scaleFood, type FoodSubmission, type RecordedFood } from "../../src/food/contract";
+import { isBarcode, manualFood, scaleFood, type FoodSubmission, type RecordedFood } from "../../src/food/contract";
 
 type FoodInput = FoodSubmission["food"];
 
@@ -40,15 +40,24 @@ function packagedChoice(product: PackagedProduct): Choice {
     per100: product.food,
     brand: product.brand,
     serving: product.serving,
-    toFood: (amount) => {
-      const { catalogRef, ...food } = scaleFood(product.food, amount);
-
-      return catalogRef ? { ...food, catalogRef } : food;
-    },
+    toFood: (amount) => manualFood(scaleFood(product.food, amount)),
   };
 }
 
-// Only an outage is worth asking Open Food Facts again; a missing product stays missing.
+// A barcode finds one product and a name searches Ciqual; either way the tab shows choices and their sources.
+async function findChoices(term: string): Promise<{ choices: Choice[]; attribution: SearchResult["attribution"] }> {
+  if (isBarcode(term)) {
+    const { product, attribution } = await lookupBarcode(term);
+
+    return { choices: [packagedChoice(product)], attribution };
+  }
+
+  const { items, attribution } = await searchFoods(term);
+
+  return { choices: items.map(catalogChoice), attribution };
+}
+
+// Only an outage is worth asking again; a missing product stays missing.
 const retryOutage = (failures: number, error: Error) => failures < 1 && error instanceof ApiError && error.status === 502;
 
 export function SearchFoodsTab({ pending, onSave }: { pending: boolean; onSave: (event: FormEvent<HTMLFormElement>, food: FoodInput) => void }) {
@@ -58,28 +67,16 @@ export function SearchFoodsTab({ pending, onSave }: { pending: boolean; onSave: 
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
   // Digits are a barcode, never a name, so a mistyped code says so instead of finding no foods.
-  const digits = /^\d+$/.test(term);
-  const barcode = digits && isBarcode(term) ? term : null;
+  const badBarcode = /^\d+$/.test(term) && !isBarcode(term);
 
-  const searchQuery = useQuery({
+  const query = useQuery({
     queryKey: ["foods", term],
-    queryFn: () => searchFoods(term),
-    enabled: !digits && term.length >= 2,
-  });
-
-  const productQuery = useQuery({
-    queryKey: ["barcodes", barcode],
-    queryFn: () => lookupBarcode(barcode ?? ""),
-    enabled: barcode !== null,
+    queryFn: () => findChoices(term),
+    enabled: !badBarcode && term.length >= 2,
     retry: retryOutage,
   });
 
-  const active = digits ? productQuery : searchQuery;
-
-  const choices = digits
-    ? (productQuery.data ? [packagedChoice(productQuery.data.product)] : [])
-    : (searchQuery.data?.items.map(catalogChoice) ?? []);
-
+  const choices = query.data?.choices ?? [];
   const selected = choices.find((choice) => choice.key === selectedKey) ?? null;
 
   function find(value: string) {
@@ -98,12 +95,12 @@ export function SearchFoodsTab({ pending, onSave }: { pending: boolean; onSave: 
     find(code);
   }
 
-  const notFound = active.error instanceof ApiError && active.error.status === 404;
+  const notFound = query.error instanceof ApiError && query.error.status === 404;
 
-  const message = digits && !barcode ? "That barcode's numbers don't add up. Check it and try again."
-    : active.isFetching ? (digits ? "Looking up the barcode…" : "Searching foods…")
+  const message = badBarcode ? "That barcode's numbers don't add up. Check it and try again."
+    : query.isFetching ? "Searching foods…"
     : notFound ? "No product with this barcode yet. Add it manually from the label."
-    : active.isError ? active.error.message
+    : query.isError ? query.error.message
     : !term ? "Search for a food, or scan a packaged food's barcode."
     : choices.length === 0 ? "No foods found. Try another name."
     : null;
@@ -158,7 +155,7 @@ export function SearchFoodsTab({ pending, onSave }: { pending: boolean; onSave: 
       )}
       {/* Keyed by choice, so choosing another food restarts from its default amount. */}
       {selected && <ChoiceForm key={selected.key} choice={selected} pending={pending} onSave={onSave} />}
-      {active.data?.attribution.map((source) => (
+      {query.data?.attribution.map((source) => (
         <a
           {...stylex.props(styles.sourceLink)}
           key={source.url}

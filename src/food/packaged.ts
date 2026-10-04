@@ -81,7 +81,6 @@ function product(barcode: string, found: Product): BarcodeLookup["product"] | nu
 
   return {
     barcode,
-    name,
     brand: found.brands?.split(",")[0]?.trim() || null,
     food: food.data,
     serving: servingUnit === unit && servingAmount > 0 && servingAmount <= 10_000 ? { amount: servingAmount, unit } : null,

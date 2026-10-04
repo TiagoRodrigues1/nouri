@@ -109,7 +109,6 @@ export function isBarcode(code: string): boolean {
 // turns into any amount in the same unit. The serving, when the label gives one, is in that unit too.
 export const packagedProductSchema = z.object({
   barcode: z.string().refine(isBarcode),
-  name: z.string(),
   brand: z.string().nullable(),
   food: recordedFoodSchema,
   serving: z.object({ amount: positiveAmount, unit: z.enum(["g", "ml"]) }).nullable(),
@@ -157,6 +156,11 @@ export function scaleFood(food: RecordedFood, amount: number): RecordedFood {
     quantity: { ...food.quantity, amount },
     nutrients: { kcal: scale(kcal), proteinG: scale(proteinG), carbsG: scale(carbsG), fatG: scale(fatG) },
   };
+}
+
+// A recorded food as a manual write sends it: the body leaves out a reference it lacks rather than sending null.
+export function manualFood({ catalogRef, ...food }: RecordedFood): FoodInput["food"] {
+  return catalogRef ? { ...food, catalogRef } : food;
 }
 
 // A scaled food must still fit the journal's limits, which a tiny recorded amount scaled up can exceed.
