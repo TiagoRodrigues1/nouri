@@ -56,13 +56,21 @@ export const submissionSchema = z.union([manualInputSchema, catalogInputSchema])
   !("catalogRef" in input.food && input.food.catalogRef?.provider === "ciqual"));
 
 // Logging a saved entry again copies what was recorded, so it keeps working after the catalog it came from changes.
+// An amount scales the recorded food; without one it is logged at the amount recorded.
 export const repeatInputSchema = z.object({
   occurredAt: occurredAtSchema,
   timeZone: timeZoneSchema,
+  amount: positiveAmount.max(10_000).optional(),
 }).strict();
 
-export const entrySchema = recordBaseSchema.extend({
-  food: manualInputSchema.shape.food.extend({ catalogRef: recordedRefSchema.nullable() }),
+// A food as the journal recorded it. Repeats, recent foods and saved meals copy it rather than re-reading the catalog.
+export const recordedFoodSchema = manualInputSchema.shape.food.extend({ catalogRef: recordedRefSchema.nullable() });
+
+export const entrySchema = recordBaseSchema.extend({ food: recordedFoodSchema });
+
+// Distinct foods most recently eaten first, each with the latest entry that recorded it.
+export const recentFoodsSchema = z.object({
+  foods: z.array(z.object({ entryId: z.uuid(), lastEaten: z.iso.date(), food: recordedFoodSchema })),
 });
 
 export const daySchema = z.object({
@@ -96,6 +104,12 @@ export type RepeatInput = z.infer<typeof repeatInputSchema>;
 
 export type FoodEntry = z.infer<typeof entrySchema>;
 
+export type RecordedFood = z.infer<typeof recordedFoodSchema>;
+
+export type RecentFoods = z.infer<typeof recentFoodsSchema>;
+
+export type RecentFood = RecentFoods["foods"][number];
+
 export type FoodDay = z.infer<typeof daySchema>;
 
 export type SearchResult = z.infer<typeof searchResultSchema>;
@@ -103,3 +117,24 @@ export type SearchResult = z.infer<typeof searchResultSchema>;
 export type CatalogSelection = z.infer<typeof catalogRefSchema>;
 
 export type FoodQuantity = z.infer<typeof quantitySchema>;
+
+// The same food at another amount. Nutrients scale with it, rounded to the thousandth the journal stores,
+// and an unknown value stays unknown. The server logs with this and the page previews with it.
+export function scaleFood(food: RecordedFood, amount: number): RecordedFood {
+  const from = food.quantity.amount;
+  const scale = (value: number | null) => (value === null ? null : Math.round((value * amount * 1000) / from) / 1000);
+  const { kcal, proteinG, carbsG, fatG } = food.nutrients;
+
+  return {
+    ...food,
+    quantity: { ...food.quantity, amount },
+    nutrients: { kcal: scale(kcal), proteinG: scale(proteinG), carbsG: scale(carbsG), fatG: scale(fatG) },
+  };
+}
+
+// A scaled food must still fit the journal's limits, which a tiny recorded amount scaled up can exceed.
+export function scaledFood(food: RecordedFood, amount: number): RecordedFood | null {
+  const result = recordedFoodSchema.safeParse(scaleFood(food, amount));
+
+  return result.success ? result.data : null;
+}

@@ -13,8 +13,8 @@ import { dashboardSchema } from "../../../src/dashboard/contract";
 import type { Dashboard } from "../../../src/dashboard/contract";
 import { daySchema } from "../../../src/days/contract";
 import type { Day } from "../../../src/days/contract";
-import { entrySchema, searchResultSchema } from "../../../src/food/contract";
-import type { FoodEntry, SearchResult } from "../../../src/food/contract";
+import { entrySchema, recentFoodsSchema, searchResultSchema } from "../../../src/food/contract";
+import type { FoodEntry, RecentFood, SearchResult } from "../../../src/food/contract";
 import { overviewSchema } from "../../../src/overview/contract";
 import { reviewSchema } from "../../../src/review/contract";
 import type { Review } from "../../../src/review/contract";
@@ -30,7 +30,7 @@ export type { CardId, Dashboard } from "../../../src/dashboard/contract";
 
 export type { Day } from "../../../src/days/contract";
 
-export type { FoodEntry, SearchResult } from "../../../src/food/contract";
+export type { FoodEntry, RecentFood, SearchResult } from "../../../src/food/contract";
 
 export type { SavedMeal } from "../../../src/meals/contract";
 
@@ -133,12 +133,16 @@ export async function searchFoods(query: string): Promise<SearchResult> {
   return request(`/v1/foods/search?q=${encodeURIComponent(query)}&locale=en`, searchResultSchema);
 }
 
+export async function getRecentFoods(): Promise<RecentFood[]> {
+  return (await request("/v1/foods/recent", recentFoodsSchema)).foods;
+}
+
 export async function createFood(key: string, input: FoodSubmission): Promise<FoodEntry> {
   return write("/v1/food-entries", entrySchema, { method: "POST", key, json: input });
 }
 
-export async function repeatFood(key: string, entry: FoodEntry, input: RepeatInput): Promise<FoodEntry> {
-  return write(`/v1/food-entries/${encodeURIComponent(entry.id)}/repeats`, entrySchema, { method: "POST", key, json: input });
+export async function repeatFood(key: string, entryId: string, input: RepeatInput): Promise<FoodEntry> {
+  return write(`/v1/food-entries/${encodeURIComponent(entryId)}/repeats`, entrySchema, { method: "POST", key, json: input });
 }
 
 export async function updateFood(key: string, entry: FoodEntry, input: FoodSubmission): Promise<FoodEntry> {

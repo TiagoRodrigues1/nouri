@@ -1,19 +1,15 @@
-import { maxMealItems, scaleFood, type MealFood } from "../../../src/meals/contract.js";
+import { scaleFood, type RecordedFood } from "../../../src/food/contract.js";
+import { maxMealItems } from "../../../src/meals/contract.js";
+import { typedAmount } from "./typed-amount.js";
 
 export { maxMealItems };
 
 // One food offered for a meal, whether an entry being saved or a saved item being logged.
 // The amount stays text while typing, so a half-typed "0." is not rewritten under the cursor.
-export type MealRow = { id: string; food: MealFood; included: boolean; amount: string };
+export type MealRow = { id: string; food: RecordedFood; included: boolean; amount: string };
 
-export function mealRows(items: Array<{ id: string; food: MealFood }>, included: (id: string) => boolean = () => true): MealRow[] {
+export function mealRows(items: Array<{ id: string; food: RecordedFood }>, included: (id: string) => boolean = () => true): MealRow[] {
   return items.map(({ id, food }) => ({ id, food, included: included(id), amount: String(food.quantity.amount) }));
-}
-
-function amountOf(row: MealRow): number | null {
-  const amount = Number(row.amount);
-
-  return row.amount.trim() !== "" && amount > 0 ? amount : null;
 }
 
 // The rows to send, each with its amount; null while an included row has no usable amount.
@@ -22,7 +18,7 @@ export function chosenAmounts(rows: MealRow[]): Array<{ id: string; amount: numb
 
   for (const row of rows) {
     if (!row.included) continue;
-    const amount = amountOf(row);
+    const amount = typedAmount(row.amount);
 
     if (amount === null) return null;
     chosen.push({ id: row.id, amount });
@@ -32,8 +28,8 @@ export function chosenAmounts(rows: MealRow[]): Array<{ id: string; amount: numb
 }
 
 // A row's food at its typed amount, so the page shows what logging it would record.
-export function rowFood(row: MealRow): MealFood {
-  const amount = amountOf(row);
+export function rowFood(row: MealRow): RecordedFood {
+  const amount = typedAmount(row.amount);
 
   return amount === null ? row.food : scaleFood(row.food, amount);
 }

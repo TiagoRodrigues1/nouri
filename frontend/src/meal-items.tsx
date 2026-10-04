@@ -3,9 +3,8 @@ import { Checkbox } from "./components/ui/checkbox";
 import { Input } from "./components/ui/input";
 import { styles } from "./form-styles";
 import { format } from "./lib/api";
+import { nutrientLine, unitLabels } from "./lib/food-text";
 import { includedKcal, rowFood, type MealRow } from "./lib/saved-meals";
-
-const units = { g: "g", ml: "ml", serving: "servings" } as const;
 
 // The foods of a meal, each with whether it is included and its amount. Saving and logging share it.
 export function MealItems({ rows, onChange, label }: { rows: MealRow[]; onChange: (rows: MealRow[]) => void; label: string }) {
@@ -27,7 +26,7 @@ export function MealItems({ rows, onChange, label }: { rows: MealRow[]; onChange
               <label htmlFor={`meal-item-${row.id}`} {...stylex.props(styles.mealRowText)}>
                 <strong {...stylex.props(styles.resultsText, styles.resultsName)}>{name}</strong>
                 <small {...stylex.props(styles.resultsText, styles.resultsMeta)}>
-                  {format(nutrients.kcal)} kcal · P {format(nutrients.proteinG, 1)} · C {format(nutrients.carbsG, 1)} · F {format(nutrients.fatG, 1)}
+                  {nutrientLine(nutrients)}
                 </small>
               </label>
               <span {...stylex.props(styles.mealAmount)}>
@@ -36,13 +35,13 @@ export function MealItems({ rows, onChange, label }: { rows: MealRow[]; onChange
                   min="0.001"
                   max="10000"
                   step="0.001"
-                  aria-label={`Amount of ${name} in ${units[quantity.unit]}`}
+                  aria-label={`Amount of ${name} in ${unitLabels[quantity.unit]}`}
                   value={row.amount}
                   disabled={!row.included}
                   required={row.included}
                   onChange={(event) => change(row.id, { amount: event.target.value })}
                 />
-                <span {...stylex.props(styles.mealUnit)}>{units[quantity.unit]}</span>
+                <span {...stylex.props(styles.mealUnit)}>{unitLabels[quantity.unit]}</span>
               </span>
             </li>
           );

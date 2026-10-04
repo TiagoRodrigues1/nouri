@@ -7,15 +7,12 @@ type Receipt = typeof mutationReceipts.$inferSelect;
 
 const storedOutcomeSchema = z.enum(["created", "updated", "deleted", "missing", "stale", "key-reuse"]);
 
-type Result<Entry, Extra extends string> =
-  | { outcome: "created" | "updated"; entry: Entry }
-  | { outcome: "deleted" | "missing" | "stale" | "key-reuse" | Extra };
-
-// The callback parses a completed receipt into the feature's narrower result type.
-export async function withReceipt<Entry, Extra extends string, R extends Result<Entry, Extra>>(
+// The callback parses a completed receipt into the feature's narrower result type. A feature's own
+// outcomes (a missing catalog food, an invalid item) keep no receipt, so the key can be sent again once fixed.
+export async function withReceipt<R extends { outcome: string }>(
   db: AppDatabase, userId: string, key: string, requestHash: string,
   parse: (receipt: Receipt) => R,
-  run: (tx: Transaction) => Promise<R>, discard?: Extra,
+  run: (tx: Transaction) => Promise<R>,
 ): Promise<R | { outcome: "key-reuse" }> {
   return db.transaction(async (tx) => {
     const where = and(eq(mutationReceipts.userId, userId), eq(mutationReceipts.key, key));
@@ -29,12 +26,13 @@ export async function withReceipt<Entry, Extra extends string, R extends Result<
     if (receipt.outcome !== null) return parse(receipt);
 
     const result = await run(tx);
+    const stored = storedOutcomeSchema.safeParse(result.outcome);
 
-    if (result.outcome === discard) {
+    if (!stored.success) {
       await tx.delete(mutationReceipts).where(where);
     } else {
       const body = "entry" in result ? result.entry : null;
-      await tx.update(mutationReceipts).set({ outcome: storedOutcomeSchema.parse(result.outcome), body }).where(where);
+      await tx.update(mutationReceipts).set({ outcome: stored.data, body }).where(where);
     }
 
     return result;

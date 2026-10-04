@@ -3,9 +3,8 @@ import { Fragment, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs";
-import { useTargets } from "./lib/use-targets";
+import { useTargetsQuery } from "./lib/use-targets";
 import { queryStatus } from "./query-status";
-import { TargetsNotice } from "./targets-notice";
 import { SportsSection } from "./overview/sports";
 import { MeasurementsSection } from "./overview/measurements";
 import { SleepSection } from "./overview/sleep";
@@ -83,25 +82,28 @@ export function Overview() {
   }
 
   const data = query.data;
-  const targets = useTargets(date);
+  const targetsQuery = useTargetsQuery(date);
+  const targets = targetsQuery.data?.targets;
+  // A failed refetch keeps the cached targets on screen, so the notice shows only while there are none.
+  const targetsStatus = targets ? null : queryStatus(targetsQuery, "Loading your targets…", "Targets could not load: ");
   const remove = (path: RecordPath, label: string) => (entry: { id: string; revision: number }) => journal.remove.mutate({ path, label, ...entry });
   const busy = journal.create.isPending || journal.remove.isPending;
 
   const sections: Record<Category, ReactNode> = data ? {
-    sports: <SportsSection sports={data.sports} busy={busy} onDelete={remove("/v1/workouts", "Workout")} />,
+    sports: <SportsSection sports={data.sports} busy={busy} onDelete={remove(recordPaths.workout, "Workout")} />,
     measurements: (
       <MeasurementsSection
         date={date}
         measurements={data.measurements}
-        weightGoalKg={targets.targets?.weightKg ?? null}
+        weightGoalKg={targets?.weightKg ?? null}
         photos={data.photos}
         busy={busy}
-        onDelete={remove("/v1/measurements", "Measurement")}
+        onDelete={remove(recordPaths.measurement, "Measurement")}
         onUpload={upload}
-        onDeletePhoto={remove("/v1/progress-photos", "Photo")}
+        onDeletePhoto={remove(recordPaths.photo, "Photo")}
       />
     ),
-    sleep: <SleepSection sleep={data.sleep} goalMinutes={targets.targets?.sleepMinutes} busy={busy} onDelete={remove("/v1/sleep-sessions", "Sleep session")} />,
+    sleep: <SleepSection sleep={data.sleep} goalMinutes={targets?.sleepMinutes} busy={busy} onDelete={remove(recordPaths.sleep, "Sleep session")} />,
   } : { sports: null, measurements: null, sleep: null };
 
   const status = queryStatus(query, "Loading your overview…");
@@ -119,7 +121,7 @@ export function Overview() {
           <p {...stylex.props(styles.status)}>{status}</p>
         ) : (
           <>
-            <TargetsNotice state={targets} style={styles.targetsNotice} />
+            {targetsStatus && <p {...stylex.props(styles.targetsNotice)}>{targetsStatus}</p>}
             <TabsContent value="all" {...stylex.props(styles.sections)}>
               {categories.map((category) => <Fragment key={category.id}>{sections[category.id]}</Fragment>)}
             </TabsContent>

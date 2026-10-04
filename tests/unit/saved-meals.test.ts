@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { chosenAmounts, includedKcal, mealRows, rowFood } from "../../frontend/src/lib/saved-meals.js";
-import { scaleFood, type MealFood } from "../../src/meals/contract.js";
+import { scaleFood, type RecordedFood } from "../../src/food/contract.js";
 
-const oats: MealFood = { name: "Oats", quantity: { amount: 80, unit: "g" }, nutrients: { kcal: 300, proteinG: 10, carbsG: null, fatG: 0.001 }, catalogRef: null };
+const oats: RecordedFood = { name: "Oats", quantity: { amount: 80, unit: "g" }, nutrients: { kcal: 300, proteinG: 10, carbsG: null, fatG: 0.001 }, catalogRef: null };
 
-const yogurt: MealFood = {
+const yogurt: RecordedFood = {
   name: "Yogurt",
   quantity: { amount: 1, unit: "serving", servingSize: { amount: 125, unit: "g" } },
   nutrients: { kcal: 90, proteinG: 5, carbsG: 6, fatG: 4 },

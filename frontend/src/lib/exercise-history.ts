@@ -7,11 +7,6 @@ export function exerciseHistoryQueryOptions() {
   return queryOptions({ queryKey: ["exercise-history"], queryFn: getExerciseHistory });
 }
 
-// Sessions on or before the date, oldest first.
-export function sessionsUpTo(exercise: ExerciseHistory, date: string): ExerciseSession[] {
-  return exercise.sessions.filter((session) => session.date <= date);
-}
-
 // The latest session of the exercise a typed name matches, on or before the date.
 export function lastSession(exercises: ExerciseHistory[], name: string, date: string): ExerciseSession | null {
   const key = exerciseKey(name);

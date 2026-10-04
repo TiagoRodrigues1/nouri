@@ -54,4 +54,11 @@ export const reviewSchema = z.object({
 
 export type ReviewDay = z.infer<typeof reviewDaySchema>;
 
+type CompleteFood = ReviewDay["food"] & { kcal: number; proteinG: number };
+
+// A day with no food has no totals, so known totals also mean food was logged.
+export function isCompleteFood(food: ReviewDay["food"]): food is CompleteFood {
+  return food.kcal !== null && food.proteinG !== null;
+}
+
 export type Review = z.infer<typeof reviewSchema>;

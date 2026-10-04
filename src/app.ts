@@ -8,9 +8,9 @@ import { dashboardSchema } from "./dashboard/contract.js";
 import { getDashboard, saveDashboard } from "./dashboard/dashboard.js";
 import { daySchema } from "./days/contract.js";
 import { getDay } from "./days/days.js";
-import { entrySchema, repeatInputSchema, searchResultSchema, submissionSchema } from "./food/contract.js";
+import { entrySchema, recentFoodsSchema, repeatInputSchema, searchResultSchema, submissionSchema } from "./food/contract.js";
 import { searchFoods } from "./food/catalog.js";
-import { mutateFood } from "./food/food.js";
+import { getRecentFoods, mutateFood } from "./food/food.js";
 import type { AppDatabase } from "./db/database.js";
 import { getDated, saveDated, type DatedKind, type DatedTable } from "./effective-dated.js";
 import { mealEditSchema, mealInputSchema, mealLogInputSchema, mealLogSchema, savedMealListSchema, savedMealSchema } from "./meals/contract.js";
@@ -43,7 +43,7 @@ import { getExerciseHistory, getWorkoutSummary, workoutRecords } from "./workout
 
 type MutationResult<Entry> =
   | { outcome: "created" | "updated"; entry: Entry }
-  | { outcome: "deleted" | "missing" | "stale" | "key-reuse" | "catalog-missing" | "invalid-item" }
+  | { outcome: "deleted" | "missing" | "stale" | "key-reuse" | "catalog-missing" | "invalid-item" | "invalid-amount" }
   | { outcome: "unknown-reference"; message: string };
 
 // Every write answers the same way; routes differ only in what a missing record is called.
@@ -62,6 +62,8 @@ function mutationResponse<Entry>(result: MutationResult<Entry>, missing: string)
       return error(404, result.message);
     case "invalid-item":
       return error(400, "Invalid saved meal item");
+    case "invalid-amount":
+      return error(400, "Amount out of range");
     case "stale":
       return error(409, "Revision conflict");
     case "key-reuse":
@@ -124,7 +126,8 @@ export function createApp(db: AppDatabase, identity: Identity, wearables?: Weara
 
   app.get("/assets/:file", async (context) => {
     const file = context.req.param("file");
-    const type = /^[a-zA-Z0-9_-]+\.([a-z0-9]+)$/.exec(file)?.[1];
+    // Dots only between name parts, so a module like theme.stylex.ts keeps its chunk and ".." never matches.
+    const type = /^[a-zA-Z0-9_-]+(?:\.[a-zA-Z0-9_-]+)*\.([a-z0-9]+)$/.exec(file)?.[1];
     const contentType = type && assetTypes.get(type);
 
     if (!contentType) return error(404, "Asset not found");
@@ -195,7 +198,10 @@ export function createApp(db: AppDatabase, identity: Identity, wearables?: Weara
 
     return mutationResponse(await mutateFood(db, context.get("userId"), key, { kind: "repeat", sourceId: id.data, input: input.data }), "Food entry not found");
   });
-  app.openAPIRegistry.registerPath({ method: "post", path: "/v1/food-entries/{id}/repeats", request: { params: z.object({ id: z.uuid() }), headers: mutationHeaders, body: json(repeatInputSchema) }, responses: { 201: { description: "A new entry copying the saved food, amount and nutrients", ...json(entrySchema) }, 400: failure("Invalid request"), 404: failure("Entry not found"), 409: failure("Idempotency conflict") } });
+  app.openAPIRegistry.registerPath({ method: "post", path: "/v1/food-entries/{id}/repeats", request: { params: z.object({ id: z.uuid() }), headers: mutationHeaders, body: json(repeatInputSchema) }, responses: { 201: { description: "A new entry copying the saved food, amount and nutrients, scaled to the amount when one is given", ...json(entrySchema) }, 400: failure("Invalid request or amount out of range"), 404: failure("Entry not found"), 409: failure("Idempotency conflict") } });
+
+  app.get("/v1/foods/recent", async (context) => context.json(await getRecentFoods(db, context.get("userId"))));
+  app.openAPIRegistry.registerPath({ method: "get", path: "/v1/foods/recent", responses: { 200: { description: "Up to 20 distinct foods from the latest entries, most recently eaten first, each with the entry to log again", ...json(recentFoodsSchema) } } });
 
   app.get("/v1/foods/search", (context) => {
     const query = z.string().trim().min(2).max(80).safeParse(context.req.query("q"));

@@ -1,4 +1,4 @@
-import { queryOptions, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { createSavedMeal, deleteSavedMeal, getSavedMeals, logSavedMeal, updateSavedMeal, type SavedMeal } from "./api";
 import { useIdempotentDelete, useIdempotentWrite } from "./use-idempotent";
 import { queryRefresh } from "./query-refresh";
@@ -8,12 +8,8 @@ type PendingLog = { meal: SavedMeal; input: MealLogInput };
 
 type PendingEdit = { meal: SavedMeal; input: MealEdit };
 
-function savedMealsQueryOptions() {
-  return queryOptions({ queryKey: ["saved-meals"], queryFn: () => getSavedMeals() });
-}
-
 export function useSavedMeals() {
-  return useQuery(savedMealsQueryOptions());
+  return useQuery({ queryKey: ["saved-meals"], queryFn: getSavedMeals });
 }
 
 export function useSaveMeal(onSaved: () => void) {

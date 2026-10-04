@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { Beef, ChartColumn, Flame, LayoutDashboard } from "lucide-react";
-import { calorieTolerance } from "../../src/review/contract";
+import { calorieTolerance, isCompleteFood } from "../../src/review/contract";
 import { Button } from "./components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "./components/ui/table";
@@ -48,14 +48,13 @@ function foodTotal(day: ReviewDay, nutrient: Nutrient) {
 
   if (value === null) return <span {...stylex.props(styles.muted)} title="A logged food has no value for this">Incomplete</span>;
 
-  const complete = day.food.kcal !== null && day.food.proteinG !== null;
   const target = day.targets[nutrient];
   const difference = Math.round(value - target);
 
   return (
     <>
       <Amount value={format(value)} unit={unit} />
-      {complete && (
+      {isCompleteFood(day.food) && (
         <span {...stylex.props(styles.difference)} title={`Target ${format(target)} ${unit}`}>
           {difference === 0 ? "on target" : `${difference > 0 ? "+" : "−"}${format(Math.abs(difference))}`}
         </span>
