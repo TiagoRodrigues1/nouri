@@ -2,7 +2,8 @@ import { targetsForDaySchema } from "../../../src/targets/contract";
 import type { Targets } from "./api";
 import { datedResource } from "./dated-resource";
 
-export const { useDatedQuery: useTargetsQuery, useSaveDated: useSaveTargets } = datedResource<Targets, typeof targetsForDaySchema>("/v1/targets", "targets", targetsForDaySchema);
+// Review compares each day with its targets, so saving refreshes it too.
+export const { useDatedQuery: useTargetsQuery, useSaveDated: useSaveTargets } = datedResource<Targets, typeof targetsForDaySchema>("/v1/targets", "targets", targetsForDaySchema, { refresh: ["review"] });
 
 // A failed read is its own state rather than the defaults, so a screen never presents numbers the person did not set.
 // Every state carries `targets`, so a screen reads it directly and compares only when it is there.

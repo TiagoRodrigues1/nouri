@@ -2,9 +2,10 @@ import * as stylex from "@stylexjs/stylex";
 import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { ChartColumn, LayoutDashboard } from "lucide-react";
+import { Beef, ChartColumn, Flame, LayoutDashboard } from "lucide-react";
+import { calorieTolerance } from "../../src/review/contract";
 import { Button } from "./components/ui/button";
-import { Card } from "./components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "./components/ui/table";
 import { useDashboardPage } from "./dashboard-page-context";
 import { format, getReview, type Review as ReviewData, type ReviewDay } from "./lib/api";
@@ -33,18 +34,39 @@ function Blank() {
   return <span {...stylex.props(styles.hidden)}>Not logged</span>;
 }
 
+type Nutrient = "kcal" | "proteinG";
+
+const units: Record<Nutrient, string> = { kcal: "kcal", proteinG: "g" };
+
 // A day whose foods lack a value says so rather than showing a partial sum.
-function foodTotal(day: ReviewDay, value: number | null, unit: string) {
+// A complete day also shows how far it landed from that day's target.
+function foodTotal(day: ReviewDay, nutrient: Nutrient) {
+  const value = day.food[nutrient];
+  const unit = units[nutrient];
+
   if (day.food.entryCount === 0) return <Blank />;
 
   if (value === null) return <span {...stylex.props(styles.muted)} title="A logged food has no value for this">Incomplete</span>;
 
-  return <Amount value={format(value)} unit={unit} />;
+  const complete = day.food.kcal !== null && day.food.proteinG !== null;
+  const target = day.targets[nutrient];
+  const difference = Math.round(value - target);
+
+  return (
+    <>
+      <Amount value={format(value)} unit={unit} />
+      {complete && (
+        <span {...stylex.props(styles.difference)} title={`Target ${format(target)} ${unit}`}>
+          {difference === 0 ? "on target" : `${difference > 0 ? "+" : "−"}${format(Math.abs(difference))}`}
+        </span>
+      )}
+    </>
+  );
 }
 
 const metrics: Metric[] = [
-  { label: "Calories", cell: (day) => foodTotal(day, day.food.kcal, "kcal"), recorded: (counts) => counts.food },
-  { label: "Protein", cell: (day) => foodTotal(day, day.food.proteinG, "g"), recorded: (counts) => counts.food },
+  { label: "Calories", cell: (day) => foodTotal(day, "kcal"), recorded: (counts) => counts.food },
+  { label: "Protein", cell: (day) => foodTotal(day, "proteinG"), recorded: (counts) => counts.food },
   {
     label: "Workouts",
     cell: ({ workouts }) => workouts.totalMinutes === null ? <Blank /> : (
@@ -58,6 +80,42 @@ const metrics: Metric[] = [
   { label: "Sleep", cell: ({ sleep }) => sleep.totalMinutes === null ? <Blank /> : duration(sleep.totalMinutes), recorded: (counts) => counts.sleep },
   { label: "Weight", cell: ({ weightKg }) => weightKg === null ? <Blank /> : <Amount value={format(weightKg, 1)} unit="kg" />, recorded: (counts) => counts.weight },
 ];
+
+type ComparisonProps = {
+  title: string;
+  icon: ReactNode;
+  nutrient: Nutrient;
+  rule: string;
+  nutrition: ReviewData["nutrition"];
+};
+
+function Comparison({ title, icon, nutrient, rule, nutrition }: ComparisonProps) {
+  const { average, averageTarget, daysOnTarget } = nutrition[nutrient];
+  const unit = units[nutrient];
+  const days = nutrition.completeDays;
+
+  return (
+    <Card>
+      <CardHeader {...stylex.props(styles.comparisonHeader)}>
+        <CardTitle {...stylex.props(styles.comparisonTitle)}>{icon} {title}</CardTitle>
+      </CardHeader>
+      <CardContent {...stylex.props(styles.comparisonContent)}>
+        {average === null || averageTarget === null ? (
+          <p {...stylex.props(styles.muted)}>No complete food days to compare yet.</p>
+        ) : (
+          <>
+            <p {...stylex.props(styles.comparisonValue)}>
+              <Amount value={format(average)} unit={`${unit} a day`} />
+            </p>
+            <p {...stylex.props(styles.muted)}>
+              Target {format(averageTarget)} {unit}. {rule} on <strong>{daysOnTarget} of {days}</strong> complete {days === 1 ? "day" : "days"}.
+            </p>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 export function Review() {
   const { date } = useDashboardPage();
@@ -76,8 +134,13 @@ export function Review() {
   return (
     <div {...stylex.props(styles.page)}>
       <p {...stylex.props(styles.summary)}>
-        Records on <strong>{review.recordedDays.any} of {total} days</strong>. Days without a record stay blank.
+        Records on <strong>{review.recordedDays.any} of {total} days</strong>. Complete food records on <strong>{review.nutrition.completeDays} of {total} days</strong>:
+        food logged and every food has calories and protein. Only those days are compared with your targets.
       </p>
+      <div {...stylex.props(styles.comparisons)}>
+        <Comparison title="Calories" icon={<Flame size={15} />} nutrient="kcal" rule={`Within ${calorieTolerance * 100}% of target`} nutrition={review.nutrition} />
+        <Comparison title="Protein" icon={<Beef size={15} />} nutrient="proteinG" rule="Reached target" nutrition={review.nutrition} />
+      </div>
       <Card {...stylex.props(styles.card)}>
         <Table aria-label="Seven-day review">
           <TableHeader>

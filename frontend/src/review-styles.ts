@@ -9,6 +9,16 @@ export const styles = stylex.create({
   number: { textAlign: "right", fontVariantNumeric: "tabular-nums" },
   unit: { marginLeft: 4, color: colors.mutedForeground, fontSize: 12 },
   muted: { color: colors.mutedForeground, fontSize: 12 },
+  difference: { display: "block", color: colors.mutedForeground, fontSize: 11 },
+  comparisons: {
+    display: "grid",
+    gap: 14,
+    gridTemplateColumns: { default: "repeat(2, minmax(0, 1fr))", "@media (max-width: 620px)": "minmax(0, 1fr)" },
+  },
+  comparisonHeader: { paddingTop: 14, paddingRight: 16, paddingBottom: 8, paddingLeft: 16 },
+  comparisonTitle: { display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600 },
+  comparisonContent: { display: "grid", gap: 4, paddingTop: 0, paddingRight: 16, paddingBottom: 14, paddingLeft: 16 },
+  comparisonValue: { margin: 0, fontSize: 22, fontWeight: 600, fontVariantNumeric: "tabular-nums" },
   links: { display: "inline-flex", gap: 2 },
   hidden: {
     position: "absolute",

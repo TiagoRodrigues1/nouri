@@ -21,7 +21,8 @@ const review = await getReview(token, "2026-09-30");
 
 ```
 src/review/contract.ts   reviewSchema, reviewDays
-src/review/review.ts     getReview(db, userId, to): the window, empty days, recorded counts
+src/review/review.ts     getReview(db, userId, to): the window, empty days, recorded counts, target comparison
+src/effective-dated.ts   getDatedRange(db, kind, userId, from, to)  the targets in force on each day
 src/food/food.ts         getFoodRange(db, userId, from, to)       per-day count, kcal, protein
 src/workouts/workouts.ts getWorkoutRange(db, userId, from, to)    per-day count, minutes
 src/sleep/sleep.ts       getSleepRange(db, userId, from, to)      per-day sessions, minutes
@@ -45,8 +46,32 @@ The first sketch also took B's idea of reusing the shell's selected date as the 
 - The sidebar Review link always opens the last seven days. Back returns to an earlier week, but the sidebar does not remember it.
 - `+ Log` on the Review page logs to the visible window's last day. Each dialog states that date before saving.
 - On narrow screens the table scrolls sideways to reach Weight and the day links.
+- A day with only part of its food logged counts as complete when every logged food has calories and protein. The count says "complete records", not "fully logged days".
+- The 10% calorie band is a fixed convention, not a setting.
 - The food range read fetches nutrient values for the seven days and uses the same completeness rule as the day read. It transfers one row per food rather than aggregate SQL rows.
+
+## Targets comparison
+
+The first version left the person to judge the numbers. Review now compares calories and protein with the person's targets, and counts the days with complete food records.
+
+```ts
+review.recordedDays.food === 4             // food logged on 4 days
+review.nutrition.completeDays === 3        // "Complete food records on 3 of 7 days"
+review.days[1].targets                     // { kcal: 1800, proteinG: 120 }, the targets in force that day
+review.nutrition.kcal                      // { average: 2100, averageTarget: 2066.67, daysOnTarget: 2 }
+review.nutrition.proteinG.daysOnTarget     // days that reached the protein target
+```
+
+A complete food day has food logged and known calorie and protein totals. Nouri has no "I finished logging" marker, so this is the strictest rule the data supports: a day with an `Incomplete` total would always read as under target. A day with one snack logged still counts as complete. Only complete days are averaged and counted.
+
+Each day carries the targets in force that day. `getDatedRange` in `src/effective-dated.ts` reads them in two queries, the value in force on `from` and every change inside the window, so a target changed mid-week judges each day by its own target. The weekly target is the mean of the complete days' targets.
+
+The rules live in `getReview`, not the page: calories are on target within `calorieTolerance` (10%) of the target in either direction, and protein is on target once it reaches the target. The page shows each complete day's difference from its target under the total, and two cards with the average, the target, and the on-target count.
+
+### Synthesis decision
+
+Candidate A extended `/v1/review` with per-day targets and the weekly comparison. Candidate B kept the API and had the page read `/v1/targets/{date}`: either seven more requests, or only the window's last day, which misjudges the days before a mid-week change. B would also put the completeness and on-target rules in the page, where a native client would have to copy them, which the targets design set out to avoid. A is the base. From B it keeps the idea that the arithmetic per day (the difference) is plain enough to do in the page; only the rules that need a threshold stay on the server.
 
 ## Not in this version
 
-Averages, trends against targets, charts, and coaching suggestions. Water and supplements are not in the timeline.
+Trends across weeks, charts, carbohydrate and fat comparisons, and coaching suggestions. Water and supplements are not in the timeline.

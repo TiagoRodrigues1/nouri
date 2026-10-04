@@ -2,6 +2,9 @@ import { z } from "zod";
 
 export const reviewDays = 7;
 
+// A day's calories count as on target within this share of its target. Protein counts once it reaches its target.
+export const calorieTolerance = 0.1;
+
 // A metric is null when nothing was recorded that day, never zero.
 export const reviewDaySchema = z.object({
   date: z.iso.date(),
@@ -16,6 +19,16 @@ export const reviewDaySchema = z.object({
   sleep: z.object({ sessionCount: z.number().int(), totalMinutes: z.number().int().nullable() }),
   // The last weight recorded that day. Earlier weights do not carry forward.
   weightKg: z.number().nullable(),
+  // The targets in force that day, so a change mid-week judges each day by its own.
+  targets: z.object({ kcal: z.number().int(), proteinG: z.number().int() }),
+});
+
+// Measured over complete food days only; the averages are null when there are none.
+const targetComparisonSchema = z.object({
+  average: z.number().nullable(),
+  // The mean of each complete day's target.
+  averageTarget: z.number().nullable(),
+  daysOnTarget: z.number().int(),
 });
 
 export const reviewSchema = z.object({
@@ -30,6 +43,12 @@ export const reviewSchema = z.object({
     sleep: z.number().int(),
     weight: z.number().int(),
     any: z.number().int(),
+  }),
+  // A complete food day has food logged and known calorie and protein totals. Only those are compared with targets.
+  nutrition: z.object({
+    completeDays: z.number().int(),
+    kcal: targetComparisonSchema,
+    proteinG: targetComparisonSchema,
   }),
 });
 

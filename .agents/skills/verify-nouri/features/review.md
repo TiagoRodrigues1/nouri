@@ -7,3 +7,7 @@ Choose `Open <day> in Today`. Its link contains `?date=<day>`, and Today opens o
 Read `GET /v1/review/<date>` and assert `from`, the seven `days`, the null metrics on unrecorded days, and `recordedDays`.
 
 From an earlier Review window, choose `+ Log` > `Food`. The dialog must name the window's last day. Log a manual food and read `GET /v1/days/<window-end>` to confirm it landed there, then compare that day's calories and protein with `GET /v1/review/<window-end>`.
+
+## Targets comparison
+
+Save targets taking effect before the window (for example 1,800 kcal and 120 g protein) and a change from the window's fourth day (2,200 kcal, 100 g). Log foods on three days with calories and protein, one close to its target and one far off, and a food without calories on a fourth day. Open that week in Review. The line above the table reads `Complete food records on 3 of 7 days`. The `Calories` and `Protein` cards show the average over the three days, the mean target, and `Within 10% of target on N of 3` or `Reached target on N of 3`. Each complete day shows its signed difference from that day's target under the total (`on target` when equal); the day with the missing calorie value shows `Incomplete` and no difference. A week with no complete days shows `No complete food days to compare yet.` in both cards. Read `GET /v1/review/<date>` and assert each day's `targets` switch on the change date and `nutrition` matches the cards.
