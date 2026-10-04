@@ -89,7 +89,7 @@ export function LogFoodDialog({ open, onOpenChange, date, isToday, pending, onSa
                     type="search"
                     minLength={2}
                     maxLength={80}
-                    placeholder="Try apple, oats, chicken..."
+                    placeholder="Try maçã, frango, oats..."
                     value={searchDraft}
                     onChange={(event) => setSearchDraft(event.target.value)}
                     required
@@ -100,7 +100,7 @@ export function LogFoodDialog({ open, onOpenChange, date, isToday, pending, onSa
                 </div>
               </form>
               <p {...stylex.props(styles.fieldHint)}>
-                Ciqual results show nutrition per 100 g.
+                Search in Portuguese, English, or French. Ciqual results show their English names and nutrition per 100 g.
               </p>
               {searchQuery.isFetching ? (
                 <p {...stylex.props(styles.searchMessage)}>Searching foods…</p>
