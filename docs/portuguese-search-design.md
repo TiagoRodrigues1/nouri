@@ -31,19 +31,17 @@ The search box accepts English, French and Portuguese words. `bacalhau` finds co
 // values are English words that appear in Ciqual names. Several values mean several valid readings.
 export const portugueseTerms = { "frango": ["chicken"], "couve flor": ["cauliflower"], … } satisfies Record<string, string[]>;
 
-// Small connectives a Portuguese query uses between food words ("peito de frango").
-export const portugueseConnectives: Set<string>;
+// Portuguese grammar stays here: phrases, connectives, plural and feminine fallback.
+export type QueryPhrase = { kind: "word"; typed: string } | { kind: "term"; typed: string[]; english: [string, ...string[]] };
+export function readQuery(words: string[]): QueryPhrase[];
+// ["peito", "de", "frango"] -> [{ kind: "term", typed: ["peito"], english: ["breast"] }, { kind: "term", typed: ["frango"], english: ["chicken"] }]
 
-// src/food/catalog.ts (private)
+// src/food/catalog.ts (private). Knows catalog words, not Portuguese.
 // One way to read part of a query: a food matches when its name has a word from every set.
 type Reading = Set<string>[];
 
-// A word with no glossary entry matches anywhere in a name, as typed. A glossary term matches whole words only.
-type Part = { typed: string; english: string | null; readings: Reading[] };
-
-function parseQuery(words: string[]): Part[];
-// "peito de frango" -> [{ typed: "peito", english: "breast", … }, { typed: "frango", english: "chicken", … }]
-// Longest phrase first, so "couve flor" reads as cauliflower before couve -> cabbage.
+// A plain word matches anywhere in a name, as typed. A term matches whole words only.
+type Part = { kind: "word"; typed: string } | { kind: "term"; english: string; readings: Reading[] };
 
 export function searchFoods(query: string, locale: string): SearchResult; // unchanged signature
 ```
@@ -51,7 +49,7 @@ export function searchFoods(query: string, locale: string): SearchResult; // unc
 Load-bearing decisions:
 
 - **Translate the query, not the catalog.** The glossary only widens what a query matches. Result names, ids, nutrients and attribution come straight from Ciqual, so no displayed fact is invented (per the source decision in the food search design).
-- **The glossary is data and `catalog.ts` holds the policy.** `portuguese.ts` is a plain table. Matching, ranking and typo tolerance stay in one module. Callers learn nothing new, and the HTTP and frontend contracts stay the same (per deep modules).
+- **Portuguese grammar and catalog matching stay apart.** `portuguese.ts` owns the table and how a Portuguese query reads. `catalog.ts` turns English readings into catalog words, then matches, ranks and handles typos. Removing or replacing the glossary touches one import. Callers learn nothing new, and the HTTP and frontend contracts stay the same (per deep modules).
 - **A glossary term matches whole words.** Plain words keep the existing substring match, so typing `appl` still works. A translated word is complete, so it matches whole catalog words and their plurals. Otherwise `pera` would find pearled barley, `sal` salmon and `cabrito` kidney. Matching stays locale-independent because the page always sends `en`.
 - **Portuguese grammar is handled at lookup, not in the table.** A miss retries the singular and masculine form (`assadas` → `assada` → `assado`, `camarões` → `camarao`), so the glossary lists each word once.
 - **Ranking tries the English reading in both orders.** Portuguese names the food first (`sumo de laranja`), while English puts it last (`orange juice`). Ranking scores the query as typed, its English reading, and that reading reversed, then keeps the best. Ranking also ignores punctuation, so `chicken breast` ranks "Chicken, breast, raw" as a whole-word match.

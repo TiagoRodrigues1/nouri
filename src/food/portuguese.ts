@@ -2,6 +2,9 @@
 // Search translates the query with this; result names stay as Ciqual published them.
 // Keys are lower case without accents, with hyphens as spaces. Each value is one reading,
 // and every word in it must appear in a matching food's name.
+// At least one English reading per term; the first is the one ranking compares against.
+type Readings = [string, ...string[]];
+
 export const portugueseTerms = {
   // Fruit
   "maca": ["apple"],
@@ -349,7 +352,54 @@ export const portugueseTerms = {
   "refrigerante": ["soft drink", "carbonated beverage"],
   "bebida": ["drink", "beverage"],
   "batido": ["milkshake", "smoothie"],
-} satisfies Record<string, string[]>;
+} satisfies Record<string, Readings>;
 
-// Words a Portuguese query puts between food words ("peito de frango"). Matching skips them.
-export const portugueseConnectives = new Set(["a", "o", "as", "os", "ao", "e", "de", "do", "da", "dos", "das", "com", "em", "no", "na"]);
+// Words a Portuguese query puts between food words ("peito de frango"). Reading skips them.
+const connectives = new Set(["a", "o", "as", "os", "ao", "e", "de", "do", "da", "dos", "das", "com", "em", "no", "na"]);
+
+const terms: Map<string, Readings> = new Map(Object.entries(portugueseTerms));
+
+const longestTerm = Math.max(...[...terms.keys()].map((term) => term.split(" ").length));
+
+// A stretch of a query: a word to match as typed, or a Portuguese term with the English readings it stands for.
+export type QueryPhrase = { kind: "word"; typed: string } | { kind: "term"; typed: string[]; english: Readings };
+
+// Plurals and feminine forms fall back to the singular masculine entry, so "batatas assadas" reads as batata and assado.
+function lookup(words: string[]): Readings | undefined {
+  const variants = words.map((word) => {
+    const singular = word.replace(/(oes|aes|aos)$/, "ao").replace(/s$/, "");
+
+    return [word, singular, singular.replace(/a$/, "o")];
+  });
+
+  for (const level of [0, 1, 2]) {
+    const english = terms.get(variants.map((forms) => forms[level]).join(" "));
+
+    if (english) return english;
+  }
+
+  return undefined;
+}
+
+// Reads normalized query words as Portuguese terms where it can, so "peito de frango" reads as breast and chicken.
+// The longest phrase wins, so "couve flor" is cauliflower rather than cabbage and flor.
+export function readQuery(words: string[]): QueryPhrase[] {
+  const phrases: QueryPhrase[] = [];
+
+  for (let start = 0; start < words.length;) {
+    let size = Math.min(longestTerm, words.length - start);
+
+    while (size > 1 && !lookup(words.slice(start, start + size))) size--;
+
+    const typed = words.slice(start, start + size);
+    const english = lookup(typed);
+
+    if (english) phrases.push({ kind: "term", typed, english });
+    else if (!connectives.has(typed[0] ?? "")) phrases.push({ kind: "word", typed: typed[0] ?? "" });
+
+    start += size;
+  }
+
+  // A query of connectives alone still has to match something.
+  return phrases.length > 0 ? phrases : words.map((word) => ({ kind: "word", typed: word }));
+}

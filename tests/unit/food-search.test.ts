@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { searchFoods } from "../../src/food/catalog.js";
-import { portugueseTerms } from "../../src/food/portuguese.js";
+import { portugueseTerms, readQuery } from "../../src/food/portuguese.js";
 
 const first = (query: string, locale = "en") => searchFoods(query, locale).items[0]?.name;
 
@@ -9,6 +9,19 @@ void test("every Portuguese term finds a food", () => {
   const empty = Object.keys(portugueseTerms).filter((term) => searchFoods(term, "en").items.length === 0);
 
   assert.deepEqual(empty, []);
+});
+
+void test("a query reads plurals, feminine forms and phrases as Portuguese terms", () => {
+  assert.deepEqual(readQuery(["batatas", "assadas"]), [
+    { kind: "term", typed: ["batatas"], english: ["potato"] },
+    { kind: "term", typed: ["assadas"], english: ["roasted", "baked"] },
+  ]);
+  assert.deepEqual(readQuery(["couve", "flor"]), [{ kind: "term", typed: ["couve", "flor"], english: ["cauliflower"] }]);
+  assert.deepEqual(readQuery(["peito", "de", "appl"]), [
+    { kind: "term", typed: ["peito"], english: ["breast"] },
+    { kind: "word", typed: "appl" },
+  ]);
+  assert.deepEqual(readQuery(["de"]), [{ kind: "word", typed: "de" }]);
 });
 
 void test("Portuguese words find the food under its catalog name", () => {
