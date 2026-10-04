@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./components/ui/table";
 import { useDashboardPage } from "./dashboard-page-context";
 import { format, type ExerciseSession } from "./lib/api";
-import { exerciseHistoryQueryOptions, sessionsUpTo, setsLabel } from "./lib/exercise-history";
+import { exerciseHistoryQueryOptions, setsLabel } from "./lib/exercise-history";
 import { shortDayLabel } from "./lib/time";
 import { ProgressChart } from "./progress-chart";
 import { queryStatus } from "./query-status";
@@ -25,7 +25,7 @@ export function Progress() {
 
   // The header date bounds the history, so stepping back shows what you had done by then.
   const exercises = query.data.exercises
-    .map((exercise) => ({ ...exercise, sessions: sessionsUpTo(exercise, date) }))
+    .map((exercise) => ({ ...exercise, sessions: exercise.sessions.filter((session) => session.date <= date) }))
     .filter((exercise) => exercise.sessions.length > 0);
 
   const exercise = exercises.find((candidate) => candidate.key === selected) ?? exercises[0];

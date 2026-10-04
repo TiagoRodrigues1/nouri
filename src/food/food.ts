@@ -1,13 +1,13 @@
 import { createHash, randomUUID } from "node:crypto";
-import { and, between, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, between, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { AppDatabase, Transaction } from "../db/database.js";
 import { softDelete } from "../journal/records.js";
 import { withReceipt } from "../journal/receipt.js";
 import { foodEntries } from "../db/schema.js";
 import { localDate } from "../time.js";
 import { resolveFood } from "./catalog.js";
-import { entrySchema } from "./contract.js";
-import type { CatalogFoodInput, FoodEntry, FoodInput, FoodSubmission, RepeatInput } from "./contract.js";
+import { entrySchema, scaledFood } from "./contract.js";
+import type { CatalogFoodInput, FoodEntry, FoodInput, FoodSubmission, RecentFoods, RecordedFood, RepeatInput } from "./contract.js";
 
 export type FoodCommand =
   | { kind: "create"; input: FoodSubmission }
@@ -18,7 +18,7 @@ export type FoodCommand =
 export type FoodMutationResult =
   | { outcome: "created" | "updated"; entry: FoodEntry }
   | { outcome: "deleted" | "missing" | "stale" | "key-reuse" }
-  | { outcome: "catalog-missing" };
+  | { outcome: "catalog-missing" | "invalid-amount" };
 
 type FoodRow = typeof foodEntries.$inferSelect;
 
@@ -98,7 +98,7 @@ async function missingOrStale(tx: Transaction, userId: string, id: string): Prom
 
 // Logs recorded foods at one time, in the order given. Copies the saved name, amount, nutrients and
 // catalog reference, never the catalog's current values, so it keeps working after the catalog changes.
-export async function insertFoods(tx: Transaction, userId: string, when: RepeatInput, foods: FoodEntry["food"][]): Promise<FoodEntry[]> {
+export async function insertFoods(tx: Transaction, userId: string, when: Pick<RepeatInput, "occurredAt" | "timeZone">, foods: RecordedFood[]): Promise<FoodEntry[]> {
   const rows = foods.map(({ catalogRef, ...food }) => ({ id: randomUUID(), userId, ...values({ ...when, food: catalogRef ? { ...food, catalogRef } : food }) }));
   const inserted = await tx.insert(foodEntries).values(rows).returning();
   const byId = new Map(inserted.map((row) => [row.id, entry(row)]));
@@ -113,11 +113,26 @@ export async function insertFoods(tx: Transaction, userId: string, when: RepeatI
 }
 
 // The person's current foods among these entries, by entry id. Deleted and unknown ids are absent.
-export async function recordedFoods(tx: Transaction, userId: string, ids: string[]): Promise<Map<string, FoodEntry["food"]>> {
+export async function recordedFoods(tx: Transaction, userId: string, ids: string[]): Promise<Map<string, RecordedFood>> {
   const rows = await tx.select().from(foodEntries)
     .where(and(eq(foodEntries.userId, userId), inArray(foodEntries.id, ids), isNull(foodEntries.deletedAt)));
 
   return new Map(rows.map((row) => [row.id, entry(row).food]));
+}
+
+// Copies the recorded food, scaled when an amount is given. A scaled food must still fit the journal's limits.
+async function repeat(tx: Transaction, userId: string, sourceId: string, { amount, ...when }: RepeatInput): Promise<FoodMutationResult> {
+  const recorded = (await recordedFoods(tx, userId, [sourceId])).get(sourceId);
+
+  if (!recorded) return { outcome: "missing" };
+  const food = amount === undefined ? recorded : scaledFood(recorded, amount);
+
+  if (!food) return { outcome: "invalid-amount" };
+  const [created] = await insertFoods(tx, userId, when, [food]);
+
+  if (!created) throw new Error("Food insert returned no row");
+
+  return { outcome: "created", entry: created };
 }
 
 async function insert(tx: Transaction, userId: string, input: FoodInput): Promise<{ outcome: "created"; entry: FoodEntry }> {
@@ -126,6 +141,15 @@ async function insert(tx: Transaction, userId: string, input: FoodInput): Promis
   if (!row) throw new Error("Food insert returned no row");
 
   return { outcome: "created", entry: entry(row) };
+}
+
+async function update(tx: Transaction, userId: string, id: string, revision: number, input: FoodInput): Promise<FoodMutationResult> {
+  const [row] = await tx.update(foodEntries)
+    .set({ ...values(input), revision: sql`${foodEntries.revision} + 1`, updatedAt: new Date() })
+    .where(and(eq(foodEntries.userId, userId), eq(foodEntries.id, id), eq(foodEntries.revision, revision), isNull(foodEntries.deletedAt)))
+    .returning();
+
+  return row ? { outcome: "updated", entry: entry(row) } : missingOrStale(tx, userId, id);
 }
 
 export async function mutateFood(db: AppDatabase, userId: string, key: string, command: FoodCommand): Promise<FoodMutationResult> {
@@ -140,36 +164,54 @@ export async function mutateFood(db: AppDatabase, userId: string, key: string, c
 
     return { outcome };
   }, async (tx): Promise<FoodMutationResult> => {
-    let result: Exclude<FoodMutationResult, { outcome: "catalog-missing" }>;
+    if (command.kind === "delete") return softDelete(tx, foodEntries, userId, command.id, command.revision);
 
-    if (command.kind === "delete") {
-      result = await softDelete(tx, foodEntries, userId, command.id, command.revision);
-    } else if (command.kind === "repeat") {
-      const food = (await recordedFoods(tx, userId, [command.sourceId])).get(command.sourceId);
-      const [repeated] = food ? await insertFoods(tx, userId, command.input, [food]) : [];
+    if (command.kind === "repeat") return repeat(tx, userId, command.sourceId, command.input);
+    const input = resolveInput(command.input);
 
-      result = repeated ? { outcome: "created", entry: repeated } : { outcome: "missing" };
-    } else {
-      const input = resolveInput(command.input);
+    if (!input) return { outcome: "catalog-missing" };
 
-      if (!input) {
-        return { outcome: "catalog-missing" };
-      }
+    return command.kind === "create" ? insert(tx, userId, input) : update(tx, userId, command.id, command.revision, input);
+  });
+}
 
-      if (command.kind === "create") {
-        result = await insert(tx, userId, input);
-      } else {
-        const [row] = await tx.update(foodEntries)
-          .set({ ...values(input), revision: sql`${foodEntries.revision} + 1`, updatedAt: new Date() })
-          .where(and(eq(foodEntries.userId, userId), eq(foodEntries.id, command.id), eq(foodEntries.revision, command.revision), isNull(foodEntries.deletedAt)))
-          .returning();
+const recentScan = 500;
 
-        result = row ? { outcome: "updated", entry: entry(row) } : await missingOrStale(tx, userId, command.id);
-      }
-    }
+const recentLimit = 20;
 
-    return result;
-  }, "catalog-missing");
+// Entries name the same food when they share a name (ignoring case and spacing), a catalog food
+// in any release, and a unit. Amounts and nutrients may differ.
+function foodIdentity({ name, quantity, catalogRef }: RecordedFood): string {
+  return JSON.stringify([name.trim().replace(/\s+/g, " ").toLowerCase(), catalogRef?.provider ?? null, catalogRef?.id ?? null, quantity.unit]);
+}
+
+// The first entry of each food, in the order given, up to the limit. Entries come newest first.
+function distinctFoods(entries: FoodEntry[]): RecentFoods["foods"] {
+  const seen = new Set<string>();
+  const foods = [];
+
+  for (const { id, localDate, food } of entries) {
+    const identity = foodIdentity(food);
+
+    if (seen.has(identity)) continue;
+    seen.add(identity);
+    foods.push({ entryId: id, lastEaten: localDate, food });
+
+    if (foods.length === recentLimit) break;
+  }
+
+  return foods;
+}
+
+// Foods from the person's latest entries, most recently eaten first, and among foods eaten at the same
+// time the latest logged first. Older foods are found by search.
+export async function getRecentFoods(db: AppDatabase, userId: string): Promise<RecentFoods> {
+  const rows = await db.select().from(foodEntries)
+    .where(and(eq(foodEntries.userId, userId), isNull(foodEntries.deletedAt)))
+    .orderBy(desc(foodEntries.localDate), desc(foodEntries.occurredAt), desc(foodEntries.createdAt), desc(foodEntries.id))
+    .limit(recentScan);
+
+  return { foods: distinctFoods(rows.map(entry)) };
 }
 
 export async function getFoodDay(db: AppDatabase, userId: string, date: string) {

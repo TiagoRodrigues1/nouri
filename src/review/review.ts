@@ -1,12 +1,12 @@
 import type { AppDatabase } from "../db/database.js";
-import { getDatedRange } from "../effective-dated.js";
+import { getDatedHistory } from "../effective-dated.js";
 import { getFoodRange } from "../food/food.js";
 import { getWeightRange } from "../measurements/measurements.js";
 import { getSleepRange } from "../sleep/sleep.js";
 import { shiftDate } from "../time.js";
 import { targetsKind } from "../targets/targets.js";
 import { getWorkoutRange } from "../workouts/workouts.js";
-import { calorieTolerance, reviewDays } from "./contract.js";
+import { calorieTolerance, isCompleteFood, reviewDays } from "./contract.js";
 import type { Review, ReviewDay } from "./contract.js";
 
 type CompleteDay = { kcal: number; proteinG: number; targets: ReviewDay["targets"] };
@@ -25,7 +25,7 @@ function compare(days: CompleteDay[], nutrient: "kcal" | "proteinG", onTarget: (
 
 // Only days with known calorie and protein totals are compared. A day with a missing value would read as under target.
 function nutrition(days: ReviewDay[]): Review["nutrition"] {
-  const complete = days.flatMap(({ food: { kcal, proteinG }, targets }): CompleteDay[] => kcal === null || proteinG === null ? [] : [{ kcal, proteinG, targets }]);
+  const complete = days.flatMap(({ food, targets }): CompleteDay[] => isCompleteFood(food) ? [{ kcal: food.kcal, proteinG: food.proteinG, targets }] : []);
 
   return {
     completeDays: complete.length,
@@ -43,7 +43,7 @@ export async function getReview(db: AppDatabase, userId: string, to: string): Pr
     getWorkoutRange(db, userId, from, to),
     getSleepRange(db, userId, from, to),
     getWeightRange(db, userId, from, to),
-    getDatedRange(db, targetsKind, userId, from, to),
+    getDatedHistory(db, targetsKind, userId, to),
   ]);
 
   const days = Array.from({ length: reviewDays }, (_, index): ReviewDay => {

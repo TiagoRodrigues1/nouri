@@ -22,7 +22,7 @@ const review = await getReview(token, "2026-09-30");
 ```
 src/review/contract.ts   reviewSchema, reviewDays
 src/review/review.ts     getReview(db, userId, to): the window, empty days, recorded counts, target comparison
-src/effective-dated.ts   getDatedRange(db, kind, userId, from, to)  the targets in force on each day
+src/effective-dated.ts   getDatedHistory(db, kind, userId, to)    the targets in force on each day
 src/food/food.ts         getFoodRange(db, userId, from, to)       per-day count, kcal, protein
 src/workouts/workouts.ts getWorkoutRange(db, userId, from, to)    per-day count, minutes
 src/sleep/sleep.ts       getSleepRange(db, userId, from, to)      per-day sessions, minutes
@@ -64,7 +64,7 @@ review.nutrition.proteinG.daysOnTarget     // days that reached the protein targ
 
 A complete food day has food logged and known calorie and protein totals. Nouri has no "I finished logging" marker, so this is the strictest rule the data supports: a day with an `Incomplete` total would always read as under target. A day with one snack logged still counts as complete. Only complete days are averaged and counted.
 
-Each day carries the targets in force that day. `getDatedRange` in `src/effective-dated.ts` reads them in two queries, the value in force on `from` and every change inside the window, so a target changed mid-week judges each day by its own target. The weekly target is the mean of the complete days' targets.
+Each day carries the targets in force that day. `getDatedHistory` in `src/effective-dated.ts` reads every change saved up to `to` in one query, latest first, so a target changed mid-week judges each day by its own target. The weekly target is the mean of the complete days' targets.
 
 The rules live in `getReview`, not the page: calories are on target within `calorieTolerance` (10%) of the target in either direction, and protein is on target once it reaches the target. The page shows each complete day's difference from its target under the total, and two cards with the average, the target, and the on-target count.
 

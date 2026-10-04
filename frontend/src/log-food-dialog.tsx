@@ -11,6 +11,7 @@ import { TimePicker } from "./components/ui/time-picker";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs";
 import { format, searchFoods, type Candidate } from "./lib/api";
 import { currentTime, dateLabel } from "./lib/time";
+import { RecentFoodsTab } from "./recent-foods-tab";
 import { SavedMealsTab } from "./saved-meals-tab";
 import type { FoodSubmission } from "../../src/food/contract";
 
@@ -54,15 +55,18 @@ export function LogFoodDialog({ open, onOpenChange, date, isToday, pending, onSa
         <DialogContent>
           <DialogTitle {...stylex.props(styles.dialogTitle)}>Log a food</DialogTitle>
           <DialogDescription {...stylex.props(styles.dialogDescription)}>
-            Choose a food from the catalog, a saved meal, or enter one manually. It will be
-            added to {isToday ? "today" : dateLabel(date)}.
+            Choose a food you logged before, one from the catalog, a saved meal, or enter one
+            manually. It will be added to {isToday ? "today" : dateLabel(date)}.
           </DialogDescription>
           <div {...stylex.props(styles.timeField)}>
             <Label {...stylex.props(styles.formLabel, styles.timeLabel)} htmlFor="food-time">Time eaten</Label>
             <TimePicker id="food-time" value={time} onChange={setTime} onNow={() => setTime(currentTime())} />
           </div>
-          <Tabs defaultValue="search">
+          <Tabs defaultValue="recent">
             <TabsList {...stylex.props(styles.widthFull)}>
+              <TabsTrigger value="recent" {...stylex.props(styles.flexOne)}>
+                Recent
+              </TabsTrigger>
               <TabsTrigger value="search" {...stylex.props(styles.flexOne)}>
                 Search foods
               </TabsTrigger>
@@ -73,6 +77,9 @@ export function LogFoodDialog({ open, onOpenChange, date, isToday, pending, onSa
                 Add manually
               </TabsTrigger>
             </TabsList>
+            <TabsContent value="recent">
+              <RecentFoodsTab date={date} time={time} onLogged={() => onOpenChange(false)} />
+            </TabsContent>
             <TabsContent value="search">
               <form onSubmit={search}>
                 <Label {...stylex.props(styles.formLabel)} htmlFor="search-query">Find a food</Label>

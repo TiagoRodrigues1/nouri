@@ -1,0 +1,7 @@
+# Recent foods
+
+Choose `2026-09-25` with the `Choose log date` picker and log the catalog apple at 150 g (see [catalog-log.md](catalog-log.md)), then the manual foods `Verification oats` (80 g, 311 kcal) and `verification OATS` (60 g, 233 kcal) from the `Add manually` tab. Before anything is logged, the food dialog opens on its `Recent` tab, which reads `No foods logged yet. Search for a food or add one manually, and it will show up here next time.`
+
+Choose `Next day` twice to reach `2026-09-27`, then choose `+ Log` and `Food`. The `Recent foods` list shows each food once, most recently eaten first. The two oats entries appear as a single `verification OATS` row at 60 g, the latest one. Each row shows its amount, nutrients and when it was last eaten (`today`, `yesterday`, or a date such as `Sep 25`). Choose `verification OATS`. `#recent-amount` reads `60`. Fill it with `40`, and the preview below it changes to `155 kcal · P 6.7 · C 33.3 · F 3.3`. Set `#food-time` to 12:30 and choose `Add to log`. The page sends `POST /v1/food-entries/<latest oats id>/repeats` with `amount: 40`. `GET /v1/days/2026-09-27` shows the oats at 40 g, 155.333 kcal, and `occurredAt` 12:30 local time.
+
+Logging the apple from `Recent` at 200 g records 108 kcal and keeps its Ciqual `catalogRef`. The server scales the recorded snapshot and never re-reads the catalog. Log again on a timeline row still lands today at the original amount and sends no `amount`.

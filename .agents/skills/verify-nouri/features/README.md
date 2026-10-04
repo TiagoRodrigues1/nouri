@@ -22,6 +22,7 @@ This index is the maintained list of Nouri's user paths. Read the relevant file 
 - [Account access](auth.md): signed-out page, test-user sign-in, sign-out, and protected API.
 - [Search foods](search.md): Ciqual search results, no-match state, attribution.
 - [Log a catalog food](catalog-log.md): search, select, set grams, save and read back.
+- [Recent foods](recent-foods.md): Recent tab in the food dialog, one row per food, amount and preview, logging on the chosen day.
 - [Log a manual food](manual-log.md): manual tab, nutrition fields, save and read back.
 - [Browse dates and delete](dates-delete.md): date picker and arrows, daily totals, remove a row.
 - [Edit a food](edit.md): pencil on timeline rows, catalog amount, manual fields and time, revision conflict.

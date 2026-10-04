@@ -27,7 +27,6 @@ import { createFood, deleteFood } from "./lib/api";
 import { dateLabel, localDate, occurredAt, shiftDate, weekLabel, timeZone as zone } from "./lib/time";
 import { useIdempotentWrite, useIdempotentDelete } from "./lib/use-idempotent";
 import { queryRefresh } from "./lib/query-refresh";
-import { useWater } from "./lib/use-water";
 import { useConnection } from "./lib/use-connection";
 import { submissionSchema, type FoodSubmission } from "../../src/food/contract";
 import { LogFoodDialog } from "./log-food-dialog";
@@ -94,8 +93,6 @@ export function Dashboard() {
 
   const journal = useJournal();
 
-  const water = useWater();
-
   const googleHealth = useConnection("google-health", wearablesOpen);
 
   const foodDelete = useIdempotentDelete<FoodEntry>((entry, key) => deleteFood(entry, key), {
@@ -136,7 +133,7 @@ export function Dashboard() {
   }
 
   return (
-    <dashboardPageContext.Provider value={{ date, isToday, onEditFood: (entry) => setEditingId(entry.id), onSaveMeal: setMealSelection, foodDelete, journal, water, onManageSupplements: () => setSupplementsOpen(true), customizingCards, onCustomizingCardsChange: setCustomizingCards }}>
+    <dashboardPageContext.Provider value={{ date, isToday, onEditFood: (entry) => setEditingId(entry.id), onSaveMeal: setMealSelection, foodDelete, journal, onManageSupplements: () => setSupplementsOpen(true), customizingCards, onCustomizingCardsChange: setCustomizingCards }}>
     <div {...stylex.props(styles.appShell)}>
       <aside {...stylex.props(styles.sidebar)}>
         <Link to="/" {...stylex.props(styles.brand)}>
@@ -257,7 +254,7 @@ export function Dashboard() {
       <LogFoodDialog open={logOpen} onOpenChange={setLogOpen} date={date} isToday={isToday} pending={createMutation.isPending} onSave={saveFood} />
       <EditFoodDialog date={date} entryId={editingId} onClose={() => setEditingId(null)} />
       <SaveMealDialog date={date} selection={mealSelection} onClose={() => setMealSelection(null)} />
-      <WaterDialog open={recordDialog === "water"} onOpenChange={(open) => setRecordDialog(open ? "water" : null)} date={date} pending={water.pending} onSave={(input) => water.add(input, () => setRecordDialog(null))} />
+      <WaterDialog open={recordDialog === "water"} onOpenChange={(open) => setRecordDialog(open ? "water" : null)} date={date} pending={journal.create.isPending} onSave={(input) => saveRecord({ path: recordPaths.water, input }, "Water")} />
       <WorkoutDialog open={recordDialog === "workout"} onOpenChange={(open) => setRecordDialog(open ? "workout" : null)} date={date} pending={journal.create.isPending} onSave={(input) => saveRecord({ path: recordPaths.workout, input }, "Workout")} />
       <SleepDialog open={recordDialog === "sleep"} onOpenChange={(open) => setRecordDialog(open ? "sleep" : null)} date={date} pending={journal.create.isPending} onSave={(input) => saveRecord({ path: recordPaths.sleep, input }, "Sleep")} />
       <MeasurementDialog open={recordDialog === "measurement"} onOpenChange={(open) => setRecordDialog(open ? "measurement" : null)} date={date} pending={journal.create.isPending} onSave={(input) => saveRecord({ path: recordPaths.measurement, input }, "Measurement")} />

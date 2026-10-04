@@ -1,6 +1,7 @@
 import { createHarness, publishableKey } from "../harness.js";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { readdir } from "node:fs/promises";
 import { test } from "node:test";
 import type { FoodInput } from "../../src/food/contract.js";
 
@@ -56,6 +57,13 @@ void test("food CRUD, stable retries, day totals, and concurrent writes", async 
     }));
 
     assert.ok(chunks.some((chunk) => chunk.includes("/v1/food-entries")));
+
+    // Chunks named after dotted modules, like theme.stylex, load too.
+    for (const file of await readdir(new URL("../../web/dist/assets", import.meta.url))) {
+      assert.equal((await app.request(`/assets/${file}`)).status, 200, file);
+    }
+
+    assert.equal((await app.request("/assets/..js")).status, 404);
 
     const stylePath = pageHtml.match(/href="(\/assets\/[^" ]+\.css)"/)?.[1];
     assert.ok(stylePath);

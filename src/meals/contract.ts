@@ -1,17 +1,16 @@
 import { z } from "zod";
-import { entrySchema, positiveAmount } from "../food/contract.js";
+import { entrySchema, positiveAmount, recordedFoodSchema } from "../food/contract.js";
+import type { RecordedFood } from "../food/contract.js";
 import { occurredAtSchema, timeZoneSchema } from "../time.js";
 
 export const maxMealItems = 20;
-
-// A food as it was recorded, at the amount it was saved with. Logging scales it from there.
-export const mealFoodSchema = entrySchema.shape.food;
 
 export const savedMealSchema = z.object({
   id: z.uuid(),
   revision: z.number().int().positive(),
   name: z.string(),
-  items: z.array(z.object({ id: z.uuid(), food: mealFoodSchema })),
+  // Each food as it was recorded, at the amount it was saved with. Logging scales it from there.
+  items: z.array(z.object({ id: z.uuid(), food: recordedFoodSchema })),
 });
 
 export const savedMealListSchema = z.object({ meals: z.array(savedMealSchema) });
@@ -43,8 +42,6 @@ export const mealEditSchema = z.object({ name: mealNameSchema, items: itemAmount
 
 export const mealLogSchema = z.object({ entries: z.array(entrySchema) });
 
-export type MealFood = z.infer<typeof mealFoodSchema>;
-
 export type SavedMeal = z.infer<typeof savedMealSchema>;
 
 export type SavedMealItem = SavedMeal["items"][number];
@@ -59,20 +56,6 @@ export type MealEdit = z.infer<typeof mealEditSchema>;
 
 // A saved item as stored. The basis is the food as recorded when the meal was saved, so every amount scales
 // from it and edits never compound rounding. It stays on the server; meals saved before editing lack it.
-export type StoredMealItem = SavedMealItem & { basis?: MealFood | undefined };
+export type StoredMealItem = SavedMealItem & { basis?: RecordedFood | undefined };
 
 export type MealLog = z.infer<typeof mealLogSchema>;
-
-// The same food at another amount. Nutrients scale with it, rounded to the thousandth the journal stores,
-// and an unknown value stays unknown. The server logs with this and the page previews with it.
-export function scaleFood(food: MealFood, amount: number): MealFood {
-  const from = food.quantity.amount;
-  const scale = (value: number | null) => (value === null ? null : Math.round((value * amount * 1000) / from) / 1000);
-  const { kcal, proteinG, carbsG, fatG } = food.nutrients;
-
-  return {
-    ...food,
-    quantity: { ...food.quantity, amount },
-    nutrients: { kcal: scale(kcal), proteinG: scale(proteinG), carbsG: scale(carbsG), fatG: scale(fatG) },
-  };
-}

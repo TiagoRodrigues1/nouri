@@ -5,8 +5,9 @@ import { savedMeals } from "../db/schema.js";
 import { insertFoods, recordedFoods } from "../food/food.js";
 import { softDelete } from "../journal/records.js";
 import { withReceipt } from "../journal/receipt.js";
-import { mealFoodSchema, mealLogSchema, savedMealSchema, scaleFood } from "./contract.js";
-import type { MealEdit, MealFood, MealInput, MealLog, MealLogInput, SavedMeal, SavedMealList, StoredMealItem } from "./contract.js";
+import { scaledFood } from "../food/contract.js";
+import { mealLogSchema, savedMealSchema } from "./contract.js";
+import type { MealEdit, MealInput, MealLog, MealLogInput, SavedMeal, SavedMealList, StoredMealItem } from "./contract.js";
 
 export type MealCommand =
   | { kind: "create"; input: MealInput }
@@ -34,17 +35,10 @@ function hash(request: MealCommand | { kind: "log"; id: string; input: MealLogIn
   return createHash("sha256").update(JSON.stringify({ ...request, kind: `saved-meal-${request.kind}` })).digest("hex");
 }
 
-// A scaled food must still fit the journal's limits, which a tiny saved amount scaled up can exceed.
-function scaled(food: MealFood, amount: number): MealFood | null {
-  const result = mealFoodSchema.safeParse(scaleFood(food, amount));
-
-  return result.success ? result.data : null;
-}
-
 // The item at another amount, scaled from its basis so a chain of edits matches a single one.
 function portion(item: StoredMealItem, amount: number): StoredMealItem | null {
   const basis = item.basis ?? item.food;
-  const food = scaled(basis, amount);
+  const food = scaledFood(basis, amount);
 
   return food ? { id: item.id, food, basis } : null;
 }
@@ -130,7 +124,7 @@ export async function mutateMeal(db: AppDatabase, userId: string, key: string, c
     if (!row) throw new Error("Saved meal insert returned no row");
 
     return { outcome: "created", entry: meal(row) };
-  }, "invalid-item");
+  });
 }
 
 // Logs the chosen items of a meal at one time, all or none, in the meal's order. An edit keeps each item's
@@ -166,5 +160,5 @@ export async function logMeal(db: AppDatabase, userId: string, key: string, id: 
     const entries = await insertFoods(tx, userId, { occurredAt: input.occurredAt, timeZone: input.timeZone }, foods);
 
     return { outcome: "created", entry: { entries } };
-  }, "invalid-item");
+  });
 }

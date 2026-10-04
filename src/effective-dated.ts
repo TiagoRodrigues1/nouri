@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, lte } from "drizzle-orm";
+import { and, desc, eq, lte } from "drizzle-orm";
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core";
 import type { z } from "zod";
 import type { AppDatabase, Transaction } from "./db/database.js";
@@ -27,22 +27,19 @@ export async function getDated<T extends DatedTable, Input, Result>(db: AppDatab
   return row ? kind.toResult(row) : kind.empty;
 }
 
-// The value in force on each day from `from` to `to`: the one in force on `from`, then every change inside the range.
-export async function getDatedRange<T extends DatedTable, Input, Result>(db: AppDatabase, kind: DatedKind<T, Input, Result>, userId: string, from: string, to: string): Promise<(date: string) => Result> {
+// The value in force on each day up to `to`, from every change saved by then, latest first.
+export async function getDatedHistory<T extends DatedTable, Input, Result>(db: AppDatabase, kind: DatedKind<T, Input, Result>, userId: string, to: string): Promise<(date: string) => Result> {
   const { table } = kind;
   const source: PgTable = table;
 
-  const [first, rows] = await Promise.all([
-    getDated(db, kind, userId, from),
-    db.select().from(source)
-      .where(and(eq(table.userId, userId), gt(table.effectiveFrom, from), lte(table.effectiveFrom, to)))
-      .orderBy(desc(table.effectiveFrom)),
-  ]);
+  const rows = await db.select().from(source)
+    .where(and(eq(table.userId, userId), lte(table.effectiveFrom, to)))
+    .orderBy(desc(table.effectiveFrom));
 
   // SAFETY: every dated table declares effective_from with drizzle's date(), which reads as an ISO date string.
   const changes = rows.map((row) => ({ effectiveFrom: row.effectiveFrom as string, result: kind.toResult(row) }));
 
-  return (date) => changes.find((change) => change.effectiveFrom <= date)?.result ?? first;
+  return (date) => changes.find((change) => change.effectiveFrom <= date)?.result ?? kind.empty;
 }
 
 // A full replacement of the value taking effect on that day, so repeating it changes nothing.

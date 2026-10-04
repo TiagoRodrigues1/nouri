@@ -71,5 +71,5 @@ export async function mutateRecord<Input, Entry>(db: AppDatabase, userId: string
     if (command.kind === "delete") return softDelete(tx, kind.table, userId, command.id, command.revision, { erase: kind.erase, deletable: kind.deletable });
 
     return kind.create(tx, userId, command.input);
-  }, "unknown-reference");
+  });
 }

@@ -7,14 +7,15 @@ import { colors } from "./theme.stylex";
 import { styles } from "./my-day-styles";
 import { DashboardCardsDialog, useDashboardCards } from "./dashboard-cards";
 import { clock, entryHour, entryTime } from "./lib/time";
-import { useTargets } from "./lib/use-targets";
+import { useTargetsQuery } from "./lib/use-targets";
 import { workoutSummaryQueryOptions } from "./lib/day-query";
 import { useLogAgain } from "./lib/use-log-again";
-import { TargetsNotice } from "./targets-notice";
+import { queryStatus } from "./query-status";
 import { useSupplements } from "./lib/use-supplements";
 import { useDashboardPage } from "./dashboard-page-context";
 import { SupplementsCard } from "./my-day/supplements-card";
 import { format, type CardId, type Day, type FoodEntry } from "./lib/api";
+import { recordPaths } from "../../src/journal/paths";
 import { ActivityCard, FastingCard, Gauge, LargestCard, MealsCard, MixCard, WaterCard, WindowCard } from "./my-day/cards";
 
 type Row =
@@ -25,7 +26,7 @@ type Row =
 type MyDayProps = { day: Day | undefined; status: ReactNode };
 
 export function MyDay({ day, status }: MyDayProps) {
-  const { date, isToday, onEditFood: onEdit, onSaveMeal, foodDelete, water, onManageSupplements, customizingCards, onCustomizingCardsChange } = useDashboardPage();
+  const { date, isToday, onEditFood: onEdit, onSaveMeal, foodDelete, journal, onManageSupplements, customizingCards, onCustomizingCardsChange } = useDashboardPage();
   const supplements = useSupplements(date);
   const logAgain = useLogAgain(date);
   const busy = foodDelete.isPending || logAgain.pending;
@@ -40,8 +41,8 @@ export function MyDay({ day, status }: MyDayProps) {
   // The Activity card mounts only once the targets and layout arrive, so its read starts here, alongside them.
   // While the layout is unknown it assumes the card is shown.
   useQuery({ ...workoutSummaryQueryOptions(date), enabled: layout.cards?.includes("activity") ?? true });
-  const targetsState = useTargets(date);
-  const { targets } = targetsState;
+  const targetsQuery = useTargetsQuery(date);
+  const targets = targetsQuery.data?.targets;
   // Cards wait for the targets too, so no gauge draws against a value about to change.
   const shown = targets && layout.cards;
 
@@ -67,8 +68,8 @@ export function MyDay({ day, status }: MyDayProps) {
         goalMl={targets.waterMl}
         entries={day?.water.entries ?? []}
         totalMl={day?.water.totalMl}
-        pending={water.pending}
-        onDelete={water.remove}
+        pending={journal.create.isPending || journal.remove.isPending}
+        onDelete={(entry) => journal.remove.mutate({ path: recordPaths.water, label: "Water", ...entry })}
       />
     ),
     supplements: (
@@ -103,7 +104,7 @@ export function MyDay({ day, status }: MyDayProps) {
       />
       <div {...stylex.props(styles.side)}>
         {!targets ? (
-          <TargetsNotice state={targetsState} style={styles.noCards} />
+          <p {...stylex.props(styles.noCards)}>{queryStatus(targetsQuery, "Loading your targets…", "Targets could not load: ")}</p>
         ) : shown?.length === 0 ? (
           <p {...stylex.props(styles.noCards)}>All cards are hidden. Use the customize button at the top to bring some back.</p>
         ) : (
