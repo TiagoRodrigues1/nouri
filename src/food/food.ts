@@ -6,7 +6,7 @@ import { withReceipt } from "../journal/receipt.js";
 import { foodEntries } from "../db/schema.js";
 import { localDate } from "../time.js";
 import { resolveFood } from "./catalog.js";
-import { entrySchema, scaledFood } from "./contract.js";
+import { entrySchema, manualFood, scaledFood } from "./contract.js";
 import type { CatalogFoodInput, FoodEntry, FoodInput, FoodSubmission, RecentFoods, RecordedFood, RepeatInput } from "./contract.js";
 
 export type FoodCommand =
@@ -99,7 +99,7 @@ async function missingOrStale(tx: Transaction, userId: string, id: string): Prom
 // Logs recorded foods at one time, in the order given. Copies the saved name, amount, nutrients and
 // catalog reference, never the catalog's current values, so it keeps working after the catalog changes.
 export async function insertFoods(tx: Transaction, userId: string, when: Pick<RepeatInput, "occurredAt" | "timeZone">, foods: RecordedFood[]): Promise<FoodEntry[]> {
-  const rows = foods.map(({ catalogRef, ...food }) => ({ id: randomUUID(), userId, ...values({ ...when, food: catalogRef ? { ...food, catalogRef } : food }) }));
+  const rows = foods.map((food) => ({ id: randomUUID(), userId, ...values({ ...when, food: manualFood(food) }) }));
   const inserted = await tx.insert(foodEntries).values(rows).returning();
   const byId = new Map(inserted.map((row) => [row.id, entry(row)]));
 

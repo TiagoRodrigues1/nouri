@@ -3,7 +3,9 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { createApp } from "../src/app.js";
 import { applyMigrations } from "../src/db/migrations.js";
+import { openFoodFacts } from "../src/food/packaged.js";
 import type { WearableRuntime } from "../src/wearables/provider.js";
+import { FakeOpenFoodFacts } from "./fake-open-food-facts.js";
 
 // pk_test_ followed by base64 of "example.clerk.accounts.dev$", the shape Clerk issues.
 export const publishableKey = `pk_test_${Buffer.from("example.clerk.accounts.dev$").toString("base64")}`;
@@ -26,13 +28,15 @@ export function createHarness(wearables?: WearableRuntime) {
     publishableKey,
   });
 
-  const app = createApp(db, identity("user_test_1"), wearables);
-  const otherApp = createApp(db, identity("user_test_2"));
+  const products = new FakeOpenFoodFacts();
+  const packagedFoods = openFoodFacts(products.fetch);
+  const app = createApp(db, identity("user_test_1"), packagedFoods, wearables);
+  const otherApp = createApp(db, identity("user_test_2"), packagedFoods);
   const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
 
   return {
-    app, otherApp, client, db, token, userId, headers,
-    signedInAs: (clerkUserId: string) => createApp(db, identity(clerkUserId), wearables),
+    app, otherApp, client, db, token, userId, headers, products,
+    signedInAs: (clerkUserId: string) => createApp(db, identity(clerkUserId), packagedFoods, wearables),
     setup: async () => {
       await admin.unsafe(`CREATE SCHEMA "${schema}"`);
       await applyMigrations(client);

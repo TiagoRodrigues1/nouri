@@ -21,6 +21,7 @@ This index is the maintained list of Nouri's user paths. Read the relevant file 
 
 - [Account access](auth.md): signed-out page, test-user sign-in, sign-out, and protected API.
 - [Search foods](search.md): Ciqual search results, no-match state, attribution.
+- [Barcode lookup](barcode.md): typed or camera-scanned barcode in the Search foods tab, live Open Food Facts product, serving default, check-digit and not-found states, logging and editing a scanned product.
 - [Log a catalog food](catalog-log.md): search, select, set grams, save and read back.
 - [Recent foods](recent-foods.md): Recent tab in the food dialog, one row per food, amount and preview, logging on the chosen day.
 - [Log a manual food](manual-log.md): manual tab, nutrition fields, save and read back.

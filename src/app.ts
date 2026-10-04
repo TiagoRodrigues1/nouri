@@ -8,9 +8,10 @@ import { dashboardSchema } from "./dashboard/contract.js";
 import { getDashboard, saveDashboard } from "./dashboard/dashboard.js";
 import { daySchema } from "./days/contract.js";
 import { getDay } from "./days/days.js";
-import { entrySchema, recentFoodsSchema, repeatInputSchema, searchResultSchema, submissionSchema } from "./food/contract.js";
+import { barcodeLookupSchema, entrySchema, isBarcode, recentFoodsSchema, repeatInputSchema, searchResultSchema, submissionSchema } from "./food/contract.js";
 import { searchFoods } from "./food/catalog.js";
 import { getRecentFoods, mutateFood } from "./food/food.js";
+import type { PackagedFoods } from "./food/packaged.js";
 import type { AppDatabase } from "./db/database.js";
 import { getDated, saveDated, type DatedKind, type DatedTable } from "./effective-dated.js";
 import { mealEditSchema, mealInputSchema, mealLogInputSchema, mealLogSchema, savedMealListSchema, savedMealSchema } from "./meals/contract.js";
@@ -75,7 +76,7 @@ function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (character) => `&#${character.charCodeAt(0)};`);
 }
 
-export function createApp(db: AppDatabase, identity: Identity, wearables?: WearableRuntime) {
+export function createApp(db: AppDatabase, identity: Identity, packagedFoods: PackagedFoods, wearables?: WearableRuntime) {
   const app = new OpenAPIHono<{ Variables: { userId: string; idempotencyKey: string } }>();
 
   // Clerk loads its scripts from the instance's Frontend API, shows avatars from img.clerk.com, and runs bot protection in a Cloudflare frame.
@@ -85,7 +86,7 @@ export function createApp(db: AppDatabase, identity: Identity, wearables?: Weara
   const pageHeaders = {
     "Cache-Control": "no-store",
     "X-Content-Type-Options": "nosniff",
-    "Content-Security-Policy": `default-src 'self'; script-src 'self' ${clerk} ${challenges}; style-src 'self' 'unsafe-inline'; connect-src 'self' ${clerk}; img-src 'self' blob: https://img.clerk.com; worker-src 'self' blob:; frame-src ${challenges}; base-uri 'none'; form-action 'self'`,
+    "Content-Security-Policy": `default-src 'self'; script-src 'self' 'wasm-unsafe-eval' ${clerk} ${challenges}; style-src 'self' 'unsafe-inline'; connect-src 'self' ${clerk}; img-src 'self' blob: https://img.clerk.com; worker-src 'self' blob:; frame-src ${challenges}; base-uri 'none'; form-action 'self'`,
   };
 
   const keyMeta = `<meta name="nouri-clerk-publishable-key" content="${escapeHtml(identity.publishableKey)}" />`;
@@ -122,6 +123,7 @@ export function createApp(db: AppDatabase, identity: Identity, wearables?: Weara
     ["js", "text/javascript; charset=utf-8"],
     ["css", "text/css; charset=utf-8"],
     ["woff2", "font/woff2"],
+    ["wasm", "application/wasm"],
   ]);
 
   app.get("/assets/:file", async (context) => {
@@ -212,6 +214,23 @@ export function createApp(db: AppDatabase, identity: Identity, wearables?: Weara
     return context.json(searchFoods(query.data, locale.data));
   });
   app.openAPIRegistry.registerPath({ method: "get", path: "/v1/foods/search", request: { query: z.object({ q: z.string().min(2).max(80), locale: z.string().optional() }) }, responses: { 200: { description: "Ciqual food matches and attribution", ...json(searchResultSchema) }, 400: failure("Invalid query") } });
+
+  app.get("/v1/foods/barcodes/:code", async (context) => {
+    const code = context.req.param("code");
+
+    if (!isBarcode(code)) return error(400, "Invalid barcode");
+    const found = await packagedFoods.lookup(code);
+
+    switch (found.outcome) {
+      case "found":
+        return context.json(found.result);
+      case "not-found":
+        return error(404, "No product found for this barcode");
+      case "unavailable":
+        return error(502, "Open Food Facts is not answering. Try again, or add the food manually.");
+    }
+  });
+  app.openAPIRegistry.registerPath({ method: "get", path: "/v1/foods/barcodes/{code}", request: { params: z.object({ code: z.string().regex(/^(?:\d{8}|\d{12,14})$/) }) }, responses: { 200: { description: "The Open Food Facts product with this barcode: its nutrition per 100 g or 100 ml as a food to scale and log, its serving size, and attribution", ...json(barcodeLookupSchema) }, 400: failure("Not an EAN-8, UPC-A, EAN-13, or GTIN-14 with a valid check digit"), 404: failure("No product with this barcode"), 502: failure("Open Food Facts did not answer") } });
 
   app.patch("/v1/food-entries/:id", async (context) => {
     const key = context.get("idempotencyKey");

@@ -3,6 +3,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { z } from "zod";
 import { createApp } from "./app.js";
+import { openFoodFacts } from "./food/packaged.js";
 import { wearablesFromEnv } from "./google-health/config.js";
 import { identityFromEnv } from "./identity/identity.js";
 
@@ -16,6 +17,6 @@ const wearables = wearablesFromEnv(process.env, fetch);
 
 const client = postgres(settings.DATABASE_URL);
 
-const app = createApp(drizzle(client), identityFromEnv(process.env), wearables);
+const app = createApp(drizzle(client), identityFromEnv(process.env), openFoodFacts(fetch), wearables);
 
 serve({ fetch: app.fetch, port: settings.PORT, hostname: settings.HOST });

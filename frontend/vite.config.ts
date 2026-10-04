@@ -41,6 +41,8 @@ export default defineConfig(({ mode }) => ({
             { name: "clerk", test: /node_modules[\\/]@clerk[\\/]/ },
             { name: "ui", test: /node_modules[\\/](@radix-ui|radix-ui|@floating-ui|react-remove-scroll|sonner|lucide-react|tailwind-merge)/ },
             { name: "zod", test: /node_modules[\\/]zod[\\/]/ },
+            // Loaded only when someone scans, so it stays out of the vendor chunk every page needs.
+            { name: "barcode", test: /node_modules[\\/](barcode-detector|zxing-wasm)[\\/]/ },
             { name: "vendor", test: /node_modules[\\/]/ },
           ],
         },

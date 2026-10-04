@@ -66,6 +66,13 @@ Choose a search result and send its `ref` with a quantity in grams. The server c
 
 Use the `ref` returned by search. The example selects raw apple from the pinned dataset.
 
+Packaged foods are found by barcode. `GET /v1/foods/barcodes/{code}` takes an EAN-8, UPC-A, EAN-13, or GTIN-14 with a valid check digit. It asks [Open Food Facts](https://world.openfoodfacts.org), whose data is available under the Open Database License, and returns the product's name, brand, serving size, and a `food` holding 100 g or 100 ml of it, with an `open-food-facts` reference. It answers 404 when Open Food Facts has no product with that code, and 502 when Open Food Facts does not answer. Log the product with the manual body, scaling `food` to the amount eaten. The web page does this from the **Search foods** tab, where you can type a barcode or choose **Scan** to read one with the camera. The camera needs HTTPS or localhost. [docs/barcode-lookup-design.md](docs/barcode-lookup-design.md) explains the design.
+
+```sh
+curl http://localhost:3000/v1/foods/barcodes/3017620422003 \
+  -H "Authorization: Bearer $NOURI_TOKEN"
+```
+
 Use `PATCH /v1/food-entries/{id}` with a full replacement body and `If-Match: "<revision>"` to edit. Use `DELETE` at the same path with the same revision header to remove. Each intended mutation needs a new `Idempotency-Key`; reuse the key and request when retrying. The day endpoint groups entries by the local date in each entry's recorded time zone. It returns `null` for an empty or incomplete nutrient total.
 
 A saved meal copies the foods of chosen entries at chosen amounts, so a usual breakfast logs in one request. `POST /v1/saved-meals` with `{"name":"Breakfast","items":[{"entryId":"<id>","amount":60}]}` saves one, and `GET /v1/saved-meals` lists them. `POST /v1/saved-meals/{id}/logs` with `occurredAt`, `timeZone`, and `items` of `{"id":"<item id>","amount":…}` logs the listed items at that time, scaling each saved food's nutrients to the amount. The response is `{"entries":[…]}`. Items left out are not logged. `PATCH /v1/saved-meals/{id}` with `If-Match` and `{"name":…,"items":[{"id":"<item id>","amount":…}]}` renames the meal and sets its usual amounts. Items left out are removed. Delete a meal with `DELETE` and `If-Match`, and the foods already logged from it stay. [docs/saved-meals-design.md](docs/saved-meals-design.md) and [docs/saved-meal-editing-design.md](docs/saved-meal-editing-design.md) explain the design.
