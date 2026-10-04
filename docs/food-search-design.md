@@ -115,7 +115,7 @@ Both shapes can have a small caller interface. Live federation lost because each
 - Will INSA allow commercial reuse and local indexing of PortFIR, and what attribution does it require?
 - Does the product accept Open Food Facts ODbL terms for a barcode feature and for any stored product fields?
 - Is Portuguese language ingredient search required for the first release? If so, Ciqual alone is insufficient.
-- Should the first release include barcode lookup, or should it follow ingredient search after the licensing decision?
+- Should the first release include barcode lookup, or should it follow ingredient search after the licensing decision? [Barcode lookup](barcode-lookup-design.md) now covers it.
 
 ## Next implementation step
 

@@ -82,6 +82,8 @@ export const daySchema = z.object({
   }),
 });
 
+const attributionSchema = z.object({ provider: z.string(), label: z.string(), url: z.url() });
+
 export const searchResultSchema = z.object({
   items: z.array(z.object({
     ref: catalogRefSchema,
@@ -91,8 +93,29 @@ export const searchResultSchema = z.object({
     basis: z.literal("per-100-g"),
     nutrients: nutrientsSchema,
   })),
-  attribution: z.array(z.object({ provider: z.string(), label: z.string(), url: z.url() })),
+  attribution: z.array(attributionSchema),
 });
+
+// EAN-8, UPC-A, EAN-13 and GTIN-14 end in a GS1 check digit, so a misread or mistyped code is caught before any lookup.
+export function isBarcode(code: string): boolean {
+  if (!/^(?:\d{8}|\d{12,14})$/.test(code)) return false;
+  const digits = code.split("").map(Number).reverse();
+  const sum = digits.slice(1).reduce((total, digit, index) => total + digit * (index % 2 === 0 ? 3 : 1), 0);
+
+  return (10 - (sum % 10)) % 10 === digits[0];
+}
+
+// A packaged product's label as the journal can record it: `food` is 100 g or 100 ml of it, which scaleFood
+// turns into any amount in the same unit. The serving, when the label gives one, is in that unit too.
+export const packagedProductSchema = z.object({
+  barcode: z.string().refine(isBarcode),
+  name: z.string(),
+  brand: z.string().nullable(),
+  food: recordedFoodSchema,
+  serving: z.object({ amount: positiveAmount, unit: z.enum(["g", "ml"]) }).nullable(),
+});
+
+export const barcodeLookupSchema = z.object({ product: packagedProductSchema, attribution: z.array(attributionSchema) });
 
 export type FoodInput = z.infer<typeof manualInputSchema>;
 
@@ -113,6 +136,10 @@ export type RecentFood = RecentFoods["foods"][number];
 export type FoodDay = z.infer<typeof daySchema>;
 
 export type SearchResult = z.infer<typeof searchResultSchema>;
+
+export type PackagedProduct = z.infer<typeof packagedProductSchema>;
+
+export type BarcodeLookup = z.infer<typeof barcodeLookupSchema>;
 
 export type CatalogSelection = z.infer<typeof catalogRefSchema>;
 

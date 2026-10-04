@@ -1,18 +1,16 @@
 import * as stylex from "@stylexjs/stylex";
 import { styles } from "./form-styles";
 import { useEffect, useState, type FormEvent } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { ChevronRight, Search } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "./components/ui/dialog";
 import { Label } from "./components/ui/label";
 import { Input } from "./components/ui/input";
 import { TimePicker } from "./components/ui/time-picker";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs";
-import { format, searchFoods, type Candidate } from "./lib/api";
 import { currentTime, dateLabel } from "./lib/time";
 import { RecentFoodsTab } from "./recent-foods-tab";
 import { SavedMealsTab } from "./saved-meals-tab";
+import { SearchFoodsTab } from "./search-foods-tab";
 import type { FoodSubmission } from "../../src/food/contract";
 
 type FoodInput = FoodSubmission["food"];
@@ -27,10 +25,6 @@ type LogFoodDialogProps = {
 };
 
 export function LogFoodDialog({ open, onOpenChange, date, isToday, pending, onSave }: LogFoodDialogProps) {
-  const [searchDraft, setSearchDraft] = useState("");
-  const [searchTerm, setSearchTerm] = useState("");
-  const [selected, setSelected] = useState<Candidate | null>(null);
-  const [grams, setGrams] = useState("100");
   const [time, setTime] = useState(currentTime);
 
   // Each time the dialog opens, default the entry time to now.
@@ -38,25 +32,13 @@ export function LogFoodDialog({ open, onOpenChange, date, isToday, pending, onSa
     if (open) setTime(currentTime());
   }, [open]);
 
-  const searchQuery = useQuery({
-    queryKey: ["foods", searchTerm],
-    queryFn: () => searchFoods(searchTerm),
-    enabled: searchTerm.length >= 2,
-  });
-
-  function search(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setSelected(null);
-    setSearchTerm(searchDraft.trim());
-  }
-
   return (
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent>
           <DialogTitle {...stylex.props(styles.dialogTitle)}>Log a food</DialogTitle>
           <DialogDescription {...stylex.props(styles.dialogDescription)}>
-            Choose a food you logged before, one from the catalog, a saved meal, or enter one
-            manually. It will be added to {isToday ? "today" : dateLabel(date)}.
+            Choose a food you logged before, one from the catalog or by barcode, a saved meal, or
+            enter one manually. It will be added to {isToday ? "today" : dateLabel(date)}.
           </DialogDescription>
           <div {...stylex.props(styles.timeField)}>
             <Label {...stylex.props(styles.formLabel, styles.timeLabel)} htmlFor="food-time">Time eaten</Label>
@@ -81,105 +63,7 @@ export function LogFoodDialog({ open, onOpenChange, date, isToday, pending, onSa
               <RecentFoodsTab date={date} time={time} onLogged={() => onOpenChange(false)} />
             </TabsContent>
             <TabsContent value="search">
-              <form onSubmit={search}>
-                <Label {...stylex.props(styles.formLabel)} htmlFor="search-query">Find a food</Label>
-                <div {...stylex.props(styles.searchFormRow)}>
-                  <Input
-                    id="search-query"
-                    type="search"
-                    minLength={2}
-                    maxLength={80}
-                    placeholder="Try apple, oats, chicken..."
-                    value={searchDraft}
-                    onChange={(event) => setSearchDraft(event.target.value)}
-                    required
-                  />
-                  <Button type="submit">
-                    <Search size={16} /> Search
-                  </Button>
-                </div>
-              </form>
-              <p {...stylex.props(styles.fieldHint)}>
-                Ciqual results show nutrition per 100 g.
-              </p>
-              {searchQuery.isFetching ? (
-                <p {...stylex.props(styles.searchMessage)}>Searching foods…</p>
-              ) : searchQuery.isError ? (
-                <p {...stylex.props(styles.searchMessage)}>{searchQuery.error.message}</p>
-              ) : searchTerm && !searchQuery.data?.items.length ? (
-                <p {...stylex.props(styles.searchMessage)}>
-                  No foods found. Try another name.
-                </p>
-              ) : !searchTerm ? (
-                <p {...stylex.props(styles.searchMessage)}>
-                  Search for a food to get started.
-                </p>
-              ) : (
-                <ul {...stylex.props(styles.resultsList)} aria-label="Food search results">
-                  {searchQuery.data?.items.map((item, index) => (
-                    <li key={item.ref.id} {...stylex.props(index > 0 && styles.resultsItemBorder)}>
-                      <button
-                        {...stylex.props(styles.resultsButton, selected?.ref.id === item.ref.id && styles.resultsButtonSelected)}
-                        type="button"
-                        onClick={() => {
-                          setSelected(item);
-                          setGrams("100");
-                        }}
-                      >
-                        <span>
-                          <strong {...stylex.props(styles.resultsText, styles.resultsName)}>{item.name}</strong>
-                          <small {...stylex.props(styles.resultsText, styles.resultsMeta)}>
-                            {format(item.nutrients.kcal)} kcal · P{" "}
-                            {format(item.nutrients.proteinG, 1)}g · C{" "}
-                            {format(item.nutrients.carbsG, 1)}g · F{" "}
-                            {format(item.nutrients.fatG, 1)}g
-                          </small>
-                        </span>
-                        <ChevronRight size={16} />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {selected && (
-                <form
-                  {...stylex.props(styles.selectedForm)}
-                  onSubmit={(event) =>
-                    onSave(event, {
-                      kind: "catalog",
-                      ref: selected.ref,
-                      quantity: { amount: Number(grams), unit: "g" },
-                    }, time)
-                  }
-                >
-                  <strong {...stylex.props(styles.selectedName)}>{selected.name}</strong>
-                  <Label {...stylex.props(styles.formLabel, styles.selectedLabel)} htmlFor="catalog-grams">Amount in grams</Label>
-                  <Input
-                    id="catalog-grams"
-                    type="number"
-                    min="0.001"
-                    max="10000"
-                    step="0.001"
-                    value={grams}
-                    onChange={(event) => setGrams(event.target.value)}
-                    required
-                  />
-                  <Button type="submit" disabled={pending} {...stylex.props(styles.selectedButton)}>
-                    Add to log
-                  </Button>
-                </form>
-              )}
-              {searchQuery.data?.attribution.map((source) => (
-                <a
-                  {...stylex.props(styles.sourceLink)}
-                  key={source.url}
-                  href={source.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  Source: {source.label}
-                </a>
-              ))}
+              <SearchFoodsTab pending={pending} onSave={(event, food) => onSave(event, food, time)} />
             </TabsContent>
             <TabsContent value="meals">
               <SavedMealsTab date={date} time={time} onLogged={() => onOpenChange(false)} />
