@@ -31,7 +31,7 @@ The built page is also available at `http://localhost:3000/`. Run `pnpm build:we
 
 Theme colors are in `frontend/src/theme.stylex.ts` for StyleX page styles and in the `:root` variables of `frontend/src/index.css` for the shadcn/ui components in `frontend/src/components/ui`; keep the two in sync. Add components with `pnpm dlx shadcn@latest add <name>` from `frontend/`. Page styles use StyleX and override component classes through `{...stylex.props(...)}`.
 
-Food search uses the pinned [Ciqual 2025 dataset](https://doi.org/10.57745/RDMHWY), published by Anses under Etalab Open Licence 2.0. Search names are French or English; Portuguese names are not available in this catalog. The response includes source attribution. To regenerate the checked-in catalog from the official dataset, run `python3 scripts/import-ciqual.py`.
+Food search uses the pinned [Ciqual 2025 dataset](https://doi.org/10.57745/RDMHWY), published by Anses under Etalab Open Licence 2.0. Search accepts French, English, and Portuguese words. A hand-curated glossary in `src/food/portuguese.ts` reads Portuguese words as the English words Ciqual uses, so `frango` finds chicken. Results keep the names Ciqual publishes, since the catalog has no Portuguese names. [docs/portuguese-search-design.md](docs/portuguese-search-design.md) explains why. The response includes source attribution. To regenerate the checked-in catalog from the official dataset, run `python3 scripts/import-ciqual.py`.
 
 ```sh
 curl -X POST http://localhost:3000/v1/food-entries \
@@ -44,6 +44,9 @@ curl http://localhost:3000/v1/days/2026-09-24 \
   -H "Authorization: Bearer $NOURI_TOKEN"
 
 curl 'http://localhost:3000/v1/foods/search?q=apple&locale=en' \
+  -H "Authorization: Bearer $NOURI_TOKEN"
+
+curl 'http://localhost:3000/v1/foods/search?q=peito%20de%20frango&locale=pt-PT' \
   -H "Authorization: Bearer $NOURI_TOKEN"
 ```
 

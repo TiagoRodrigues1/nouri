@@ -115,7 +115,7 @@ export function SearchFoodsTab({ pending, onSave }: { pending: boolean; onSave: 
             type="search"
             minLength={2}
             maxLength={80}
-            placeholder="Try apple, oats, or a barcode..."
+            placeholder="Try maçã, frango, oats, or a barcode..."
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             required
@@ -129,6 +129,9 @@ export function SearchFoodsTab({ pending, onSave }: { pending: boolean; onSave: 
         </div>
       </form>
       {scanning && <BarcodeScanner onDetected={detected} onCancel={() => setScanning(false)} />}
+      <p {...stylex.props(styles.fieldHint)}>
+        Search in Portuguese, English, or French, or by barcode. Ciqual results show their English names.
+      </p>
       {message ? (
         <p {...stylex.props(styles.searchMessage)}>{message}</p>
       ) : (
