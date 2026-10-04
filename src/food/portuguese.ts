@@ -2,7 +2,7 @@
 // Search translates the query with this; result names stay as Ciqual published them.
 // Keys are lower case without accents, with hyphens as spaces. Each value is one reading,
 // and every word in it must appear in a matching food's name.
-// At least one English reading per term; the first is the one ranking compares against.
+// At least one English reading per term; matching and ranking use all readings.
 type Readings = [string, ...string[]];
 
 export const portugueseTerms = {
@@ -364,21 +364,36 @@ const longestTerm = Math.max(...[...terms.keys()].map((term) => term.split(" ").
 // A stretch of a query: a word to match as typed, or a Portuguese term with the English readings it stands for.
 export type QueryPhrase = { kind: "word"; typed: string } | { kind: "term"; typed: string[]; english: Readings };
 
-// Plurals and feminine forms fall back to the singular masculine entry, so "batatas assadas" reads as batata and assado.
+// These forms cannot be derived by stripping a plural suffix or changing feminine a to o.
+const irregularForms = new Map([["crua", "cru"], ["flores", "flor"]]);
+
+function wordForms(word: string): string[] {
+  const singular = word.replace(/(oes|aes|aos)$/, "ao").replace(/s$/, "");
+
+  return [...new Set([word, singular, irregularForms.get(word), irregularForms.get(singular), singular.replace(/a$/, "o")])]
+    .filter((form): form is string => form !== undefined);
+}
+
+// Try each word's forms independently: changing an adjective must not also change its noun.
 function lookup(words: string[]): Readings | undefined {
-  const variants = words.map((word) => {
-    const singular = word.replace(/(oes|aes|aos)$/, "ao").replace(/s$/, "");
+  let phrases = [""];
 
-    return [word, singular, singular.replace(/a$/, "o")];
-  });
+  for (const word of words) {
+    phrases = phrases.flatMap((prefix) => wordForms(word).map((form) => prefix ? `${prefix} ${form}` : form));
+  }
 
-  for (const level of [0, 1, 2]) {
-    const english = terms.get(variants.map((forms) => forms[level]).join(" "));
+  for (const phrase of phrases) {
+    const english = terms.get(phrase);
 
     if (english) return english;
   }
 
   return undefined;
+}
+
+// Only individual glossary words participate in typo recovery, never fragments of a phrase.
+export function nearbyPortugueseReadings(word: string, nearlyMatches: (word: string, term: string) => boolean): string[] {
+  return [...terms].filter(([term]) => !term.includes(" ") && nearlyMatches(word, term)).flatMap(([, english]) => english);
 }
 
 // Reads normalized query words as Portuguese terms where it can, so "peito de frango" reads as breast and chicken.
@@ -395,11 +410,13 @@ export function readQuery(words: string[]): QueryPhrase[] {
     const english = lookup(typed);
 
     if (english) phrases.push({ kind: "term", typed, english });
-    else if (!connectives.has(typed[0] ?? "")) phrases.push({ kind: "word", typed: typed[0] ?? "" });
+    else phrases.push({ kind: "word", typed: typed.join(" ") });
 
     start += size;
   }
 
-  // A query of connectives alone still has to match something.
-  return phrases.length > 0 ? phrases : words.map((word) => ({ kind: "word", typed: word }));
+  // A literal English or French query keeps every word, especially English "no".
+  return phrases.some((phrase) => phrase.kind === "term")
+    ? phrases.filter((phrase) => phrase.kind === "term" || !connectives.has(phrase.typed))
+    : phrases;
 }
