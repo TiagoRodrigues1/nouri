@@ -95,11 +95,12 @@ Run `pnpm db:migrate` on a fresh database. It applies `db/schema.sql`, which hol
 
 `GET /v1/dashboard` returns the cards shown on My Day, in display order. Until the user saves a layout, it returns the defaults: `totals`, `water`, `mix`, and `activity`. `PUT /v1/dashboard` with `{"cards":[...]}` replaces the whole layout; a card left out is hidden. The other cards are `fasting`, `largest`, and `meals`.
 
-`GET /v1/overview/{date}` feeds the Overview page. It groups the day into `nutrition` (the day's food and water), `sports` (workouts), `measurements`, `sleep`, and `photos`. Log records with `POST /v1/measurements`, `POST /v1/workouts`, and `POST /v1/sleep-sessions`, and remove them with `DELETE` and `If-Match`, following the same retry rules as water.
+`GET /v1/overview/{date}` feeds the Overview page. It groups the day into `sports` (workouts), `measurements`, `sleep`, `activity`, `heartRate`, and `photos`. Log records with `POST /v1/measurements`, `POST /v1/workouts`, and `POST /v1/sleep-sessions`, and remove them with `DELETE` and `If-Match`, following the same retry rules as water.
 
 - A measurement is a `kind` of `weight` (kg), `height` (cm), `body-fat` (%), or `waist` (cm) with a `value`. It carries forward: the overview shows the latest value recorded on or before the date. It also returns a 30-day weight history, the change since the previous weight, and a BMI from the latest weight and height.
 - A workout has an `activity`, `durationMinutes`, and optional `distanceM` and `energyKcal`. Strength workouts can include exercises with a name, sets, reps per set, and optional weight in kilograms. Strength workouts cannot have a distance. The day's `energyKcal` is `null` if any workout lacks an estimate.
 - A sleep session has `startedAt`, `endedAt`, and optional `stages` in minutes (`awake`, `light`, `deep`, `rem`). It counts toward the local date on which it ends.
+- `activity` (`steps`, `activeKcal`) and `heartRate` (`restingBpm` and a `range` of `averageBpm`, `minBpm`, and `maxBpm`) come only from a connected wearable. Each is `null` on a day nothing was imported.
 
 Upload a progress photo as multipart form data with `file`, `occurredAt`, and `timeZone`:
 
@@ -112,9 +113,9 @@ curl -X POST http://localhost:3000/v1/progress-photos \
 
 The server accepts JPEG, PNG, and WebP up to 8 MB. It identifies the type from the file's first bytes, not from its name. The bytes are stored in PostgreSQL. `GET /v1/progress-photos/{id}/image` returns them. Deleting a photo erases its bytes.
 
-### Google Health sleep and workouts
+### Google Health sleep, workouts, and activity
 
-The Overview Sleep section can import sleep and workouts from Google Health, which is where a Fitbit Air syncs through the phone app. Nouri's server signs in to Google with the read-only sleep and activity-and-fitness scopes and keeps the tokens encrypted in PostgreSQL. The page never sees them. Set these in `.env` and restart:
+Nouri can import sleep, workouts, steps, active energy, and heart rate from Google Health, which is where a Fitbit Air syncs through the phone app. Nouri's server signs in to Google with the read-only sleep, activity-and-fitness, and health-metrics scopes and keeps the tokens encrypted in PostgreSQL. The page never sees them. Set these in `.env` and restart:
 
 ```sh
 GOOGLE_HEALTH_CLIENT_ID=...apps.googleusercontent.com
@@ -123,7 +124,7 @@ GOOGLE_HEALTH_REDIRECT_URI=http://127.0.0.1:3000/oauth/google-health/callback
 WEARABLE_TOKEN_KEY=$(openssl rand -hex 32)   # paste the output, not the command
 ```
 
-Open Nouri on the same host and port as the redirect URI; the sign-in cookie is tied to that host. For `pnpm dev`, register and use `http://127.0.0.1:5173/oauth/google-health/callback` instead; Vite forwards `/oauth` to the API. Choose **Wearables** in the sidebar, then **Connect**, approve sleep and exercise access, and Nouri runs a first sync. **Sync now** re-reads the last 30 days and adds, updates, or removes imported nights and workouts to match Google. Imported workouts appear in Sports under their Google name, such as "Evening Run", and count toward the day's workout totals. Imported records show their device and cannot be deleted in Nouri. Delete them in Google Health, then sync. **Disconnect** revokes Nouri's access and removes everything it imported. Manual sleep and workouts are kept. A connection made before workouts were imported reads only sleep; the Wearables dialog asks you to **Connect again** to add them.
+Open Nouri on the same host and port as the redirect URI; the sign-in cookie is tied to that host. For `pnpm dev`, register and use `http://127.0.0.1:5173/oauth/google-health/callback` instead; Vite forwards `/oauth` to the API. Choose **Wearables** in the sidebar, then **Connect**, approve sleep, activity, and health metrics access, and Nouri runs a first sync. **Sync now** re-reads the last 30 days and adds, updates, or removes imported nights, workouts, and daily totals to match Google. Imported workouts appear in Sports under their Google name, such as "Evening Run", and count toward the day's workout totals. The Overview's Activity section shows the day's steps against your steps target, active energy, and resting heart rate with the day's average and range. A day without them reads "—", never zero. Imported records show their device and cannot be deleted in Nouri. Delete them in Google Health, then sync. **Disconnect** revokes Nouri's access and removes everything it imported. Manual sleep and workouts are kept. A connection made before a kind was imported, such as heart rate, reads only the kinds it covers; the Wearables dialog asks you to **Connect again** to add the rest.
 
 The API is `GET /v1/integrations/google-health` for status, `POST .../authorizations` to start sign-in, `POST .../syncs`, and `DELETE /v1/integrations/google-health`. [docs/wearables-design.md](docs/wearables-design.md) covers the Google Cloud setup, testing with a real Fitbit Air and iPhone, and adding another provider.
 

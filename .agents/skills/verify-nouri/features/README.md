@@ -31,7 +31,7 @@ This index is the maintained list of Nouri's user paths. Read the relevant file 
 - [Overview](overview.md): sidebar link, category tabs, measurements, workouts, sleep, progress photos, deletion.
 - [Workout progress](progress.md): last-time line and Repeat in the workout dialog, Progress sidebar page with exercise picker, chart, and sessions, links from Overview exercise names.
 - [Review](review.md): sidebar link, seven-day table with blank unrecorded days and recorded-day counts, day links into Today and Overview, Back, week arrows.
-- [Wearable import](wearables.md): Wearables dialog in the sidebar, not-set-up state, fixture-backed Connect, imported sleep and workouts, repeat sync, disconnect, forged callback.
+- [Wearable import](wearables.md): Wearables dialog in the sidebar, not-set-up state, fixture-backed Connect, imported sleep, workouts, and daily activity, repeat sync, disconnect, forged callback.
 - [Customize My Day cards](cards.md): show, hide, reorder, save, reload, and restore defaults.
 - [Log again](log-again.md): timeline log-again button on today and past days, recorded time zones, `/food` redirect.
 - [Saved meals](saved-meals.md): save the day's foods as a meal from the timeline with adjusted amounts, log it from the Saved meals tab of `+ Log` > `Food`, delete it.
