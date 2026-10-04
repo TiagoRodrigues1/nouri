@@ -25,6 +25,8 @@ export const callbackMessages: Record<CallbackResult, string> = {
 export const importNouns: Record<ImportKind, [string, string]> = {
   sleep: ["sleep session", "sleep sessions"],
   workouts: ["workout", "workouts"],
+  activity: ["day of activity", "days of activity"],
+  heartRate: ["day of heart rate", "days of heart rate"],
 };
 
 export function noun(kind: ImportKind, count: number): string {

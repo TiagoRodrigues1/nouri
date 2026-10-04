@@ -91,6 +91,28 @@ export const sleepSessions = pgTable("sleep_sessions", {
   sourceDevice: text("source_device"),
 }, (table) => [activeDayIndex("sleep_sessions", table), uniqueIndex("sleep_sessions_user_source_idx").on(table.userId, table.source, table.sourceId).where(sql`source_id IS NOT NULL`)]);
 
+const dailyTotalColumns = {
+  userId: uuid("user_id").notNull(),
+  localDate: date("local_date").notNull(),
+  source: text("source").$type<WearableProvider>().notNull(),
+  sourceFingerprint: text("source_fingerprint").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+};
+
+export const dailyActivity = pgTable("daily_activity", {
+  ...dailyTotalColumns,
+  steps: integer("steps"),
+  activeKcal: integer("active_kcal"),
+}, (table) => [primaryKey({ columns: [table.userId, table.localDate, table.source] })]);
+
+export const dailyHeartRate = pgTable("daily_heart_rate", {
+  ...dailyTotalColumns,
+  restingBpm: integer("resting_bpm"),
+  averageBpm: integer("average_bpm"),
+  minBpm: integer("min_bpm"),
+  maxBpm: integer("max_bpm"),
+}, (table) => [primaryKey({ columns: [table.userId, table.localDate, table.source] })]);
+
 export const wearableConnections = pgTable("wearable_connections", {
   userId: uuid("user_id").notNull(),
   provider: text("provider").$type<WearableProvider>().notNull(),

@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { googleHealthProvider } from "../../src/google-health/google.js";
 import type { SleepDay, SleepSession } from "../../src/sleep/contract.js";
 import type { Workout, WorkoutDay } from "../../src/workouts/contract.js";
-import { FakeGoogle, fixture, googleConfig } from "../fake-google.js";
+import { FakeGoogle, fixture, googleConfig, googleScopes } from "../fake-google.js";
 import { createHarness } from "../harness.js";
 
 const google = new FakeGoogle();
@@ -29,11 +29,14 @@ const run = fixture("exercise-run");
 
 const weights = fixture("exercise-weights");
 
-const sleepScope = "https://www.googleapis.com/auth/googlehealth.sleep.readonly";
-
-const exerciseScope = "https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly";
+const { sleep: sleepScope, activity: exerciseScope, health: healthScope } = googleScopes;
 
 const unchanged = { created: 0, updated: 0, removed: 0, skipped: 0 };
+
+type Counts = typeof unchanged;
+
+// This test covers sessions; Google has no daily totals here, so those kinds report nothing.
+const sessions = (sleep: Counts, workouts: Counts) => ({ sleep, workouts, activity: unchanged, heartRate: unchanged });
 
 function send(method: string, path: string, headers: Record<string, string> = {}) {
   return app.request(path, { method, headers: { ...auth, ...headers } });
@@ -97,11 +100,11 @@ void test("Google Health sleep and workouts", async (t) => {
     });
 
     await t.test("OAuth state and consent", async () => {
-      // Authorization asks to read sleep and exercise only, offline, with PKCE, and binds the state to an HttpOnly cookie.
+      // Authorization asks to read sleep, activity, and health metrics only, offline, with PKCE, and binds the state to an HttpOnly cookie.
       const forged = await connect({ withCookie: false });
       const url = new URL(forged.authorizationUrl);
       assert.equal(url.origin + url.pathname, "https://accounts.google.com/o/oauth2/v2/auth");
-      assert.equal(url.searchParams.get("scope"), `${sleepScope} ${exerciseScope}`);
+      assert.equal(url.searchParams.get("scope"), `${sleepScope} ${exerciseScope} ${healthScope}`);
       assert.equal(url.searchParams.get("access_type"), "offline");
       assert.equal(url.searchParams.get("code_challenge_method"), "S256");
       assert.equal(url.searchParams.get("redirect_uri"), googleConfig.redirectUri);
@@ -126,7 +129,7 @@ void test("Google Health sleep and workouts", async (t) => {
       google.grantedScope = "";
       assert.equal((await connect()).result, "missing-scope");
       assert.equal(google.revoked.length, 1);
-      google.grantedScope = `${sleepScope} ${exerciseScope}`;
+      google.grantedScope = `${sleepScope} ${exerciseScope} ${healthScope}`;
 
       // Declining on Google's screen comes back with error=access_denied.
       const declined = await send("POST", `${base}/authorizations`);
@@ -153,7 +156,7 @@ void test("Google Health sleep and workouts", async (t) => {
       const connectedStatus = await status();
       assert.equal(connectedStatus.connection, "connected");
       assert.equal(connectedStatus.lastSyncedAt, null);
-      assert.deepEqual(connectedStatus.granted, ["sleep", "workouts"]);
+      assert.deepEqual(connectedStatus.granted, ["sleep", "workouts", "activity", "heartRate"]);
       assert.ok(!JSON.stringify(connectedStatus).includes("fake-"));
 
       // A manual entry on the same day stays manual and deletable.
@@ -171,12 +174,13 @@ void test("Google Health sleep and workouts", async (t) => {
       google.put(fixture("exercise-too-short"));
       const first = await sync();
       assert.equal(first.status, 200);
-      assert.deepEqual(first.body, { sleep: { created: 2, updated: 0, removed: 0, skipped: 1 }, workouts: { created: 2, updated: 0, removed: 0, skipped: 1 } });
+      assert.deepEqual(first.body, sessions({ created: 2, updated: 0, removed: 0, skipped: 1 }, { created: 2, updated: 0, removed: 0, skipped: 1 }));
       assert.equal((await status()).lastSyncedAt, now.toISOString());
-      assert.deepEqual((await status()).imported, { sleep: 2, workouts: 2 });
+      assert.deepEqual((await status()).imported, { sleep: 2, workouts: 2, activity: 0, heartRate: 0 });
       const filter = (type: string) => google.requests.find((request) => request.pathname.endsWith(`/${type}/dataPoints`))?.searchParams.get("filter");
       assert.equal(filter("sleep"), 'sleep.interval.end_time >= "2026-08-28T12:00:00.000Z"');
       assert.equal(filter("exercise"), 'exercise.interval.civil_start_time >= "2026-08-28"');
+      assert.equal(filter("daily-resting-heart-rate"), 'daily_resting_heart_rate.date >= "2026-08-28"');
 
       day = await sleepOn("2026-09-24");
       const found = day.sessions.find((item) => item.source.kind === "wearable" && item.source.device === "Google Fitbit Air");
@@ -218,7 +222,7 @@ void test("Google Health sleep and workouts", async (t) => {
 
       // Repeated import: nothing duplicates and no revision moves.
       const again = await sync();
-      assert.deepEqual(again.body, { sleep: { ...unchanged, skipped: 1 }, workouts: { ...unchanged, skipped: 1 } });
+      assert.deepEqual(again.body, sessions({ ...unchanged, skipped: 1 }, { ...unchanged, skipped: 1 }));
       const [rows] = await client`SELECT (SELECT count(*)::int FROM sleep_sessions WHERE source = 'google-health') AS sleep, (SELECT count(*)::int FROM workouts WHERE source = 'google-health') AS workouts`;
       assert.deepEqual({ ...rows }, { sleep: 2, workouts: 2 });
       assert.equal((await sleepOn("2026-09-24")).sessions.find((item) => item.id === imported.id)?.revision, 1);
@@ -229,7 +233,7 @@ void test("Google Health sleep and workouts", async (t) => {
       google.put(fixture("sleep-night-corrected"));
       google.put(fixture("exercise-run-corrected"));
       const corrected = await sync();
-      assert.deepEqual(corrected.body, { sleep: { ...unchanged, updated: 1, skipped: 1 }, workouts: { ...unchanged, updated: 1, skipped: 1 } });
+      assert.deepEqual(corrected.body, sessions({ ...unchanged, updated: 1, skipped: 1 }, { ...unchanged, updated: 1, skipped: 1 }));
       const rerun = (await sportsOn("2026-09-24")).entries.find((entry) => entry.id === importedRun.id);
       assert.deepEqual([rerun?.revision, rerun?.durationMinutes, rerun?.distanceM], [2, 42, 8450]);
       day = await sleepOn("2026-09-24");
@@ -245,7 +249,7 @@ void test("Google Health sleep and workouts", async (t) => {
       google.points.delete(nap.name);
       google.points.delete(weights.name);
       const deleted = await sync();
-      assert.deepEqual(deleted.body, { sleep: { ...unchanged, removed: 1, skipped: 1 }, workouts: { ...unchanged, removed: 1, skipped: 1 } });
+      assert.deepEqual(deleted.body, sessions({ ...unchanged, removed: 1, skipped: 1 }, { ...unchanged, removed: 1, skipped: 1 }));
       assert.deepEqual((await sportsOn("2026-09-24")).entries.map((entry) => entry.id), [importedRun.id]);
       day = await sleepOn("2026-09-24");
       assert.deepEqual(day.sessions.map((item: { source: { kind: string } }) => item.source.kind).sort(), ["manual", "wearable"]);
@@ -276,7 +280,7 @@ void test("Google Health sleep and workouts", async (t) => {
       google.outage = true;
       const outage = await sync();
       assert.equal(outage.status, 502);
-      assert.match(outage.body.error, /Google Health could not return sleep data \(503\)/);
+      assert.match(outage.body.error, /Google Health could not return [a-z ]+ data \(503\)/);
       const afterOutage = await status();
       assert.equal(afterOutage.connection, "connected");
       assert.equal(afterOutage.lastSyncedAt, lastGood);
@@ -292,7 +296,7 @@ void test("Google Health sleep and workouts", async (t) => {
       assert.match(failed.body.error, /Choose Connect to sign in again/);
       const stale = await status();
       assert.equal(stale.connection, "reauthorize");
-      assert.deepEqual(stale.imported, { sleep: 2, workouts: 2 });
+      assert.deepEqual(stale.imported, { sleep: 2, workouts: 2, activity: 0, heartRate: 0 });
       assert.deepEqual(stale.granted, []);
       assert.match(stale.lastError, /expired or was revoked/);
       const [dropped] = await client`SELECT refresh_token, access_token FROM wearable_connections`;
@@ -318,10 +322,10 @@ void test("Google Health sleep and workouts", async (t) => {
       assert.equal(google.requests.filter((request) => request.pathname.endsWith("/exercise/dataPoints")).length, exerciseReads);
       assert.equal((await sportsOn("2026-09-24")).entryCount, 2);
 
-      // Connecting again with both boxes ticked resumes workouts.
-      google.grantedScope = `${sleepScope} ${exerciseScope}`;
+      // Connecting again with every box ticked resumes workouts.
+      google.grantedScope = `${sleepScope} ${exerciseScope} ${healthScope}`;
       assert.equal((await connect()).result, "connected");
-      assert.deepEqual((await status()).granted, ["sleep", "workouts"]);
+      assert.deepEqual((await status()).granted, ["sleep", "workouts", "activity", "heartRate"]);
       assert.equal((await sync()).status, 200);
     });
 
@@ -330,7 +334,7 @@ void test("Google Health sleep and workouts", async (t) => {
       const liveRefresh = google.currentRefreshToken;
       const disconnected = await send("DELETE", base);
       assert.equal(disconnected.status, 200);
-      assert.deepEqual(await disconnected.json(), { revoked: true, removed: { sleep: 2, workouts: 2 } });
+      assert.deepEqual(await disconnected.json(), { revoked: true, removed: { sleep: 2, workouts: 2, activity: 0, heartRate: 0 } });
       assert.ok(google.revoked.includes(liveRefresh ?? ""));
       assert.equal((await status()).connection, "not-connected");
       day = await sleepOn("2026-09-24");

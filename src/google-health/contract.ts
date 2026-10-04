@@ -1,11 +1,17 @@
 import { z } from "zod";
+import type { BpmRange } from "../daily-totals/contract.js";
 import type { ImportKind } from "../wearables/contract.js";
 
-// One read-only scope per kind Nouri imports; every other Google Health scope stays unrequested.
-// Exercise sits under activity and fitness: https://developers.google.com/health/scopes
+const activityAndFitness = "https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly";
+
+// The read-only scope each kind Nouri imports needs; every other Google Health scope stays unrequested.
+// Exercise, steps, and active energy sit under activity and fitness, heart rate under health metrics:
+// https://developers.google.com/health/scopes
 export const scopes = {
   sleep: "https://www.googleapis.com/auth/googlehealth.sleep.readonly",
-  workouts: "https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly",
+  workouts: activityAndFitness,
+  activity: activityAndFitness,
+  heartRate: "https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly",
 } as const satisfies Record<ImportKind, string>;
 
 export const syncWindowDays = 30;
@@ -32,6 +38,15 @@ export const tokenErrorSchema = z.object({ error: z.string() });
 const durationSchema = z.string().regex(/^-?\d+(\.\d+)?s$/);
 
 const timestampSchema = z.iso.datetime({ offset: true });
+
+// int64 fields arrive as strings, so numbers are coerced.
+const numberSchema = z.coerce.number().finite();
+
+const twoDigits = (value: number) => String(value).padStart(2, "0");
+
+// A local date as Google writes it, like { "year": 2026, "month": 9, "day": 24 }, read as "2026-09-24".
+const civilDateSchema = z.object({ year: z.number().int().min(1).max(9999), month: z.number().int().min(1).max(12), day: z.number().int().min(1).max(31) })
+  .transform(({ year, month, day }) => `${String(year).padStart(4, "0")}-${twoDigits(month)}-${twoDigits(day)}`).pipe(z.iso.date());
 
 const deviceSourceSchema = z.object({
   device: z.object({ displayName: z.string().optional(), manufacturer: z.string().optional(), model: z.string().optional() }).optional(),
@@ -60,10 +75,7 @@ export const sleepDataPointSchema = z.object({
 
 export type SleepDataPoint = z.infer<typeof sleepDataPointSchema>;
 
-const numberSchema = z.coerce.number().finite();
-
 // Exercise sessions from https://developers.google.com/health/reference/rest/v4/users.dataTypes.dataPoints.
-// int64 fields arrive as strings, so numbers are coerced.
 export const exerciseDataPointSchema = z.object({
   name: z.string().min(1),
   dataSource: deviceSourceSchema,
@@ -94,3 +106,30 @@ export const dataPageSchema = z.object({
   dataPoints: z.array(z.object({ name: z.string().min(1) }).loose()).default([]),
   nextPageToken: z.string().optional(),
 });
+
+// One resting heart rate per local day, from the daily-resting-heart-rate data type.
+export const restingHeartRatePointSchema = z.object({
+  name: z.string().min(1),
+  dailyRestingHeartRate: z.object({ date: civilDateSchema, beatsPerMinute: numberSchema }),
+});
+
+export type RestingHeartRatePoint = z.infer<typeof restingHeartRatePointSchema>;
+
+// A page from dataPoints:dailyRollUp: one bucket per local day, from
+// https://developers.google.com/health/reference/rest/v4/users.dataTypes.dataPoints/dailyRollUp.
+// Google leaves out the value, or the whole bucket, for a day without data.
+export const rollupPageSchema = z.object({
+  rollupDataPoints: z.array(z.object({ civilStartTime: z.object({ date: civilDateSchema }) }).loose()).default([]),
+  nextPageToken: z.string().optional(),
+});
+
+// The value each rollup carries, or null when the day has none.
+export const stepsRollupSchema = z.object({ steps: z.object({ countSum: numberSchema }).optional() })
+  .transform((bucket) => bucket.steps?.countSum ?? null);
+
+export const activeEnergyRollupSchema = z.object({ activeEnergyBurned: z.object({ kcalSum: numberSchema }).optional() })
+  .transform((bucket) => bucket.activeEnergyBurned?.kcalSum ?? null);
+
+export const heartRateRollupSchema = z.object({
+  heartRate: z.object({ beatsPerMinuteAvg: numberSchema, beatsPerMinuteMin: numberSchema, beatsPerMinuteMax: numberSchema }).optional(),
+}).transform(({ heartRate }): BpmRange | null => heartRate ? { averageBpm: heartRate.beatsPerMinuteAvg, minBpm: heartRate.beatsPerMinuteMin, maxBpm: heartRate.beatsPerMinuteMax } : null);

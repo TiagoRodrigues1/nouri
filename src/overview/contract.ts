@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { activityDaySchema, heartRateDaySchema } from "../daily-totals/contract.js";
 import { measurementSummarySchema } from "../measurements/contract.js";
 import { photoSchema } from "../photos/contract.js";
 import { sleepDaySchema } from "../sleep/contract.js";
@@ -9,6 +10,8 @@ export const overviewSchema = z.object({
   sports: workoutDaySchema,
   measurements: measurementSummarySchema,
   sleep: sleepDaySchema,
+  activity: activityDaySchema,
+  heartRate: heartRateDaySchema,
   // The most recent progress photos taken on or before the date, newest first.
   photos: z.array(photoSchema),
 });

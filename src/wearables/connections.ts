@@ -1,12 +1,14 @@
 import { and, eq, isNotNull, lt } from "drizzle-orm";
 import { wearableConnections, wearableOauthStates } from "../db/schema.js";
 import type { AppDatabase, Transaction } from "../db/database.js";
+import { importKindNames } from "./contract.js";
 import type { CallbackResult, ConnectionStatus, DisconnectResult, ImportCounts, ImportKind, SyncResult, WearableProvider } from "./contract.js";
 import { ProviderFailure, reauthorizeMessage } from "./provider.js";
 import type { CloudProvider, OAuthGrant, SyncWindow, WearableRuntime } from "./provider.js";
 import { applyBatch, countImports, eachKind, removeImports } from "./import-sync.js";
 import { randomToken, sameSecret, sha256Base64url } from "../crypto.js";
 import { vault } from "./token-vault.js";
+import { shiftDate } from "../time.js";
 
 type ConnectionRow = typeof wearableConnections.$inferSelect;
 
@@ -16,6 +18,10 @@ type LiveRow = ConnectionRow & { refreshToken: string };
 type Pulled = { kind: ImportKind; complete: boolean; apply: (tx: Transaction) => Promise<ImportCounts> };
 
 const nothing = { created: 0, updated: 0, removed: 0, skipped: 0 };
+
+const allOf = new Intl.ListFormat("en", { type: "conjunction" });
+
+const utcDate = (instant: Date) => instant.toISOString().slice(0, 10);
 
 export const stateLifetimeMs = 10 * 60_000;
 
@@ -193,9 +199,10 @@ export function connectionFor(db: AppDatabase, runtime: WearableRuntime, provide
 
       const started = runtime.now();
       const since = new Date(started.getTime() - provider.windowDays * 86_400_000);
-      // The workout window starts on the UTC date of the same instant. Any date works, as long as the
-      // provider's filter and the deletion scope below use the same one.
-      const window: SyncWindow = { endedSince: since, startedOnOrAfter: since.toISOString().slice(0, 10) };
+      // The days start on the UTC date of the same instant. Any date works, as long as the provider's filter and
+      // the deletion scope use the same one. They end two days past today's UTC date, so today is in every zone.
+      // Google's own CLI asks for today with an end of tomorrow, so a range ending ahead of now is expected.
+      const window: SyncWindow = { endedSince: since, days: { from: utcDate(since), until: shiftDate(utcDate(started), 2) } };
       const kinds = provider.grantedKinds(row.scope);
       let pulled: Pulled[];
 
@@ -218,8 +225,9 @@ export function connectionFor(db: AppDatabase, runtime: WearableRuntime, provide
         return { outcome: "failed", reason, message: failure.message };
       }
 
-      const partial = pulled.flatMap((pull) => pull.complete ? [] : [pull.kind]);
-      const lastError = partial.length === 0 ? null : `The provider returned more ${partial.join(" and ")} than one sync reads, so no deletions were applied there.`;
+      const partial = pulled.flatMap((pull) => pull.complete ? [] : [importKindNames[pull.kind]]);
+      const lastError = partial.length === 0 ? null : `The provider returned more ${allOf.format(partial)} than one sync reads, so no deletions were applied there.`;
+      const byKind = new Map(pulled.map((pull) => [pull.kind, pull]));
 
       const result = await db.transaction(async (tx): Promise<SyncResult | null> => {
         // Writing the row first locks it, which serializes syncs and stops one racing a disconnect.
@@ -228,7 +236,7 @@ export function connectionFor(db: AppDatabase, runtime: WearableRuntime, provide
         if (!held) return null;
 
         // A kind the grant does not cover reports zeros.
-        return eachKind(async (kind) => pulled.find((pull) => pull.kind === kind)?.apply(tx) ?? nothing);
+        return eachKind(async (kind) => byKind.get(kind)?.apply(tx) ?? nothing);
       });
 
       if (!result) return { outcome: "not-connected" };

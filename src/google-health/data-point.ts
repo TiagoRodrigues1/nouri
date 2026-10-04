@@ -26,3 +26,11 @@ export function deviceName(dataSource: DeviceSource): string | null {
 
   return device?.displayName?.trim() || device?.model?.trim() || device?.manufacturer?.trim() || null;
 }
+
+// Values outside what Nouri stores become unknown rather than rejecting the record.
+export function within(value: number | undefined, min: number, max: number): number | null {
+  if (value === undefined) return null;
+  const rounded = Math.round(value);
+
+  return rounded >= min && rounded <= max ? rounded : null;
+}
