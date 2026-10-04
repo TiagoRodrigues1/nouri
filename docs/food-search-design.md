@@ -119,4 +119,4 @@ Both shapes can have a small caller interface. Live federation lost because each
 
 ## Next implementation step
 
-The Ciqual index, search endpoint, and catalog selection write body are implemented. The next step is to verify catalog writes against PostgreSQL and confirm Portuguese search requirements before adding another source.
+The Ciqual index, search endpoint, and catalog selection write body are implemented. Portuguese queries search Ciqual through a curated glossary while PortFIR stays gated; see [Portuguese food search design](portuguese-search-design.md). The next step is to ask INSA about PortFIR reuse so results can carry Portuguese names.
