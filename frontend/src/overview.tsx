@@ -8,6 +8,7 @@ import { queryStatus } from "./query-status";
 import { SportsSection } from "./overview/sports";
 import { MeasurementsSection } from "./overview/measurements";
 import { SleepSection } from "./overview/sleep";
+import { ActivitySection } from "./overview/activity";
 import { styles } from "./overview-styles";
 import { maxPhotoBytes, maxThumbnailBytes } from "../../src/photos/contract";
 import type { RecordPath } from "./lib/api";
@@ -19,6 +20,7 @@ import { recordPaths } from "../../src/journal/paths";
 // Food, water, and supplements live on Today, so the Overview covers the rest of the day.
 const categories = [
   { id: "sports", name: "Sports" },
+  { id: "activity", name: "Activity" },
   { id: "measurements", name: "Measurements" },
   { id: "sleep", name: "Sleep" },
 ] as const;
@@ -91,6 +93,7 @@ export function Overview() {
 
   const sections: Record<Category, ReactNode> = data ? {
     sports: <SportsSection sports={data.sports} busy={busy} onDelete={remove(recordPaths.workout, "Workout")} />,
+    activity: <ActivitySection activity={data.activity} heartRate={data.heartRate} stepsGoal={targets?.steps} />,
     measurements: (
       <MeasurementsSection
         date={date}
@@ -104,7 +107,7 @@ export function Overview() {
       />
     ),
     sleep: <SleepSection sleep={data.sleep} goalMinutes={targets?.sleepMinutes} busy={busy} onDelete={remove(recordPaths.sleep, "Sleep session")} />,
-  } : { sports: null, measurements: null, sleep: null };
+  } : { sports: null, activity: null, measurements: null, sleep: null };
 
   const status = queryStatus(query, "Loading your overview…");
 

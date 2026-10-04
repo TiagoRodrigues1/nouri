@@ -1,8 +1,8 @@
-import type { CallbackResult, ConnectionStatus, ImportKind, WearableProvider } from "./api";
+import { importKinds, type CallbackResult, type ConnectionStatus, type ImportKind, type WearableProvider } from "./api";
 
 // What the page calls each provider and where its data can be edited. Add an entry with each new provider.
 export const providerDetails: Record<WearableProvider, { name: string; description: string; revokeHelp: string }> = {
-  "google-health": { name: "Google Health", description: "Imports sleep and workouts from Fitbit devices, such as Fitbit Air, through your Google account.", revokeHelp: "Google did not confirm the revocation, so remove Nouri in your Google Account settings too." },
+  "google-health": { name: "Google Health", description: "Imports sleep, workouts, steps, active energy, and heart rate from Fitbit devices, such as Fitbit Air, through your Google account.", revokeHelp: "Google did not confirm the revocation, so remove Nouri in your Google Account settings too." },
 };
 
 // The badge each connection state shows, in the Wearables dialog and on the Overview tiles.
@@ -14,10 +14,10 @@ export const connectionBadges: Record<ConnectionStatus["connection"], { label: s
 };
 
 export const callbackMessages: Record<CallbackResult, string> = {
-  connected: "Connected. Importing your sleep and workouts…",
+  connected: "Connected. Importing your sleep, workouts, steps, active energy, and heart rate…",
   denied: "Access was not granted, so nothing was connected.",
   "expired-link": "That sign-in link expired or was opened in another browser. Choose Connect again.",
-  "missing-scope": "Nouri needs permission to read sleep or exercise. Choose Connect again and allow at least one.",
+  "missing-scope": "Nouri needs permission to read sleep, activity, or health metrics. Choose Connect again and allow at least one.",
   "token-failed": "Sign-in did not finish. Choose Connect to try again.",
 };
 
@@ -25,6 +25,8 @@ export const callbackMessages: Record<CallbackResult, string> = {
 export const importNouns: Record<ImportKind, [string, string]> = {
   sleep: ["sleep session", "sleep sessions"],
   workouts: ["workout", "workouts"],
+  activity: ["day of activity", "days of activity"],
+  heartRate: ["day of heart rate", "days of heart rate"],
 };
 
 export function noun(kind: ImportKind, count: number): string {
@@ -35,6 +37,17 @@ export function noun(kind: ImportKind, count: number): string {
 
 export function countOf(kind: ImportKind, count: number): string {
   return `${count} ${noun(kind, count)}`;
+}
+
+const listAnd = new Intl.ListFormat(undefined, { type: "conjunction" });
+
+export const listOr = new Intl.ListFormat(undefined, { type: "disjunction" });
+
+// "2 sleep sessions and 1 workout". Kinds with no records are left out, and an empty list reads "nothing".
+export function listCounts(counts: Record<ImportKind, number>): string {
+  const parts = importKinds.flatMap((kind) => counts[kind] > 0 ? [countOf(kind, counts[kind])] : []);
+
+  return parts.length ? listAnd.format(parts) : "nothing";
 }
 
 const when = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });

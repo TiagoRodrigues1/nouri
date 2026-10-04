@@ -1,3 +1,4 @@
+import type { BpmRange } from "../daily-totals/contract.js";
 import type { Stages } from "../sleep/contract.js";
 import type { Activity } from "../workouts/contract.js";
 import type { ImportKind, WearableProvider } from "./contract.js";
@@ -6,25 +7,29 @@ export type OAuthGrant = { accessToken: string; refreshToken: string | null; exp
 
 // What every imported record carries, whatever its kind.
 type ImportedRecord = {
-  // The provider's stable ID, such as a Google Health data point name or a HealthKit sample UUID.
-  externalId: string;
   // Changes whenever anything Nouri stores changes, so a correction without a new revision still lands.
   fingerprint: string;
+  localDate: string;
+};
+
+// A session the provider names, such as a night or a workout.
+type SessionRecord = ImportedRecord & {
+  // The provider's stable ID, such as a Google Health data point name or a HealthKit sample UUID.
+  externalId: string;
   // An IANA zone when the provider knows it, otherwise a fixed offset like "-04:00".
   timeZone: string;
-  localDate: string;
   device: string | null;
 };
 
 // One sleep session as a provider reports it, already normalized to Nouri's units.
-export type SleepRecord = ImportedRecord & {
+export type SleepRecord = SessionRecord & {
   startedAt: Date;
   endedAt: Date;
   stages: Stages | null;
 };
 
 // One workout as a provider reports it. It belongs to the local date it started on.
-export type WorkoutRecord = ImportedRecord & {
+export type WorkoutRecord = SessionRecord & {
   occurredAt: Date;
   activity: Activity;
   // The provider's own name for the session, such as "Morning Trail Run" or "Yoga".
@@ -34,14 +39,29 @@ export type WorkoutRecord = ImportedRecord & {
   energyKcal: number | null;
 };
 
-export type ImportRecords = { sleep: SleepRecord; workouts: WorkoutRecord };
+// A local day's steps and active energy. Daily totals carry no ID of their own; the date is their identity.
+export type ActivityRecord = ImportedRecord & {
+  steps: number | null;
+  activeKcal: number | null;
+};
+
+// A local day's resting heart rate and the range over the day, in beats per minute.
+export type HeartRateRecord = ImportedRecord & {
+  restingBpm: number | null;
+  range: BpmRange | null;
+};
+
+export type ImportRecords = { sleep: SleepRecord; workouts: WorkoutRecord; activity: ActivityRecord; heartRate: HeartRateRecord };
 
 // A complete pull reports every record in the window, so absence means deletion.
 export type Pull<R> = { records: R[]; complete: boolean; skipped: number };
 
-// The history each sync re-reads. Sleep is read by when it ended; workouts by the local date they started,
-// because Google only filters exercise by civil start time.
-export type SyncWindow = { endedSince: Date; startedOnOrAfter: string };
+// Local dates from `from` up to, not including, `until`.
+export type DayRange = { from: string; until: string };
+
+// The history each sync re-reads. Sleep is read by when it ended. Workouts are read by the local date they
+// started, because Google only filters exercise by civil start time, and daily totals by their local date.
+export type SyncWindow = { endedSince: Date; days: DayRange };
 
 export function oauthCallbackPath(provider: string): string {
   return `/oauth/${provider}/callback`;

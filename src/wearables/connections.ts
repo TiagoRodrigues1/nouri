@@ -1,21 +1,27 @@
 import { and, eq, isNotNull, lt } from "drizzle-orm";
 import { wearableConnections, wearableOauthStates } from "../db/schema.js";
-import type { AppDatabase } from "../db/database.js";
-import { importKinds } from "./contract.js";
-import type { CallbackResult, ConnectionStatus, DisconnectResult, ImportKind, SyncResult, WearableProvider } from "./contract.js";
+import type { AppDatabase, Transaction } from "../db/database.js";
+import { importKindNames } from "./contract.js";
+import type { CallbackResult, ConnectionStatus, DisconnectResult, ImportCounts, ImportKind, SyncResult, WearableProvider } from "./contract.js";
 import { ProviderFailure, reauthorizeMessage } from "./provider.js";
-import type { CloudProvider, ImportRecords, OAuthGrant, Pull, SyncWindow, WearableRuntime } from "./provider.js";
-import { applyBatch, countImports, removeImports } from "./import-sync.js";
+import type { CloudProvider, OAuthGrant, SyncWindow, WearableRuntime } from "./provider.js";
+import { applyBatch, countImports, eachKind, removeImports } from "./import-sync.js";
 import { randomToken, sameSecret, sha256Base64url } from "../crypto.js";
 import { vault } from "./token-vault.js";
+import { shiftDate } from "../time.js";
 
 type ConnectionRow = typeof wearableConnections.$inferSelect;
 
 type LiveRow = ConnectionRow & { refreshToken: string };
 
-type Pulls = { [K in ImportKind]?: Pull<ImportRecords[K]> };
+// One kind's records, read and waiting for the sync's transaction.
+type Pulled = { kind: ImportKind; complete: boolean; apply: (tx: Transaction) => Promise<ImportCounts> };
 
 const nothing = { created: 0, updated: 0, removed: 0, skipped: 0 };
+
+const allOf = new Intl.ListFormat("en", { type: "conjunction" });
+
+const utcDate = (instant: Date) => instant.toISOString().slice(0, 10);
 
 export const stateLifetimeMs = 10 * 60_000;
 
@@ -64,6 +70,7 @@ export function connectionFor(db: AppDatabase, runtime: WearableRuntime, provide
   const tokens = vault(runtime.tokenKey, provider.id, userId);
   const key = connectionKey(userId, provider.id);
   const pendingStates = and(eq(wearableOauthStates.userId, userId), eq(wearableOauthStates.provider, provider.id));
+  const owner = { userId, provider: provider.id };
 
   const stored = async (): Promise<ConnectionRow | null> => (await db.select().from(wearableConnections).where(key))[0] ?? null;
 
@@ -93,18 +100,16 @@ export function connectionFor(db: AppDatabase, runtime: WearableRuntime, provide
     return { accessToken: grant.accessToken, refreshToken: grant.refreshToken ?? refreshToken };
   }
 
-  // Reads every kind the grant covers with one access token, so a sync applies all of them or none.
-  async function pullAll(accessToken: string, kinds: ImportKind[], window: SyncWindow): Promise<Pulls> {
-    const pulls: Pulls = {};
+  async function pullKind<K extends ImportKind>(accessToken: string, kind: K, window: SyncWindow): Promise<Pulled> {
+    const batch = await provider.pull[kind](accessToken, window);
 
-    if (kinds.includes("sleep")) pulls.sleep = await provider.pull.sleep(accessToken, window);
-
-    if (kinds.includes("workouts")) pulls.workouts = await provider.pull.workouts(accessToken, window);
-
-    return pulls;
+    return { kind, complete: batch.complete, apply: (tx) => applyBatch(tx, kind, owner, window, batch) };
   }
 
-  async function pullWithRetry(row: LiveRow, kinds: ImportKind[], window: SyncWindow): Promise<Pulls> {
+  // Reads every kind the grant covers with one access token, so a sync applies all of them or none.
+  const pullAll = (accessToken: string, kinds: ImportKind[], window: SyncWindow) => Promise.all(kinds.map((kind) => pullKind(accessToken, kind, window)));
+
+  async function pullWithRetry(row: LiveRow, kinds: ImportKind[], window: SyncWindow): Promise<Pulled[]> {
     let refreshToken = tokens.open("refresh-token", row.refreshToken);
     let accessToken = cachedToken(row);
 
@@ -194,14 +199,15 @@ export function connectionFor(db: AppDatabase, runtime: WearableRuntime, provide
 
       const started = runtime.now();
       const since = new Date(started.getTime() - provider.windowDays * 86_400_000);
-      // The workout window starts on the UTC date of the same instant. Any date works, as long as the
-      // provider's filter and the deletion scope below use the same one.
-      const window: SyncWindow = { endedSince: since, startedOnOrAfter: since.toISOString().slice(0, 10) };
+      // The days start on the UTC date of the same instant. Any date works, as long as the provider's filter and
+      // the deletion scope use the same one. They end two days past today's UTC date, so today is in every zone.
+      // Google's own CLI asks for today with an end of tomorrow, so a range ending ahead of now is expected.
+      const window: SyncWindow = { endedSince: since, days: { from: utcDate(since), until: shiftDate(utcDate(started), 2) } };
       const kinds = provider.grantedKinds(row.scope);
-      let pulls: Pulls;
+      let pulled: Pulled[];
 
       try {
-        pulls = await pullWithRetry(row, kinds, window);
+        pulled = await pullWithRetry(row, kinds, window);
       } catch (failure) {
         if (!(failure instanceof ProviderFailure)) throw failure;
 
@@ -219,9 +225,9 @@ export function connectionFor(db: AppDatabase, runtime: WearableRuntime, provide
         return { outcome: "failed", reason, message: failure.message };
       }
 
-      const partial = importKinds.filter((kind) => pulls[kind]?.complete === false);
-      const lastError = partial.length === 0 ? null : `The provider returned more ${partial.join(" and ")} than one sync reads, so no deletions were applied there.`;
-      const owner = { userId, provider: provider.id };
+      const partial = pulled.flatMap((pull) => pull.complete ? [] : [importKindNames[pull.kind]]);
+      const lastError = partial.length === 0 ? null : `The provider returned more ${allOf.format(partial)} than one sync reads, so no deletions were applied there.`;
+      const byKind = new Map(pulled.map((pull) => [pull.kind, pull]));
 
       const result = await db.transaction(async (tx): Promise<SyncResult | null> => {
         // Writing the row first locks it, which serializes syncs and stops one racing a disconnect.
@@ -229,10 +235,8 @@ export function connectionFor(db: AppDatabase, runtime: WearableRuntime, provide
 
         if (!held) return null;
 
-        return {
-          sleep: pulls.sleep ? await applyBatch(tx, "sleep", owner, window, pulls.sleep) : nothing,
-          workouts: pulls.workouts ? await applyBatch(tx, "workouts", owner, window, pulls.workouts) : nothing,
-        };
+        // A kind the grant does not cover reports zeros.
+        return eachKind(async (kind) => byKind.get(kind)?.apply(tx) ?? nothing);
       });
 
       if (!result) return { outcome: "not-connected" };
@@ -250,7 +254,7 @@ export function connectionFor(db: AppDatabase, runtime: WearableRuntime, provide
         await tx.delete(wearableConnections).where(key);
         await tx.delete(wearableOauthStates).where(pendingStates);
 
-        return removeImports(tx, { userId, provider: provider.id });
+        return removeImports(tx, owner);
       });
 
       return { revoked, removed };

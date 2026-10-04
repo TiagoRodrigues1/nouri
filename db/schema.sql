@@ -168,6 +168,35 @@ CREATE TABLE sleep_sessions (
 CREATE INDEX sleep_sessions_user_day_active_idx ON sleep_sessions (user_id, local_date) WHERE deleted_at IS NULL;
 CREATE UNIQUE INDEX sleep_sessions_user_source_idx ON sleep_sessions (user_id, source, source_id) WHERE source_id IS NOT NULL;
 
+-- A local day's totals from a wearable, one row per provider. A day without data has no row, so it never reads as zero.
+-- The provider owns these rows and each sync rewrites them, so they have no revision and are removed outright.
+CREATE TABLE daily_activity (
+  user_id uuid NOT NULL,
+  local_date date NOT NULL,
+  source text NOT NULL CHECK (source IN ('google-health')),
+  steps integer CHECK (steps BETWEEN 0 AND 200000),
+  active_kcal integer CHECK (active_kcal BETWEEN 0 AND 20000),
+  source_fingerprint text NOT NULL,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, local_date, source),
+  CHECK (num_nonnulls(steps, active_kcal) > 0)
+);
+
+CREATE TABLE daily_heart_rate (
+  user_id uuid NOT NULL,
+  local_date date NOT NULL,
+  source text NOT NULL CHECK (source IN ('google-health')),
+  resting_bpm integer CHECK (resting_bpm BETWEEN 20 AND 250),
+  average_bpm integer CHECK (average_bpm BETWEEN 20 AND 250),
+  min_bpm integer CHECK (min_bpm BETWEEN 20 AND 250),
+  max_bpm integer CHECK (max_bpm BETWEEN 20 AND 250),
+  source_fingerprint text NOT NULL,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, local_date, source),
+  CHECK (num_nonnulls(resting_bpm, average_bpm, min_bpm, max_bpm) > 0),
+  CHECK (num_nulls(average_bpm, min_bpm, max_bpm) IN (0, 3))
+);
+
 CREATE TABLE progress_photos (
   id uuid PRIMARY KEY,
   user_id uuid NOT NULL,

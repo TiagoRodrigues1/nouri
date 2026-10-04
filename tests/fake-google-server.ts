@@ -23,6 +23,13 @@ const google = new FakeGoogle(redirectUri);
 
 for (const name of ["sleep-night", "sleep-nap", "sleep-too-long", "exercise-run", "exercise-weights", "exercise-too-short"]) google.put(fixture(name));
 
+// Daily totals for the fixtures' days, with one day of only a resting heart rate.
+google.days = new Map([
+  ["2026-09-24", { steps: 9037, activeKcal: 412.6, heartRate: { average: 72, min: 48, max: 161 }, restingBpm: 58 }],
+  ["2026-09-25", { steps: 4120, activeKcal: 186, heartRate: { average: 68, min: 51, max: 122 }, restingBpm: 59 }],
+  ["2026-09-26", { restingBpm: 60 }],
+]);
+
 const wearables = wearablesFromEnv({ GOOGLE_HEALTH_CLIENT_ID: googleConfig.clientId, GOOGLE_HEALTH_CLIENT_SECRET: googleConfig.clientSecret, GOOGLE_HEALTH_REDIRECT_URI: redirectUri, WEARABLE_TOKEN_KEY: Buffer.alloc(32, 9).toString("hex") }, google.fetch);
 
 serve({ fetch: createApp(drizzle(postgres(settings.DATABASE_URL)), identityFromEnv(process.env), openFoodFacts(new FakeOpenFoodFacts().fetch), wearables).fetch, port: settings.PORT, hostname: "127.0.0.1" });

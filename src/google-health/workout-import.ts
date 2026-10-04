@@ -3,7 +3,7 @@ import type { WorkoutRecord } from "../wearables/provider.js";
 import { localDate } from "../time.js";
 import type { ExerciseDataPoint } from "./contract.js";
 import { sha256Base64url } from "../crypto.js";
-import { deviceName, durationSeconds, offsetZone } from "./data-point.js";
+import { deviceName, durationSeconds, offsetZone, within } from "./data-point.js";
 
 // Google names well over a hundred exercise types; Nouri keeps six. The session's own name keeps the detail.
 const activityGroups: [Activity, string[]][] = [
@@ -15,14 +15,6 @@ const activityGroups: [Activity, string[]][] = [
 ];
 
 const activityByType = new Map(activityGroups.flatMap(([activity, types]) => types.map((type) => [type, activity] as const)));
-
-// Values outside what a Nouri workout stores become unknown rather than rejecting the session.
-function within(value: number | undefined, min: number, max: number): number | null {
-  if (value === undefined) return null;
-  const rounded = Math.round(value);
-
-  return rounded >= min && rounded <= max ? rounded : null;
-}
 
 // Null when the point cannot be a Nouri workout: it must last between 1 minute and 24 hours.
 export function workoutRecord(point: ExerciseDataPoint): WorkoutRecord | null {

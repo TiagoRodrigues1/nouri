@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 // Every source Nouri imports from. Apple Health and Health Connect join this list with their adapters,
-// together with the sleep_sessions.source and workouts.source checks in db/schema.sql.
+// together with the source checks on sleep_sessions, workouts, daily_activity, and daily_heart_rate in db/schema.sql.
 export const wearableProviders = ["google-health"] as const;
 
 export type WearableProvider = (typeof wearableProviders)[number];
@@ -17,14 +17,24 @@ export const recordSourceSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("wearable"), provider: wearableProviderSchema, device: z.string().nullable() }),
 ]);
 
-// What a provider can import. Each kind has its own scope, so a grant may cover only some of them.
-export const importKinds = ["sleep", "workouts"] as const;
+// What a provider can import. Each kind needs a scope, so a grant may cover only some of them.
+// Sleep and workouts are sessions; activity (steps and active energy) and heart rate are totals per local day.
+export const importKinds = ["sleep", "workouts", "activity", "heartRate"] as const;
 
 export type ImportKind = (typeof importKinds)[number];
 
 export const importKindSchema = z.enum(importKinds);
 
-const perKind = <T extends z.ZodType>(schema: T) => z.object({ sleep: schema, workouts: schema });
+// What each kind covers, in messages to the person.
+export const importKindNames: Record<ImportKind, string> = {
+  sleep: "sleep",
+  workouts: "workouts",
+  activity: "steps and active energy",
+  heartRate: "heart rate",
+};
+
+// The compiler checks the keys against importKinds, so a new kind cannot be left out of the API.
+const perKind = <T extends z.ZodType>(schema: T) => z.object({ sleep: schema, workouts: schema, activity: schema, heartRate: schema } satisfies Record<ImportKind, T>);
 
 export const connectionStates = ["not-configured", "not-connected", "connected", "reauthorize"] as const;
 
@@ -45,7 +55,7 @@ export const importCountsSchema = z.object({
   created: z.number().int(),
   updated: z.number().int(),
   removed: z.number().int(),
-  // Records that could not become a Nouri entry, such as sleep longer than 24 hours.
+  // Records that could not become a Nouri entry, such as sleep longer than 24 hours. Daily kinds count days.
   skipped: z.number().int(),
 });
 

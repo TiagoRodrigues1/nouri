@@ -75,7 +75,7 @@ void test("overview combines sports, measurements, sleep, and photos", async () 
 
     const empty = await overview("2026-09-24");
     // Food, water, and supplements come from the day, so the overview does not read them again.
-    assert.deepEqual(Object.keys(empty).sort(), ["date", "measurements", "photos", "sleep", "sports"]);
+    assert.deepEqual(Object.keys(empty).sort(), ["activity", "date", "heartRate", "measurements", "photos", "sleep", "sports"]);
     assert.deepEqual(empty.sports, { entries: [], entryCount: 0, totalMinutes: null, energyKcal: null });
     assert.deepEqual(await (await app.request("/v1/workouts/summary/2026-09-24", { headers: auth })).json(), { entryCount: 0, totalMinutes: null, burnedKcal: null });
     assert.equal((await app.request("/v1/workouts/summary/invalid", { headers: auth })).status, 400);
