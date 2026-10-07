@@ -22,6 +22,7 @@ import type { WearableRuntime } from "./wearables/provider.js";
 import { clerkFrontendOrigin, userFor, type Identity } from "./identity/identity.js";
 import { recordPaths } from "./journal/paths.js";
 import { mutateRecord } from "./journal/records.js";
+import { mcpRoutes } from "./mcp/routes.js";
 import type { RecordKind } from "./journal/records.js";
 import { measurementInputSchema } from "./measurements/contract.js";
 import { measurementRecords } from "./measurements/measurements.js";
@@ -76,7 +77,7 @@ function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (character) => `&#${character.charCodeAt(0)};`);
 }
 
-export function createApp(db: AppDatabase, identity: Identity, packagedFoods: PackagedFoods, wearables?: WearableRuntime) {
+export function createApp(db: AppDatabase, identity: Identity, packagedFoods: PackagedFoods, wearables?: WearableRuntime, publicUrl?: string) {
   const app = new OpenAPIHono<{ Variables: { userId: string; idempotencyKey: string } }>();
 
   // Clerk loads its scripts from the instance's Frontend API, shows avatars from img.clerk.com, and runs bot protection in a Cloudflare frame.
@@ -140,6 +141,9 @@ export function createApp(db: AppDatabase, identity: Identity, packagedFoods: Pa
     // Vite names each asset after its content, so a name always means the same bytes and browsers can keep them.
     return new Response(body, { headers: { ...pageHeaders, "Cache-Control": "public, max-age=31536000, immutable", "Content-Type": contentType } });
   });
+
+  // Outside /v1, so Clerk OAuth access tokens are checked instead of session tokens and no Idempotency-Key is asked for.
+  app.route("/", mcpRoutes(db, identity, publicUrl));
 
   const keyParameter = z.string().min(1).max(200);
   const mutationHeaders = z.object({ "Idempotency-Key": keyParameter });

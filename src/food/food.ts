@@ -7,7 +7,7 @@ import { foodEntries } from "../db/schema.js";
 import { localDate } from "../time.js";
 import { resolveFood } from "./catalog.js";
 import { entrySchema, manualFood, scaledFood } from "./contract.js";
-import type { CatalogFoodInput, FoodEntry, FoodInput, FoodSubmission, RecentFoods, RecordedFood, RepeatInput } from "./contract.js";
+import type { CatalogFoodInput, CatalogSelection, FoodEntry, FoodInput, FoodSubmission, RecentFoods, RecordedFood, RepeatInput } from "./contract.js";
 
 export type FoodCommand =
   | { kind: "create"; input: FoodSubmission }
@@ -110,6 +110,28 @@ export async function insertFoods(tx: Transaction, userId: string, when: Pick<Re
 
     return created;
   });
+}
+
+// A food to log: as recorded, or a catalog food at an amount in grams.
+export type FoodItem = RecordedFood | { ref: CatalogSelection; grams: number };
+
+// Logs several foods at one time in one transaction, so an unknown catalog food logs none of them.
+export async function logFoods(db: AppDatabase, userId: string, when: Pick<RepeatInput, "occurredAt" | "timeZone">, items: FoodItem[]): Promise<{ outcome: "created"; entries: FoodEntry[] } | { outcome: "catalog-missing" }> {
+  const foods: RecordedFood[] = [];
+
+  for (const item of items) {
+    if (!("ref" in item)) {
+      foods.push(item);
+      continue;
+    }
+
+    const resolved = resolveFood(item.ref, item.grams, when.occurredAt, when.timeZone);
+
+    if (!resolved) return { outcome: "catalog-missing" };
+    foods.push({ ...resolved.food, catalogRef: resolved.food.catalogRef ?? null });
+  }
+
+  return { outcome: "created", entries: await db.transaction((tx) => insertFoods(tx, userId, when, foods)) };
 }
 
 // The person's current foods among these entries, by entry id. Deleted and unknown ids are absent.
