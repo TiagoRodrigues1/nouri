@@ -8,10 +8,9 @@ import { dashboardSchema } from "./dashboard/contract.js";
 import { getDashboard, saveDashboard } from "./dashboard/dashboard.js";
 import { daySchema } from "./days/contract.js";
 import { getDay } from "./days/days.js";
-import { barcodeLookupSchema, entrySchema, isBarcode, recentFoodsSchema, repeatInputSchema, searchResultSchema, submissionSchema } from "./food/contract.js";
-import { searchFoods } from "./food/catalog.js";
-import { getRecentFoods, mutateFood } from "./food/food.js";
 import type { PackagedFoods } from "./food/packaged.js";
+import { foodRoutes } from "./food/routes.js";
+import { idempotencyKeySchema, mutationResponse, revisionHeader } from "./journal/http.js";
 import type { AppDatabase } from "./db/database.js";
 import { getDated, saveDated, type DatedKind, type DatedTable } from "./effective-dated.js";
 import { mealEditSchema, mealInputSchema, mealLogInputSchema, mealLogSchema, savedMealListSchema, savedMealSchema } from "./meals/contract.js";
@@ -22,6 +21,7 @@ import type { WearableRuntime } from "./wearables/provider.js";
 import { clerkFrontendOrigin, userFor, type Identity } from "./identity/identity.js";
 import { recordPaths } from "./journal/paths.js";
 import { mutateRecord } from "./journal/records.js";
+import { mcpRoutes } from "./mcp/routes.js";
 import type { RecordKind } from "./journal/records.js";
 import { measurementInputSchema } from "./measurements/contract.js";
 import { measurementRecords } from "./measurements/measurements.js";
@@ -42,41 +42,11 @@ import { waterRecords } from "./water/water.js";
 import { exerciseHistoryListSchema, workoutInputSchema, workoutSummarySchema } from "./workouts/contract.js";
 import { getExerciseHistory, getWorkoutSummary, workoutRecords } from "./workouts/workouts.js";
 
-type MutationResult<Entry> =
-  | { outcome: "created" | "updated"; entry: Entry }
-  | { outcome: "deleted" | "missing" | "stale" | "key-reuse" | "catalog-missing" | "invalid-item" | "invalid-amount" }
-  | { outcome: "unknown-reference"; message: string };
-
-// Every write answers the same way; routes differ only in what a missing record is called.
-function mutationResponse<Entry>(result: MutationResult<Entry>, missing: string): Response {
-  switch (result.outcome) {
-    case "created":
-    case "updated":
-      return new Response(JSON.stringify(result.entry), { status: result.outcome === "created" ? 201 : 200, headers: { "Content-Type": "application/json" } });
-    case "deleted":
-      return new Response(null, { status: 204 });
-    case "missing":
-      return error(404, missing);
-    case "catalog-missing":
-      return error(404, "Catalog food not found");
-    case "unknown-reference":
-      return error(404, result.message);
-    case "invalid-item":
-      return error(400, "Invalid saved meal item");
-    case "invalid-amount":
-      return error(400, "Amount out of range");
-    case "stale":
-      return error(409, "Revision conflict");
-    case "key-reuse":
-      return error(409, "Idempotency key reused for another request");
-  }
-}
-
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (character) => `&#${character.charCodeAt(0)};`);
 }
 
-export function createApp(db: AppDatabase, identity: Identity, packagedFoods: PackagedFoods, wearables?: WearableRuntime) {
+export function createApp(db: AppDatabase, identity: Identity, packagedFoods: PackagedFoods, wearables?: WearableRuntime, publicUrl?: string) {
   const app = new OpenAPIHono<{ Variables: { userId: string; idempotencyKey: string } }>();
 
   // Clerk loads its scripts from the instance's Frontend API, shows avatars from img.clerk.com, and runs bot protection in a Cloudflare frame.
@@ -141,7 +111,10 @@ export function createApp(db: AppDatabase, identity: Identity, packagedFoods: Pa
     return new Response(body, { headers: { ...pageHeaders, "Cache-Control": "public, max-age=31536000, immutable", "Content-Type": contentType } });
   });
 
-  const keyParameter = z.string().min(1).max(200);
+  // Outside /v1, so Clerk OAuth access tokens are checked instead of session tokens and no Idempotency-Key is asked for.
+  app.route("/", mcpRoutes(db, identity, publicUrl));
+
+  const keyParameter = idempotencyKeySchema;
   const mutationHeaders = z.object({ "Idempotency-Key": keyParameter });
   const editHeaders = z.object({ "Idempotency-Key": keyParameter, "If-Match": z.string() });
   const json = (schema: z.ZodType) => ({ content: { "application/json": { schema } } });
@@ -171,89 +144,16 @@ export function createApp(db: AppDatabase, identity: Identity, packagedFoods: Pa
   app.use("/v1/*", async (context, next) => {
     // Connecting, syncing, and disconnecting are safe to repeat, so integrations take no Idempotency-Key.
     if (!["POST", "PATCH", "DELETE"].includes(context.req.method) || context.req.path.startsWith("/v1/integrations/")) return next();
-    const key = context.req.header("Idempotency-Key");
+    const key = idempotencyKeySchema.safeParse(context.req.header("Idempotency-Key"));
 
-    if (!key || key.length > 200) return error(400, "Idempotency-Key required");
-    context.set("idempotencyKey", key);
+    if (!key.success) return error(400, "Idempotency-Key required");
+    context.set("idempotencyKey", key.data);
     await next();
   });
 
   app.route("/", integrationRoutes(db, wearables));
 
-  app.post("/v1/food-entries", async (context) => {
-    const key = context.get("idempotencyKey");
-
-    const input = submissionSchema.safeParse(await context.req.json().catch(() => null));
-
-    if (!input.success) return error(400, "Invalid food entry");
-
-    return mutationResponse(await mutateFood(db, context.get("userId"), key, { kind: "create", input: input.data }), "Food entry not found");
-  });
-  app.openAPIRegistry.registerPath({ method: "post", path: "/v1/food-entries", request: { headers: mutationHeaders, body: json(submissionSchema) }, responses: { 201: { description: "Created food entry", ...json(entrySchema) }, 400: failure("Invalid request"), 404: failure("Catalog food not found"), 409: failure("Idempotency conflict") } });
-
-  app.post("/v1/food-entries/:id/repeats", async (context) => {
-    const key = context.get("idempotencyKey");
-    const id = z.uuid().safeParse(context.req.param("id"));
-    const input = repeatInputSchema.safeParse(await context.req.json().catch(() => null));
-
-    if (!id.success || !input.success) return error(400, "Invalid food repeat");
-
-    return mutationResponse(await mutateFood(db, context.get("userId"), key, { kind: "repeat", sourceId: id.data, input: input.data }), "Food entry not found");
-  });
-  app.openAPIRegistry.registerPath({ method: "post", path: "/v1/food-entries/{id}/repeats", request: { params: z.object({ id: z.uuid() }), headers: mutationHeaders, body: json(repeatInputSchema) }, responses: { 201: { description: "A new entry copying the saved food, amount and nutrients, scaled to the amount when one is given", ...json(entrySchema) }, 400: failure("Invalid request or amount out of range"), 404: failure("Entry not found"), 409: failure("Idempotency conflict") } });
-
-  app.get("/v1/foods/recent", async (context) => context.json(await getRecentFoods(db, context.get("userId"))));
-  app.openAPIRegistry.registerPath({ method: "get", path: "/v1/foods/recent", responses: { 200: { description: "Up to 20 distinct foods from the latest entries, most recently eaten first, each with the entry to log again", ...json(recentFoodsSchema) } } });
-
-  app.get("/v1/foods/search", (context) => {
-    const query = z.string().trim().min(2).max(80).safeParse(context.req.query("q"));
-    const locale = z.string().min(2).max(35).regex(/^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/).safeParse(context.req.query("locale") ?? "pt-PT");
-
-    if (!query.success || !locale.success) return error(400, "Invalid food search");
-
-    return context.json(searchFoods(query.data, locale.data));
-  });
-  app.openAPIRegistry.registerPath({ method: "get", path: "/v1/foods/search", request: { query: z.object({ q: z.string().min(2).max(80), locale: z.string().optional() }) }, responses: { 200: { description: "Ciqual food matches and attribution", ...json(searchResultSchema) }, 400: failure("Invalid query") } });
-
-  app.get("/v1/foods/barcodes/:code", async (context) => {
-    const code = context.req.param("code");
-
-    if (!isBarcode(code)) return error(400, "Invalid barcode");
-    const found = await packagedFoods.lookup(code);
-
-    switch (found.outcome) {
-      case "found":
-        return context.json(found.result);
-      case "not-found":
-        return error(404, "No product found for this barcode");
-      case "unavailable":
-        return error(502, "Open Food Facts is not answering. Try again, or add the food manually.");
-    }
-  });
-  app.openAPIRegistry.registerPath({ method: "get", path: "/v1/foods/barcodes/{code}", request: { params: z.object({ code: z.string().regex(/^(?:\d{8}|\d{12,14})$/) }) }, responses: { 200: { description: "The Open Food Facts product with this barcode: its nutrition per 100 g or 100 ml as a food to scale and log, its serving size, and attribution", ...json(barcodeLookupSchema) }, 400: failure("Not an EAN-8, UPC-A, EAN-13, or GTIN-14 with a valid check digit"), 404: failure("No product with this barcode"), 502: failure("Open Food Facts did not answer") } });
-
-  app.patch("/v1/food-entries/:id", async (context) => {
-    const key = context.get("idempotencyKey");
-    const id = z.uuid().safeParse(context.req.param("id"));
-    const revision = revisionHeader(context.req.header("If-Match"));
-    const input = submissionSchema.safeParse(await context.req.json().catch(() => null));
-
-    if (!id.success || revision === null || !input.success) return error(400, "Invalid food edit");
-
-    return mutationResponse(await mutateFood(db, context.get("userId"), key, { kind: "edit", id: id.data, revision, input: input.data }), "Food entry not found");
-  });
-  app.openAPIRegistry.registerPath({ method: "patch", path: "/v1/food-entries/{id}", request: { params: z.object({ id: z.uuid() }), headers: editHeaders, body: json(submissionSchema) }, responses: { 200: { description: "Updated food entry", ...json(entrySchema) }, 404: failure("Entry or catalog food not found"), 409: failure("Revision or idempotency conflict") } });
-
-  app.delete("/v1/food-entries/:id", async (context) => {
-    const key = context.get("idempotencyKey");
-    const id = z.uuid().safeParse(context.req.param("id"));
-    const revision = revisionHeader(context.req.header("If-Match"));
-
-    if (!id.success || revision === null) return error(400, "Invalid food deletion");
-
-    return mutationResponse(await mutateFood(db, context.get("userId"), key, { kind: "delete", id: id.data, revision }), "Food entry not found");
-  });
-  app.openAPIRegistry.registerPath({ method: "delete", path: "/v1/food-entries/{id}", request: { params: z.object({ id: z.uuid() }), headers: editHeaders }, responses: { 204: { description: "Deleted food entry" }, 404: failure("Entry not found"), 409: failure("Revision or idempotency conflict") } });
+  app.route("/", foodRoutes(db, packagedFoods));
 
   app.get("/v1/saved-meals", async (context) => context.json(await listMeals(db, context.get("userId"))));
   app.openAPIRegistry.registerPath({ method: "get", path: "/v1/saved-meals", responses: { 200: { description: "Saved meals, newest first", ...json(savedMealListSchema) } } });
@@ -477,11 +377,4 @@ export function createApp(db: AppDatabase, identity: Identity, packagedFoods: Pa
   app.doc31("/openapi.json", { openapi: "3.1.0", info: { title: "Nouri API", version: "1.0.0" } });
 
   return app;
-}
-
-function revisionHeader(value: string | undefined): number | null {
-  if (!value || !/^"[1-9][0-9]*"$/.test(value)) return null;
-  const number = Number(value.slice(1, -1));
-
-  return Number.isSafeInteger(number) ? number : null;
 }

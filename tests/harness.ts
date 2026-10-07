@@ -20,11 +20,13 @@ export function createHarness(wearables?: WearableRuntime) {
   const userId = "11111111-1111-4111-8111-111111111111";
   const otherUserId = "22222222-2222-4222-8222-222222222222";
   const token = "test-session-token";
+  const agentToken = "test-oauth-token";
   const db = drizzle(client);
 
-  // Stands in for Clerk: the test token signs in as whichever Clerk user the app was built for.
+  // Stands in for Clerk: the test tokens sign in as whichever Clerk user the app was built for.
   const identity = (clerkUserId: string) => ({
     authenticate: async (request: Request) => request.headers.get("Authorization") === `Bearer ${token}` ? clerkUserId : null,
+    authenticateAgent: async (request: Request) => request.headers.get("Authorization") === `Bearer ${agentToken}` ? clerkUserId : null,
     publishableKey,
   });
 
@@ -35,7 +37,7 @@ export function createHarness(wearables?: WearableRuntime) {
   const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
 
   return {
-    app, otherApp, client, db, token, userId, headers, products,
+    app, otherApp, client, db, token, agentToken, userId, headers, products,
     signedInAs: (clerkUserId: string) => createApp(db, identity(clerkUserId), packagedFoods, wearables),
     setup: async () => {
       await admin.unsafe(`CREATE SCHEMA "${schema}"`);

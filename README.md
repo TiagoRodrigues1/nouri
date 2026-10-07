@@ -131,3 +131,7 @@ The API is `GET /v1/integrations/google-health` for status, `POST .../authorizat
 ## Verify
 
 `pnpm typecheck` and `pnpm lint` run without a database. `pnpm test:integration` needs `DATABASE_URL` for PostgreSQL and a built frontend. The test creates and removes its own schema.
+
+## Logging from Claude or ChatGPT
+
+`/mcp` is an MCP server with five tools: search foods, log a meal, log a workout, read a day, and delete an entry. Claude and ChatGPT sign in through Clerk's OAuth consent page, so turn on dynamic client registration under **OAuth applications** in the Clerk dashboard, then add `https://<your host>/mcp` as a custom connector. Set `NOURI_PUBLIC_URL` when a proxy or tunnel hides the public origin from the server. [docs/mcp-design.md](docs/mcp-design.md) explains the design.
