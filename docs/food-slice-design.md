@@ -87,7 +87,9 @@ function getFoodDay(db: FoodDatabase, userId: string, date: string): Promise<Foo
 
 | Module | Owns |
 | --- | --- |
-| `src/app.ts` | HTTP routes, bearer authentication, Zod parsing, and OpenAPI |
+| `src/app.ts` | Authentication, retry-key checks, and route composition |
+| `src/food/routes.ts` | Food routes, request parsing, and OpenAPI using the same request schemas |
+| `src/journal/http.ts` | Shared mutation responses and retry/revision header validation |
 | `src/food/food.ts` | Food commands, retry receipts, revisions, local dates, and totals |
 | `src/db/schema.ts` and `db/schema.sql` | PostgreSQL tables and the reviewed schema SQL |
 | `src/server.ts` | Process setup and database connection |
@@ -117,3 +119,9 @@ I compared a mutable current-entry table with an append-only table of full entry
 ## Next implementation step
 
 Add the schema and one transaction-backed create path, then exercise it through the HTTP adapter against PostgreSQL before adding edits and deletion.
+
+## Food route contracts
+
+Food search, barcode lookup, recent foods, creation, edits, repeats, and deletion live in `src/food/routes.ts`. Search parameters and revision headers use the same schemas for runtime checks and OpenAPI documentation. The parent still authenticates and checks the retry key before route validation.
+
+Routes retain manual request parsing. Existing callers may send valid JSON without a JSON Content-Type header, malformed bodies receive the existing JSON errors, and repeated search parameters use the first value. Switching directly to declarative request validation would change those behaviors. `tests/integration/food-routes.test.ts` checks compatibility and the published constraints through the application request interface.
