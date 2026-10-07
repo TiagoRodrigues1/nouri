@@ -1,17 +1,19 @@
 # Wearable import (Google Health)
 
-The sidebar's `Wearables` item opens a dialog with a `Google Health` panel. Its state badge reads `Not set up`, `Not connected`, `Connected`, or `Sign in again`. `Not set up` shows setup guidance without import counts or action buttons. The other states show `Last successful sync` and an `Imported …` row per kind (sleep sessions, workouts, days of activity, days of heart rate), plus an error line after a failed attempt. `Not connected` offers `Connect`; `Connected` offers `Sync now` and `Disconnect`; `Sign in again` offers `Connect again` and `Disconnect`.
+The sidebar's `Wearables` item opens a dialog with a `Google Health` panel. Its state badge reads `Not set up`, `Not connected`, `Connected`, or `Sign in again`. `Not set up` shows setup guidance without import counts or action buttons. The other states show `Last successful sync` and one row per kind (`Imported sleep`, `Imported workouts`, `Imported steps and active energy`, `Imported heart rate`) counting sleep sessions, workouts, days of activity, and days of heart rate, plus an error line after a failed attempt. `Not connected` offers `Connect`; `Connected` offers `Sync now` and `Disconnect`; `Sign in again` offers `Connect again` and `Disconnect`.
 
 The default `control-nouri launch` run has no Google settings. There, check that the dialog reads `Not set up` and explains that settings go in `.env`.
 
-To drive Connect without a Google account, start the fixture-backed app on the run's database. This replaces only Google's HTTP boundary. The checked-in fixture records are dated September 24, 2026, and sync reads only the previous 30 days. The import assertions below require those records to remain in the sync window. Once they age out, refresh the fixture dates before using this recipe to judge import behavior.
+To drive Connect without a Google account, start the fixture-backed app on the run's database. This replaces only the Google and Open Food Facts HTTP boundaries, so check [barcode lookup](barcode.md) on the default run. The checked-in fixture records are dated September 24, 2026, and sync reads only the previous 30 days. The import assertions below require those records to remain in the sync window. Once they age out, refresh the fixture dates before using this recipe to judge import behavior.
+
+Start it in a subshell, as `launch` starts the app. Backgrounding `setsid` from the top-level shell lets it fork, so `$!` would record a parent that exits at once while the server keeps running.
 
 ```sh
 source "/tmp/nouri-verify-$RUN_ID/env"
 PORT2=<free port>
-setsid env CLERK_AUTHORIZED_PARTIES="http://127.0.0.1:$PORT2" PORT=$PORT2 \
-  node --import tsx tests/fake-google-server.ts > "/tmp/nouri-verify-$RUN_ID/fake-google.log" 2>&1 &
-echo $! > "/tmp/nouri-verify-$RUN_ID/fake-google-pid"
+(CLERK_AUTHORIZED_PARTIES="http://127.0.0.1:$PORT2" PORT=$PORT2 \
+  setsid node --import tsx tests/fake-google-server.ts > "/tmp/nouri-verify-$RUN_ID/fake-google.log" 2>&1 &
+  echo $! > "/tmp/nouri-verify-$RUN_ID/fake-google-pid")
 ```
 
 Sign the browser in on that port; the sign-in link works on any origin the app is served from:
@@ -24,4 +26,4 @@ In the browser, route `https://accounts.google.com/**` to a 302 back to the requ
 
 For CSRF, open `/oauth/google-health/callback?state=forged&code=x`. The page toasts `That sign-in link expired or was opened in another browser…` and the status stays `not-connected`.
 
-Evidence from this path is fixture-backed; never report it as a live Google sync. Kill the recorded fake-google PID before `control-nouri cleanup`.
+Evidence from this path is fixture-backed; never report it as a live Google sync. Before `control-nouri cleanup`, stop the fixture server's process group with `kill -- "-$(cat "/tmp/nouri-verify-$RUN_ID/fake-google-pid")"` and check that nothing listens on `$PORT2`.

@@ -68,4 +68,4 @@ Run cleanup after failed attempts too. Never kill by process name or use `playwr
 
 ## Helpers
 
-`control-nouri` is executable. Its interface is `control-nouri {launch|doctor|cleanup} RUN_ID` or `control-nouri browser RUN_ID PLAYWRIGHT_COMMAND [ARGS...]`; the commands above invoke each action. It uses an existing local `postgres:16-alpine` image. Docker may pull that image if it is absent.
+`control-nouri` is executable. Its interface is `control-nouri {launch|doctor|sign-in-url|cleanup} RUN_ID`, `control-nouri readback RUN_ID /v1/PATH`, or `control-nouri browser RUN_ID PLAYWRIGHT_COMMAND [ARGS...]`; the commands above invoke each action. It uses an existing local `postgres:16-alpine` image. Docker may pull that image if it is absent.
