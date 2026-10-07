@@ -30,3 +30,20 @@ export function shiftDate(date: string, days: number): string {
 
   return shifted.toISOString().slice(0, 10);
 }
+
+// How far the zone's wall clock is ahead of UTC at an instant, in milliseconds.
+function zoneOffset(zone: string, epoch: number): number {
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: zone, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" }).formatToParts(new Date(epoch));
+  const part = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((candidate) => candidate.type === type)?.value);
+
+  return Date.UTC(part("year"), part("month") - 1, part("day"), part("hour"), part("minute"), part("second")) - Math.floor(epoch / 1000) * 1000;
+}
+
+// The instant a wall clock in the zone shows the date and time ("HH:MM"). The second pass settles times near a
+// daylight saving change; a time skipped by the change lands just after it.
+export function instantAt(date: string, time: string, zone: string): string {
+  const wall = Date.parse(`${date}T${time}:00Z`);
+  const guess = wall - zoneOffset(zone, wall);
+
+  return new Date(wall - zoneOffset(zone, guess)).toISOString();
+}

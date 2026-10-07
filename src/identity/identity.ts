@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { verifyToken } from "@clerk/backend";
+import { createClerkClient, verifyToken } from "@clerk/backend";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { users } from "../db/schema.js";
@@ -10,6 +10,8 @@ export type Authenticate = (request: Request) => Promise<string | null>;
 
 export type Identity = {
   authenticate: Authenticate;
+  // OAuth access tokens Clerk issued to an MCP client such as Claude or ChatGPT, on the person's consent.
+  authenticateAgent: Authenticate;
   // Public; the page hands it to Clerk's browser SDK.
   publishableKey: string;
 };
@@ -26,6 +28,20 @@ export function clerkAuthenticator(options: { secretKey: string; jwtKey?: string
     const claims: unknown = await verifyToken(header.slice(7), options).catch(() => null);
 
     return sessionClaims.safeParse(claims).data?.sub ?? null;
+  };
+}
+
+const agentAuth = z.object({ userId: z.string().min(1) });
+
+// Clerk acts as the OAuth server for MCP clients. Its access tokens are opaque, so each check asks Clerk's API.
+export function clerkAgentAuthenticator(options: { secretKey: string; publishableKey: string }): Authenticate {
+  const clerk = createClerkClient(options);
+
+  return async (request) => {
+    if (!request.headers.get("Authorization")?.startsWith("Bearer ")) return null;
+    const state = await clerk.authenticateRequest(request, { acceptsToken: "oauth_token" }).catch(() => null);
+
+    return state?.isAuthenticated ? agentAuth.safeParse(state.toAuth()).data?.userId ?? null : null;
   };
 }
 
@@ -48,6 +64,7 @@ export function identityFromEnv(env: Record<string, string | undefined>): Identi
 
   return {
     authenticate: clerkAuthenticator({ secretKey: settings.CLERK_SECRET_KEY, authorizedParties: settings.CLERK_AUTHORIZED_PARTIES }),
+    authenticateAgent: clerkAgentAuthenticator({ secretKey: settings.CLERK_SECRET_KEY, publishableKey: settings.CLERK_PUBLISHABLE_KEY }),
     publishableKey: settings.CLERK_PUBLISHABLE_KEY,
   };
 }
