@@ -9,7 +9,7 @@ Read [features/README.md](features/README.md) and the relevant feature file befo
 
 ## Launch
 
-Run from the repository root. Docker, `pnpm`, `pg_isready`, `curl`, Python 3, and `playwright cli` must be on `PATH`. The repository `.env` must hold `CLERK_SECRET_KEY` and `CLERK_PUBLISHABLE_KEY` for a Clerk development instance; the helper refuses live keys. Dependencies are described in the root and `frontend/package.json` files; run `pnpm install` if `node_modules` is absent. The helper starts a disposable `postgres:16-alpine` container on a random localhost port, applies `db/schema.sql`, and starts `src/server.ts` on another free localhost port. Each run creates its own Clerk test user (a `+clerk_test` address that never receives mail) and deletes it at cleanup.
+Run from the repository root. Docker, `pnpm`, `pg_isready`, `curl`, Python 3, and `playwright cli` must be on `PATH`. The repository `.env` must hold `CLERK_SECRET_KEY` and `CLERK_PUBLISHABLE_KEY` for a Clerk development instance; the helper refuses live keys. Dependencies are described in the root and `frontend/package.json` files; run `pnpm install` if `node_modules` is absent. The helper starts a disposable `postgres:16-alpine` container on a random localhost port, runs `pnpm db:migrate` (`db/schema.sql`, then the numbered files in `db/migrations`), and starts `src/server.ts` on another free localhost port. Each run creates its own Clerk test user (a `+clerk_test` address that never receives mail) and deletes it at cleanup.
 
 The server serves the built page from `web/dist`. `launch` refuses to start when that build is missing or older than `frontend/index.html` or the TypeScript and CSS under `frontend/src` and `src` (the page imports its contracts from `src`). Run `pnpm build:web` first. The helper does not build for you, because rebuilding replaces assets under any other run serving the same `web/dist`.
 
@@ -49,7 +49,7 @@ Save proof under `$EVIDENCE`; cleanup never removes it. For each feature, record
 
 For a mutation, save an authenticated readback from the endpoint that owns the result: `GET /v1/days/<date>` for food, water, and supplement intakes, `GET /v1/supplement-stack/<date>` for the supplement list, `GET /v1/overview/<date>` for Overview records, or `GET /v1/dashboard` for card layout. Assert the relevant entries and totals. This is a second read of persisted state, not a substitute for the browser action. Search proof should show query, results or empty state, and source attribution. Follow real page controls. Do not use internal setters or test-only endpoints. Mock only a production boundary that already exists; the default Nouri run uses the real local database. Nouri has no dry-run mode. If a future recipe uses one, inspect actual files, network activity, and database state to establish what it skips.
 
-Example readback, after choosing a date in the page. Clerk accepts only session tokens minted for the page's origin, so `readback` makes the GET from the signed-in browser and prints the JSON:
+Example readback, after choosing a date in the page. Clerk accepts only session tokens minted for the page's origin, so `readback` makes the GET from the signed-in browser and prints only the response JSON, ready for a file or `python3 -m json.tool`:
 
 ```sh
 "$CONTROL" readback "$RUN_ID" /v1/days/2026-09-25 > "$EVIDENCE/day.json"
