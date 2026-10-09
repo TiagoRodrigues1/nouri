@@ -5,9 +5,9 @@ import { softDelete } from "../journal/records.js";
 import { withReceipt } from "../journal/receipt.js";
 import { foodEntries } from "../db/schema.js";
 import { localDate } from "../time.js";
-import { resolveFood } from "./catalog.js";
-import { entrySchema, manualFood, scaledFood } from "./contract.js";
-import type { CatalogFoodInput, CatalogSelection, FoodEntry, FoodInput, FoodSubmission, RecentFoods, RecordedFood, RepeatInput } from "./contract.js";
+import { catalogFood } from "./catalog.js";
+import { entrySchema, manualFood, recordedFood, scaledFood, totalNutrients } from "./contract.js";
+import type { CatalogFoodInput, CatalogSelection, FoodEntry, FoodInput, FoodSubmission, RecentFoods, RecordedFood, RepeatInput, SubmittedFood } from "./contract.js";
 
 export type FoodCommand =
   | { kind: "create"; input: FoodSubmission }
@@ -83,10 +83,16 @@ function hash(command: FoodCommand): string {
   return createHash("sha256").update(JSON.stringify(request)).digest("hex");
 }
 
+// A submitted food as the journal records it: a Ciqual food measured here, a typed one as sent. Null when the
+// catalog lacks the Ciqual food. Logging and saving a meal both resolve foods this way.
+export function resolveFood(food: SubmittedFood): RecordedFood | null {
+  return "kind" in food ? catalogFood(food.ref, food.quantity.amount) : recordedFood(food);
+}
+
 function resolveInput(input: FoodSubmission): FoodInput | null {
-  return isCatalogInput(input)
-    ? resolveFood(input.food.ref, input.food.quantity.amount, input.occurredAt, input.timeZone)
-    : input;
+  const food = resolveFood(input.food);
+
+  return food && { occurredAt: input.occurredAt, timeZone: input.timeZone, food: manualFood(food) };
 }
 
 async function missingOrStale(tx: Transaction, userId: string, id: string): Promise<{ outcome: "missing" | "stale" }> {
@@ -125,10 +131,10 @@ export async function logFoods(db: AppDatabase, userId: string, when: Pick<Repea
       continue;
     }
 
-    const resolved = resolveFood(item.ref, item.grams, when.occurredAt, when.timeZone);
+    const food = catalogFood(item.ref, item.grams);
 
-    if (!resolved) return { outcome: "catalog-missing" };
-    foods.push({ ...resolved.food, catalogRef: resolved.food.catalogRef ?? null });
+    if (!food) return { outcome: "catalog-missing" };
+    foods.push(food);
   }
 
   return { outcome: "created", entries: await db.transaction((tx) => insertFoods(tx, userId, when, foods)) };
@@ -257,26 +263,7 @@ type NutrientRow = Pick<FoodRow, "kcalMilli" | "proteinMilli" | "carbsMilli" | "
 
 // A total is known only when every logged food has that nutrient.
 function foodTotals(rows: NutrientRow[]) {
-  const total = (pick: (row: NutrientRow) => number | null): number | null => {
-    if (rows.length === 0) return null;
-    let sum = 0;
-
-    for (const row of rows) {
-      const value = pick(row);
-
-      if (value === null) return null;
-      sum += value;
-    }
-
-    return sum / 1000;
-  };
-
-  return {
-    kcal: total((row) => row.kcalMilli),
-    proteinG: total((row) => row.proteinMilli),
-    carbsG: total((row) => row.carbsMilli),
-    fatG: total((row) => row.fatMilli),
-  };
+  return totalNutrients(rows.map((row) => ({ kcal: decimal(row.kcalMilli), proteinG: decimal(row.proteinMilli), carbsG: decimal(row.carbsMilli), fatG: decimal(row.fatMilli) })));
 }
 
 // Days from `from` to `to` that have foods, by local date. A total is null unless every food on the day has the value.

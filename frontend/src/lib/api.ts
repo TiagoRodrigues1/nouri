@@ -19,7 +19,7 @@ import { overviewSchema } from "../../../src/overview/contract";
 import { reviewSchema } from "../../../src/review/contract";
 import type { Review } from "../../../src/review/contract";
 import { mealLogSchema, savedMealListSchema, savedMealSchema } from "../../../src/meals/contract";
-import type { MealEdit, MealInput, MealLogInput, SavedMeal } from "../../../src/meals/contract";
+import type { MealInput, MealLogInput, SavedMeal } from "../../../src/meals/contract";
 import { authorizationSchema, callbackResults, connectionStatusSchema, importKindNames, importKinds, disconnectResultSchema, syncResultSchema } from "../../../src/wearables/contract";
 import type { ConnectionStatus, DisconnectResult, SyncResult, WearableProvider } from "../../../src/wearables/contract";
 import type { Overview } from "../../../src/overview/contract";
@@ -165,7 +165,7 @@ export async function createSavedMeal(key: string, input: MealInput): Promise<Sa
   return write("/v1/saved-meals", savedMealSchema, { method: "POST", key, json: input });
 }
 
-export async function updateSavedMeal(key: string, meal: SavedMeal, input: MealEdit): Promise<SavedMeal> {
+export async function updateSavedMeal(key: string, meal: SavedMeal, input: MealInput): Promise<SavedMeal> {
   return write(`/v1/saved-meals/${encodeURIComponent(meal.id)}`, savedMealSchema, { method: "PATCH", key, revision: meal.revision, json: input });
 }
 

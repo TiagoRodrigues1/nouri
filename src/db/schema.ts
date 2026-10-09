@@ -43,11 +43,17 @@ export const savedMeals = pgTable("saved_meals", {
   userId: uuid("user_id").notNull(),
   name: text("name").notNull(),
   items: jsonb("items").$type<StoredMealItem[]>().notNull(),
+  dailyTime: text("daily_time"),
+  dailyTimeZone: text("daily_time_zone"),
+  dailyFilledThrough: date("daily_filled_through"),
   revision: integer("revision").notNull().default(1),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-}, (table) => [index("saved_meals_user_active_idx").on(table.userId, table.createdAt).where(sql`deleted_at IS NULL`)]);
+}, (table) => [
+  index("saved_meals_user_active_idx").on(table.userId, table.createdAt).where(sql`deleted_at IS NULL`),
+  index("saved_meals_user_daily_idx").on(table.userId).where(sql`daily_time IS NOT NULL AND deleted_at IS NULL`),
+]);
 
 export const waterEntries = pgTable("water_entries", {
   ...journalColumns,

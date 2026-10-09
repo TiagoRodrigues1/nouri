@@ -8,10 +8,13 @@ type Refresh<Input> =
   | { refresh: readonly string[] }
   | { refreshFor: (input: Input) => readonly string[] };
 
+// What a saved write tells the person and the page.
+type Feedback<Input> = { success?: (input: Input) => string; onSuccess?: (input: Input) => void };
+
 // One key per distinct request, reused while it is retried. Serves creates and edits alike.
 export function useIdempotentWrite<Input>(
   send: (input: Input, key: string) => Promise<object | void>,
-  options: Refresh<Input> & { success?: (input: Input) => string; onSuccess?: (input: Input) => void; signature?: (input: Input) => string },
+  options: Refresh<Input> & Feedback<Input> & { signature?: (input: Input) => string },
 ) {
   const client = useQueryClient();
   const pending = useRef(new PendingWrites<Input, object | void>());
@@ -53,7 +56,7 @@ export function useIdempotentWrite<Input>(
 
 export function useIdempotentDelete<Entry extends { id: string; revision: number }>(
   send: (entry: Entry, key: string) => Promise<object | void>,
-  options: Refresh<Entry> & { success?: (entry: Entry) => string },
+  options: Refresh<Entry> & Feedback<Entry>,
 ) {
   return useIdempotentWrite(send, {
     ...options,

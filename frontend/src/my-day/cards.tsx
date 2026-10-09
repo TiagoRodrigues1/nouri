@@ -1,6 +1,7 @@
 import * as stylex from "@stylexjs/stylex";
 import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { RingsBodySkeleton } from "./skeletons";
 import { Activity, Clock3, Droplet, PieChart, Timer, Trash2, Trophy, Utensils } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { colors } from "../theme.stylex";
@@ -139,7 +140,8 @@ export function MixCard({ kcal, proteinG, carbsG, fatG }: MixProps) {
 
 // The Move ring counts the estimates that were recorded; a workout without one adds nothing.
 export function ActivityCard({ date, targets }: { date: string; targets: Targets }) {
-  const sports = useQuery(workoutSummaryQueryOptions(date)).data;
+  const query = useQuery(workoutSummaryQueryOptions(date));
+  const sports = query.data;
 
   const rings: ActivityRing[] = [
     { label: "Move", value: sports?.burnedKcal ?? 0, goal: targets.burnedKcal, unit: "kcal", color: colors.move },
@@ -152,7 +154,7 @@ export function ActivityCard({ date, targets }: { date: string; targets: Targets
       <div {...stylex.props(styles.cardHead)}>
         <h2 {...stylex.props(styles.cardTitle, styles.activity)}><Activity size={17} /> Activity</h2>
       </div>
-      <div {...stylex.props(styles.cardBody, styles.ringBody)}>
+      {query.isPending ? <RingsBodySkeleton /> : <div {...stylex.props(styles.cardBody, styles.ringBody)}>
         <ActivityRings rings={rings} size={112} stroke={12} />
         <div {...stylex.props(styles.mixRows)}>
           {rings.map((ring) => (
@@ -166,7 +168,7 @@ export function ActivityCard({ date, targets }: { date: string; targets: Targets
             </div>
           ))}
         </div>
-      </div>
+      </div>}
     </section>
   );
 }

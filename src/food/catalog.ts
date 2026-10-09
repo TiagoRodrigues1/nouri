@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { z } from "zod";
-import { catalogNutrientsSchema, type CatalogSelection, type FoodInput } from "./contract.js";
+import { catalogNutrientsSchema, type CatalogSelection, type RecordedFood } from "./contract.js";
 import { portugueseTerms, readQuery, nearbyPortugueseReadings, type QueryPhrase } from "./portuguese.js";
 
 const row = z.object({ id: z.string(), nameFr: z.string(), nameEn: z.string(), nutrientsPer100: catalogNutrientsSchema });
@@ -226,7 +226,8 @@ function typoPart(part: Part): Part {
   };
 }
 
-export function resolveFood(ref: CatalogSelection, amountG: number, occurredAt: string, timeZone: string): FoodInput | null {
+// A Ciqual food at an amount in grams, as the journal records it; null when this catalog lacks it.
+export function catalogFood(ref: CatalogSelection, amountG: number): RecordedFood | null {
   if (ref.provider !== "ciqual" || ref.version !== data.version) return null;
 
   const food = byId.get(ref.id);
@@ -236,18 +237,14 @@ export function resolveFood(ref: CatalogSelection, amountG: number, occurredAt: 
   const scale = (value: number | null) => value === null ? null : Math.round(value * amountG * 10) / 1000;
 
   return {
-    occurredAt,
-    timeZone,
-    food: {
-      name: food.nameEn || food.nameFr,
-      quantity: { amount: amountG, unit: "g" },
-      nutrients: {
-        kcal: scale(food.nutrientsPer100.kcal),
-        proteinG: scale(food.nutrientsPer100.proteinG),
-        carbsG: scale(food.nutrientsPer100.carbsG),
-        fatG: scale(food.nutrientsPer100.fatG),
-      },
-      catalogRef: ref,
+    name: food.nameEn || food.nameFr,
+    quantity: { amount: amountG, unit: "g" },
+    nutrients: {
+      kcal: scale(food.nutrientsPer100.kcal),
+      proteinG: scale(food.nutrientsPer100.proteinG),
+      carbsG: scale(food.nutrientsPer100.carbsG),
+      fatG: scale(food.nutrientsPer100.fatG),
     },
+    catalogRef: ref,
   };
 }

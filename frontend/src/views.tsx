@@ -1,6 +1,6 @@
 import * as stylex from "@stylexjs/stylex";
 import { styles } from "./dashboard-styles";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate, useSearch } from "@tanstack/react-router";
 import {
   ChevronLeft,
@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   CalendarRange,
   ChartColumn,
+  CookingPot,
   Droplet,
   Dumbbell,
   Moon,
@@ -31,11 +32,10 @@ import { useConnection } from "./lib/use-connection";
 import { submissionSchema, type FoodSubmission } from "../../src/food/contract";
 import { LogFoodDialog } from "./log-food-dialog";
 import { EditFoodDialog } from "./edit-food-dialog";
-import { SaveMealDialog, type MealSelection } from "./save-meal-dialog";
 import { TargetsDialog } from "./targets-dialog";
 import { SupplementsDialog } from "./supplements-dialog";
 import { WearablesDialog } from "./wearables-dialog";
-import { dashboardPageContext } from "./dashboard-page-context";
+import { dashboardPageContext, useDashboardPage } from "./dashboard-page-context";
 import { MeasurementDialog, SleepDialog, WaterDialog, WorkoutDialog } from "./overview-dialogs";
 import { useJournal } from "./overview/use-journal";
 import { Popover, PopoverContent, PopoverTrigger } from "./components/ui/popover";
@@ -48,15 +48,20 @@ const now = () => localDate(new Date());
 
 type FoodInput = FoodSubmission["food"];
 
-type View = "today" | "overview" | "progress" | "review";
+type View = "today" | "meals" | "overview" | "progress" | "review";
 
 type PendingFood = { input: FoodSubmission; signature: string };
 
 type RecordKind = "water" | "workout" | "sleep" | "measurement";
 
-export function Dashboard() {
+function useView(): View {
   const path = useLocation({ select: (location) => location.pathname });
-  const view: View = path === "/overview" ? "overview" : path === "/progress" ? "progress" : path === "/review" ? "review" : "today";
+
+  return path.startsWith("/meals") ? "meals" : path === "/overview" ? "overview" : path === "/progress" ? "progress" : path === "/review" ? "review" : "today";
+}
+
+export function Dashboard() {
+  const view = useView();
   const navigate = useNavigate();
   const search = useSearch({ strict: false });
   const today = now();
@@ -71,8 +76,6 @@ export function Dashboard() {
   const reviewing = view === "review";
   const date = reviewing ? search.to ?? today : search.date ?? storedDate;
   const isToday = date === today;
-  const step = reviewing ? 7 : 1;
-  const unit = reviewing ? "week" : "day";
 
   useEffect(() => {
     if (!search.date) return;
@@ -83,7 +86,6 @@ export function Dashboard() {
 
   const [logOpen, setLogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [mealSelection, setMealSelection] = useState<MealSelection | null>(null);
   const [logMenuOpen, setLogMenuOpen] = useState(false);
   const [recordDialog, setRecordDialog] = useState<RecordKind | null>(null);
   const [customizingCards, setCustomizingCards] = useState(false);
@@ -104,17 +106,7 @@ export function Dashboard() {
     signature: (pending) => pending.signature,
   });
 
-  function pickDate(next: string) {
-    if (reviewing) void navigate({ to: "/review", search: { to: next } });
-    else if (view === "progress") void navigate({ to: "/progress", search: { date: next, exercise: search.exercise } });
-    else void navigate({ to: view === "overview" ? "/overview" : "/", search: { date: next } });
-
-    toast.dismiss();
-  }
-
-  function saveFood(event: FormEvent<HTMLFormElement>, food: FoodInput, time: string) {
-    event.preventDefault();
-
+  function saveFood(food: FoodInput, time: string) {
     createMutation.mutate({
       input: submissionSchema.parse({ occurredAt: occurredAt(date, time), timeZone: zone, food }),
       signature: JSON.stringify({ date, time, zone, food }),
@@ -133,7 +125,7 @@ export function Dashboard() {
   }
 
   return (
-    <dashboardPageContext.Provider value={{ date, isToday, onEditFood: (entry) => setEditingId(entry.id), onSaveMeal: setMealSelection, foodDelete, journal, onManageSupplements: () => setSupplementsOpen(true), customizingCards, onCustomizingCardsChange: setCustomizingCards }}>
+    <dashboardPageContext.Provider value={{ date, isToday, onEditFood: (entry) => setEditingId(entry.id), onSaveMeal: () => void navigate({ to: "/meals/new", search: { date } }), foodDelete, journal, onManageSupplements: () => setSupplementsOpen(true), customizingCards, onCustomizingCardsChange: setCustomizingCards }}>
     <div {...stylex.props(styles.appShell)}>
       <aside {...stylex.props(styles.sidebar)}>
         <Link to="/" {...stylex.props(styles.brand)}>
@@ -163,6 +155,13 @@ export function Dashboard() {
           >
             <LayoutDashboard size={17} {...stylex.props(view === "today" && styles.iconAccent)} />
             Today
+          </Link>
+          <Link
+            to="/meals"
+            {...stylex.props(styles.navItem, view === "meals" && styles.navItemActive)}
+          >
+            <CookingPot size={17} {...stylex.props(view === "meals" && styles.iconAccent)} />
+            Meals
           </Link>
           <Link
             to="/overview"
@@ -223,28 +222,6 @@ export function Dashboard() {
       </aside>
       <main {...stylex.props(styles.mainArea)}>
         <div {...stylex.props(styles.pageContent)}>
-          <header {...stylex.props(styles.dayHeader)}>
-            <h1 {...stylex.props(styles.dayHeadline)}>{reviewing ? weekLabel(date, isToday) : isToday ? "Today" : dateLabel(date)}</h1>
-            <div {...stylex.props(styles.dateActions)}>
-              {view === "today" && (
-                <Button variant="outline" size="icon" aria-label="Customize cards" title="Customize cards" onClick={() => setCustomizingCards(true)}>
-                  <SlidersHorizontal size={16} />
-                </Button>
-              )}
-              <Button variant="outline" size="icon" aria-label={`Previous ${unit}`} onClick={() => pickDate(shiftDate(date, -step))}>
-                <ChevronLeft size={17} />
-              </Button>
-              <DatePicker
-                label={reviewing ? "Choose the last day of the week" : "Choose log date"}
-                value={date}
-                days={reviewing ? 7 : 1}
-                onChange={pickDate}
-              />
-              <Button variant="outline" size="icon" aria-label={`Next ${unit}`} onClick={() => pickDate(shiftDate(date, step))}>
-                <ChevronRight size={17} />
-              </Button>
-            </div>
-          </header>
           <Outlet />
         </div>
       </main>
@@ -253,12 +230,56 @@ export function Dashboard() {
       <WearablesDialog open={wearablesOpen} onOpenChange={setWearablesOpen} connection={googleHealth} />
       <LogFoodDialog open={logOpen} onOpenChange={setLogOpen} date={date} isToday={isToday} pending={createMutation.isPending} onSave={saveFood} />
       <EditFoodDialog date={date} entryId={editingId} onClose={() => setEditingId(null)} />
-      <SaveMealDialog date={date} selection={mealSelection} onClose={() => setMealSelection(null)} />
       <WaterDialog open={recordDialog === "water"} onOpenChange={(open) => setRecordDialog(open ? "water" : null)} date={date} pending={journal.create.isPending} onSave={(input) => saveRecord({ path: recordPaths.water, input }, "Water")} />
       <WorkoutDialog open={recordDialog === "workout"} onOpenChange={(open) => setRecordDialog(open ? "workout" : null)} date={date} pending={journal.create.isPending} onSave={(input) => saveRecord({ path: recordPaths.workout, input }, "Workout")} />
       <SleepDialog open={recordDialog === "sleep"} onOpenChange={(open) => setRecordDialog(open ? "sleep" : null)} date={date} pending={journal.create.isPending} onSave={(input) => saveRecord({ path: recordPaths.sleep, input }, "Sleep")} />
       <MeasurementDialog open={recordDialog === "measurement"} onOpenChange={(open) => setRecordDialog(open ? "measurement" : null)} date={date} pending={journal.create.isPending} onSave={(input) => saveRecord({ path: recordPaths.measurement, input }, "Measurement")} />
     </div>
     </dashboardPageContext.Provider>
+  );
+}
+
+// The day pages' heading: the day or week shown and the controls that move it. Meals are not tied to a day, so
+// their routes sit outside this layout.
+export function DayLayout() {
+  const { date, isToday, onCustomizingCardsChange } = useDashboardPage();
+  const view = useView();
+  const navigate = useNavigate();
+  const reviewing = view === "review";
+  const step = reviewing ? 7 : 1;
+  const unit = reviewing ? "week" : "day";
+
+  // Stays on the page and keeps its other search params; the review names the last day of its week `to`.
+  function pickDate(next: string) {
+    void navigate({ to: ".", search: (previous) => ({ ...previous, [reviewing ? "to" : "date"]: next }) });
+    toast.dismiss();
+  }
+
+  return (
+    <>
+      <header {...stylex.props(styles.dayHeader)}>
+        <h1 {...stylex.props(styles.dayHeadline)}>{reviewing ? weekLabel(date, isToday) : isToday ? "Today" : dateLabel(date)}</h1>
+        <div {...stylex.props(styles.dateActions)}>
+          {view === "today" && (
+            <Button variant="outline" size="icon" aria-label="Customize cards" title="Customize cards" onClick={() => onCustomizingCardsChange(true)}>
+              <SlidersHorizontal size={16} />
+            </Button>
+          )}
+          <Button variant="outline" size="icon" aria-label={`Previous ${unit}`} onClick={() => pickDate(shiftDate(date, -step))}>
+            <ChevronLeft size={17} />
+          </Button>
+          <DatePicker
+            label={reviewing ? "Choose the last day of the week" : "Choose log date"}
+            value={date}
+            days={reviewing ? 7 : 1}
+            onChange={pickDate}
+          />
+          <Button variant="outline" size="icon" aria-label={`Next ${unit}`} onClick={() => pickDate(shiftDate(date, step))}>
+            <ChevronRight size={17} />
+          </Button>
+        </div>
+      </header>
+      <Outlet />
+    </>
   );
 }

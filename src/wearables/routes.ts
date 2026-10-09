@@ -15,9 +15,8 @@ const notConfigured = "This service is not set up on this server. Add its settin
 
 type Env = { Variables: { userId: string } };
 
-function stateCookie(id: WearableProvider, context: Context) {
-  const secure = new URL(context.req.url).protocol === "https:";
-
+// Secure follows the redirect URI, since a proxy terminating HTTPS hands the app a plain http request.
+function stateCookie(id: WearableProvider, secure: boolean) {
   return { name: `nouri_${id}_state`, options: { path: oauthCallbackPath(id), httpOnly: true, sameSite: "Lax" as const, secure } };
 }
 
@@ -30,6 +29,8 @@ export function integrationRoutes(db: AppDatabase, runtime: WearableRuntime | un
 
     return runtime && provider ? connectionFor(db, runtime, provider, userId) : undefined;
   };
+
+  const cookieFor = (id: WearableProvider) => stateCookie(id, providers.get(id)?.callbackOrigin.startsWith("https:") ?? false);
 
   const providerParam = (context: Context) => wearableProviderSchema.safeParse(context.req.param("provider")).data;
 
@@ -57,7 +58,7 @@ export function integrationRoutes(db: AppDatabase, runtime: WearableRuntime | un
     if (origin && origin !== callbackOrigin) return error(409, `Open Nouri at ${callbackOrigin} and choose Connect there. Sign-in returns to that address, so it cannot finish from ${origin}.`);
 
     const { url, state } = await connection.start();
-    const cookie = stateCookie(connection.provider.id, context);
+    const cookie = cookieFor(connection.provider.id);
     setCookie(context, cookie.name, state, { ...cookie.options, maxAge: stateLifetimeMs / 1000 });
 
     return context.json({ authorizationUrl: url });
@@ -69,7 +70,7 @@ export function integrationRoutes(db: AppDatabase, runtime: WearableRuntime | un
     const id = providerParam(context);
 
     if (!id) return error(404, "Unknown integration");
-    const cookie = stateCookie(id, context);
+    const cookie = cookieFor(id);
     const query = (name: string) => context.req.query(name) || undefined;
     const state = query("state");
     const owner = state ? await stateOwner(db, id, state) : null;

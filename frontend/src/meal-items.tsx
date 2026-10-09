@@ -6,7 +6,7 @@ import { format } from "./lib/api";
 import { nutrientLine, unitLabels } from "./lib/food-text";
 import { includedKcal, rowFood, type MealRow } from "./lib/saved-meals";
 
-// The foods of a meal, each with whether it is included and its amount. Saving and logging share it.
+// The foods of a meal being logged, each with whether it is included and its amount this time.
 export function MealItems({ rows, onChange, label }: { rows: MealRow[]; onChange: (rows: MealRow[]) => void; label: string }) {
   const kcal = includedKcal(rows);
 

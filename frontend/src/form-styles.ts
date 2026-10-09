@@ -171,6 +171,11 @@ export const styles = stylex.create({
     borderWidth: 1, borderStyle: "solid", borderColor: colors.border,
     borderRadius: "8px",
   },
-  mealListItem: { display: "flex", alignItems: "center", paddingRight: "6px" },
-  mealAction: { color: colors.mutedForeground },
+  manageLink: {
+    justifySelf: "center",
+    color: colors.primary,
+    fontSize: "13px",
+    fontWeight: "600",
+    textDecoration: { default: "none", ":hover": "underline" },
+  },
 });

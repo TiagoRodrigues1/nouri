@@ -11,7 +11,8 @@ import { useDashboardPage } from "./dashboard-page-context";
 import { format, getReview, type Review as ReviewData, type ReviewDay } from "./lib/api";
 import { shortDayLabel } from "./lib/time";
 import { duration } from "./overview/shared";
-import { queryStatus } from "./query-status";
+import { queryFallback } from "./query-status";
+import { Bone, Loading } from "./loading";
 import { styles } from "./review-styles";
 
 type Metric = {
@@ -124,10 +125,9 @@ export function Review() {
     queryFn: () => getReview(date),
   });
 
-  const status = queryStatus(query, "Loading your week…");
   const review = query.data;
 
-  if (status || !review) return <p {...stylex.props(styles.status)}>{status}</p>;
+  if (!review || query.isError) return queryFallback(query, <ReviewSkeleton />, styles.status);
   const total = review.days.length;
 
   return (
@@ -187,5 +187,40 @@ export function Review() {
         </Table>
       </Card>
     </div>
+  );
+}
+
+// The summary, the two comparisons, and the seven-day table, as placeholders.
+function ReviewSkeleton() {
+  return (
+    <Loading label="Loading your week…">
+      <div {...stylex.props(styles.page)}>
+        <Bone width="62%" height={13} />
+        <div {...stylex.props(styles.comparisons)}>
+          {[0, 1].map((index) => (
+            <Card key={index}>
+              <CardHeader {...stylex.props(styles.comparisonHeader)}><Bone width={90} height={13} /></CardHeader>
+              <CardContent {...stylex.props(styles.comparisonContent)}>
+                <Bone width={120} height={24} />
+                <Bone width="55%" height={11} />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+        <Card {...stylex.props(styles.card)}>
+          <Table>
+            <TableBody>
+              {Array.from({ length: 8 }, (_, row) => (
+                <TableRow key={row}>
+                  <TableCell><Bone width={row === 0 ? 40 : 70} height={12} /></TableCell>
+                  {metrics.map((metric) => <TableCell key={metric.label}><Bone width="70%" height={12} /></TableCell>)}
+                  <TableCell><Bone width={52} height={12} /></TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Card>
+      </div>
+    </Loading>
   );
 }

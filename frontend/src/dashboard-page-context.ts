@@ -1,6 +1,5 @@
 import { createContext, useContext } from "react";
 import type { FoodEntry } from "./lib/api";
-import type { MealSelection } from "./save-meal-dialog";
 import type { useIdempotentDelete } from "./lib/use-idempotent";
 import type { useJournal } from "./overview/use-journal";
 
@@ -8,7 +7,8 @@ export type DashboardPageContext = {
   date: string;
   isToday: boolean;
   onEditFood: (entry: FoodEntry) => void;
-  onSaveMeal: (selection: MealSelection) => void;
+  // Opens the meal editor with the day's foods in it.
+  onSaveMeal: () => void;
   foodDelete: ReturnType<typeof useIdempotentDelete<FoodEntry>>;
   journal: ReturnType<typeof useJournal>;
   onManageSupplements: () => void;

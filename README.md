@@ -89,7 +89,7 @@ curl -X POST http://localhost:3000/v1/water-entries \
 
 Remove one with `DELETE /v1/water-entries/{id}` and `If-Match: "<revision>"`. The day response has a `water` object with `entries`, `entryCount`, and `totalMl`. `totalMl` is `null` when nothing was logged, so an unrecorded day is not reported as zero.
 
-Run `pnpm db:migrate` on a fresh database. It applies `db/schema.sql`, which holds the whole database schema. The app is not deployed yet, so change that file directly instead of adding migrations. To apply schema changes to an existing local database, recreate it with `docker compose down -v` and `docker compose up -d db`, then run `pnpm db:migrate` again. This deletes local data.
+`pnpm db:migrate` applies `db/schema.sql` once, then each file in `db/migrations` once, in name order, and records them in `schema_migrations`. It is safe to run on every start. Once a database holds real data, leave `db/schema.sql` as it is and add each change as a new numbered file, such as `db/migrations/0001-add-notes.sql`. Update `src/db/schema.ts` to match.
 
 `GET /v1/review/{date}` returns calories, protein, workout minutes, sleep minutes, and weight for the seven local days ending on the date, oldest first, with `recordedDays` counting the days that have each kind of record. A day without a record of a kind reads `null`, never zero. Food totals are also `null` when a logged food lacks the value, and `food.entryCount` tells the two apart. Weight is the last one recorded that day and does not carry forward. The web app shows it on the Review page. [docs/review-design.md](docs/review-design.md) explains the design.
 
@@ -127,6 +127,17 @@ WEARABLE_TOKEN_KEY=$(openssl rand -hex 32)   # paste the output, not the command
 Open Nouri on the same host and port as the redirect URI; the sign-in cookie is tied to that host. For `pnpm dev`, register and use `http://127.0.0.1:5173/oauth/google-health/callback` instead; Vite forwards `/oauth` to the API. Choose **Wearables** in the sidebar, then **Connect**, approve sleep, activity, and health metrics access, and Nouri runs a first sync. **Sync now** re-reads the last 30 days and adds, updates, or removes imported nights, workouts, and daily totals to match Google. Imported workouts appear in Sports under their Google name, such as "Evening Run", and count toward the day's workout totals. The Overview's Activity section shows the day's steps against your steps target, active energy, and resting heart rate with the day's average and range. A day without them reads "—", never zero. Imported records show their device and cannot be deleted in Nouri. Delete them in Google Health, then sync. **Disconnect** revokes Nouri's access and removes everything it imported. Manual sleep and workouts are kept. A connection made before a kind was imported, such as heart rate, reads only the kinds it covers; the Wearables dialog asks you to **Connect again** to add the rest.
 
 The API is `GET /v1/integrations/google-health` for status, `POST .../authorizations` to start sign-in, `POST .../syncs`, and `DELETE /v1/integrations/google-health`. [docs/wearables-design.md](docs/wearables-design.md) covers the Google Cloud setup, testing with a real Fitbit Air and iPhone, and adding another provider.
+
+## Deploy
+
+The `Dockerfile` builds one image that serves the page and the API. On start it runs pending migrations, then the server, so run a single instance. Set these on the host:
+
+- `DATABASE_URL`, with `?sslmode=require` for a hosted database.
+- `CLERK_SECRET_KEY` and `CLERK_PUBLISHABLE_KEY` from a Clerk production instance, and `CLERK_AUTHORIZED_PARTIES=https://<your host>`.
+- `NOURI_PUBLIC_URL=https://<your host>` for the MCP server.
+- For Google Health, `GOOGLE_HEALTH_REDIRECT_URI=https://<your host>/oauth/google-health/callback` (registered in Google Cloud too), the client id and secret, and a new `WEARABLE_TOKEN_KEY`. Losing the key means everyone connects again.
+
+The image listens on `0.0.0.0:3000`; set `PORT` if the host assigns one. The barcode camera needs HTTPS, which hosts provide.
 
 ## Verify
 

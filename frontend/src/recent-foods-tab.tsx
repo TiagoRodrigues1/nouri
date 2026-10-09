@@ -10,7 +10,8 @@ import { nutrientLine, unitLabels } from "./lib/food-text";
 import { calendarDate, localDate, occurredAt, shiftDate, timeZone } from "./lib/time";
 import { typedAmount } from "./lib/typed-amount";
 import { useLogRecent, useRecentFoods } from "./lib/use-recent-foods";
-import { queryStatus } from "./query-status";
+import { ListSkeleton } from "./loading";
+import { queryFallback } from "./query-status";
 import { scaleFood } from "../../src/food/contract";
 
 const shortDate = new Intl.DateTimeFormat("en", { day: "numeric", month: "short" });
@@ -27,13 +28,24 @@ function lastEatenLabel(date: string): string {
 
 // Foods logged before, most recent first. Choosing one logs it at the dialog's date and time, at the amount typed.
 export function RecentFoodsTab({ date, time, onLogged }: { date: string; time: string; onLogged: () => void }) {
+  const log = useLogRecent(onLogged);
+
+  return (
+    <RecentFoodPicker
+      actionLabel="Add to log"
+      pending={log.isPending}
+      onPick={(recent, amount) => log.mutate({ recent, input: { occurredAt: occurredAt(date, time), timeZone, amount } })}
+    />
+  );
+}
+
+// Foods logged before, most recent first, each offered at its last amount. The meal editor shares it.
+export function RecentFoodPicker({ actionLabel, pending = false, onPick }: { actionLabel: string; pending?: boolean; onPick: (recent: RecentFood, amount: number) => void }) {
   const query = useRecentFoods();
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const log = useLogRecent(onLogged);
   const foods = query.data;
-  const status = queryStatus(query, "Loading your recent foods…");
 
-  if (status || !foods) return <p {...stylex.props(styles.searchMessage)}>{status}</p>;
+  if (!foods || query.isError) return queryFallback(query, <ListSkeleton label="Loading your recent foods…" />, styles.searchMessage);
 
   if (foods.length === 0) {
     return <p {...stylex.props(styles.searchMessage)}>No foods logged yet. Search for a food or add one manually, and it will show up here next time.</p>;
@@ -69,18 +81,13 @@ export function RecentFoodsTab({ date, time, onLogged }: { date: string; time: s
       </ul>
       {/* Keyed by entry, so choosing another food restarts from its last amount. */}
       {selected && (
-        <RecentFoodForm
-          key={selected.entryId}
-          recent={selected}
-          pending={log.isPending}
-          onLog={(amount) => log.mutate({ recent: selected, input: { occurredAt: occurredAt(date, time), timeZone, amount } })}
-        />
+        <RecentFoodForm key={selected.entryId} recent={selected} pending={pending} actionLabel={actionLabel} onPick={(amount) => onPick(selected, amount)} />
       )}
     </>
   );
 }
 
-function RecentFoodForm({ recent, pending, onLog }: { recent: RecentFood; pending: boolean; onLog: (amount: number) => void }) {
+function RecentFoodForm({ recent, pending, actionLabel, onPick }: { recent: RecentFood; pending: boolean; actionLabel: string; onPick: (amount: number) => void }) {
   const { name, quantity } = recent.food;
   const [amount, setAmount] = useState(String(quantity.amount));
   const typed = typedAmount(amount);
@@ -90,7 +97,7 @@ function RecentFoodForm({ recent, pending, onLog }: { recent: RecentFood; pendin
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (typed !== null) onLog(typed);
+    if (typed !== null) onPick(typed);
   }
 
   return (
@@ -109,7 +116,7 @@ function RecentFoodForm({ recent, pending, onLog }: { recent: RecentFood; pendin
       />
       <small {...stylex.props(styles.resultsMeta)}>{nutrientLine(preview.nutrients)}</small>
       <Button type="submit" disabled={pending} {...stylex.props(styles.selectedButton)}>
-        Add to log
+        {actionLabel}
       </Button>
     </form>
   );

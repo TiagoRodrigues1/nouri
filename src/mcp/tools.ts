@@ -12,6 +12,7 @@ import type { FoodDay, FoodEntry, SearchResult } from "../food/contract.js";
 import type { FoodItem } from "../food/food.js";
 import { getFoodDay, logFoods, mutateFood } from "../food/food.js";
 import { mutateRecord } from "../journal/records.js";
+import { fillDailyMeals } from "../meals/meals.js";
 import type { TargetsForDay } from "../targets/contract.js";
 import { targetsKind } from "../targets/targets.js";
 import { instantAt, localDate, timeZoneSchema } from "../time.js";
@@ -138,6 +139,9 @@ export function nouriMcpServer(db: AppDatabase, userId: string): McpServer {
     annotations: { readOnlyHint: true },
   }, async ({ date }) => {
     const day = date ?? localDate(new Date().toISOString(), await latestZone(db, userId) ?? "UTC");
+
+    // MCP sits outside /v1, so it brings daily meals up to date itself.
+    await fillDailyMeals(db, userId);
     const [{ food }, workoutDay, targets] = await Promise.all([getFoodDay(db, userId, day), getWorkoutDay(db, userId, day), getDated(db, targetsKind, userId, day)]);
 
     return text({ date: day, food, workouts: workoutDay, targets });
