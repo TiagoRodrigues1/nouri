@@ -6,17 +6,24 @@ import {
   redirect,
 } from "@tanstack/react-router";
 import { z } from "zod";
-import { Dashboard } from "./views";
+import { DayLayout, Dashboard } from "./views";
 
 const rootRoute = createRootRoute({ component: Dashboard });
+
+// The pages that show a day or a week, under its date header. Meals sit beside them, outside it.
+const dayLayoutRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  id: "day",
+  component: DayLayout,
+});
 
 const daySearch = z.object({ date: z.iso.date().optional().catch(undefined) });
 
 const todayRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => dayLayoutRoute,
   path: "/",
   validateSearch: daySearch,
-  component: lazyRouteComponent(() => import("./today-page"), "TodayPage"),
+  component: lazyRouteComponent(() => import("./my-day"), "MyDay"),
 });
 
 // The food journal now lives on Today, so old links land there.
@@ -29,14 +36,14 @@ const foodRoute = createRoute({
 });
 
 const overviewRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => dayLayoutRoute,
   path: "/overview",
   validateSearch: daySearch,
   component: lazyRouteComponent(() => import("./overview"), "Overview"),
 });
 
 const progressRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => dayLayoutRoute,
   path: "/progress",
   // The exercise is its key; without one the page shows the most recent exercise.
   validateSearch: daySearch.extend({ exercise: z.string().max(80).optional().catch(undefined) }),
@@ -44,15 +51,35 @@ const progressRoute = createRoute({
 });
 
 const reviewRoute = createRoute({
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => dayLayoutRoute,
   path: "/review",
   // The last day of the week under review. Without it the week ends today.
   validateSearch: z.object({ to: z.iso.date().optional().catch(undefined) }),
   component: lazyRouteComponent(() => import("./review"), "Review"),
 });
 
+const mealsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/meals",
+  component: lazyRouteComponent(() => import("./meals/meals-page"), "MealsPage"),
+});
+
+// A new meal; with a date it starts from that day's foods, as the Timeline's Save as meal does.
+const newMealRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/meals/new",
+  validateSearch: daySearch,
+  component: lazyRouteComponent(() => import("./meals/meal-editor"), "NewMealPage"),
+});
+
+const mealRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/meals/$mealId",
+  component: lazyRouteComponent(() => import("./meals/meal-editor"), "EditMealPage"),
+});
+
 export const router = createRouter({
-  routeTree: rootRoute.addChildren([todayRoute, overviewRoute, progressRoute, reviewRoute, foodRoute]),
+  routeTree: rootRoute.addChildren([dayLayoutRoute.addChildren([todayRoute, overviewRoute, progressRoute, reviewRoute]), mealsRoute, newMealRoute, mealRoute, foodRoute]),
 });
 
 declare module "@tanstack/react-router" {

@@ -9,6 +9,8 @@ type TimePickerProps = {
   value: string;
   onChange: (value: string) => void;
   onNow: () => void;
+  // Picking an hour and then a minute changes the value twice; a caller that saves on change waits for this.
+  onClose?: () => void;
 };
 
 const hours = Array.from({ length: 24 }, (_, hour) => pad(hour));
@@ -77,14 +79,21 @@ const styles = stylex.create({
 });
 
 // An "HH:MM" picker in the shadcn Popover style: hours on the left, 5-minute steps on the right.
-export function TimePicker({ id, value, onChange, onNow }: TimePickerProps) {
+export function TimePicker({ id, value, onChange, onNow, onClose }: TimePickerProps) {
   const [open, setOpen] = useState(false);
   const [hour, minute] = value.split(":");
   // Keep an off-step minute such as 16:57 selectable after the default fills it in.
   const minutes = [...new Set([...steps, minute])].sort();
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+
+        if (!next) onClose?.();
+      }}
+    >
       <PopoverTrigger id={id} {...stylex.props(styles.trigger)}>
         <Clock size={14} {...stylex.props(styles.icon)} />
         {value}

@@ -21,4 +21,7 @@ const client = postgres(settings.DATABASE_URL);
 
 const app = createApp(drizzle(client), identityFromEnv(process.env), openFoodFacts(fetch), wearables, settings.NOURI_PUBLIC_URL);
 
-serve({ fetch: app.fetch, port: settings.PORT, hostname: settings.HOST });
+const server = serve({ fetch: app.fetch, port: settings.PORT, hostname: settings.HOST });
+
+// Hosts stop the app with SIGTERM on each deploy; finish open requests before releasing the database connections.
+process.once("SIGTERM", () => server.close(() => void client.end()));

@@ -59,7 +59,7 @@ The server does not change. `food-edit.ts` is unit tested in Node, so it imports
 
 ## Synthesis decision
 
-I compared three shapes. A dedicated dialog over the existing full-replacement `PATCH` is the base. A server-side portion edit, which rescales the saved snapshot like `repeats` does, would keep catalog entries from older Ciqual releases editable. But it adds a second way to change a catalog amount and a new receipt fingerprint, and manual fixes still need full replacement. Only one catalog version exists today, and version mapping belongs in `resolveFood` when a second one ships. An edit mode on `LogFoodDialog` lost on interface depth. That dialog is built around search and tabs with an uncontrolled manual form, so each field would need an edit branch and more props.
+I compared three shapes. A dedicated dialog over the existing full-replacement `PATCH` is the base. A server-side portion edit, which rescales the saved snapshot like `repeats` does, would keep catalog entries from older Ciqual releases editable. But it adds a second way to change a catalog amount and a new receipt fingerprint, and manual fixes still need full replacement. Only one catalog version exists today, and version mapping belongs in `catalogFood` when a second one ships. An edit mode on `LogFoodDialog` lost on interface depth. That dialog is built around search and tabs with an uncontrolled manual form, so each field would need an edit branch and more props.
 
 ## Tradeoffs accepted
 
@@ -77,4 +77,4 @@ I compared three shapes. A dedicated dialog over the existing full-replacement `
 
 ## Open questions and risks
 
-- When Ciqual ships a new release, editing an entry logged against the old one returns "Catalog food not found" until `resolveFood` maps old versions.
+- When Ciqual ships a new release, editing an entry logged against the old one returns "Catalog food not found" until `catalogFood` maps old versions.

@@ -11,17 +11,17 @@ import { format, type ExerciseSession } from "./lib/api";
 import { exerciseHistoryQueryOptions, setsLabel } from "./lib/exercise-history";
 import { shortDayLabel } from "./lib/time";
 import { ProgressChart } from "./progress-chart";
-import { queryStatus } from "./query-status";
+import { queryFallback } from "./query-status";
+import { Bone, Loading } from "./loading";
 import { styles } from "./progress-styles";
 
 export function Progress() {
   const { date } = useDashboardPage();
-  const selected = useSearch({ from: "/progress", select: (search) => search.exercise });
+  const selected = useSearch({ from: "/day/progress", select: (search) => search.exercise });
   const navigate = useNavigate();
   const query = useQuery(exerciseHistoryQueryOptions());
-  const status = queryStatus(query, "Loading your exercises…");
 
-  if (status || !query.data) return <p {...stylex.props(styles.status)}>{status}</p>;
+  if (!query.data || query.isError) return queryFallback(query, <ProgressSkeleton />, styles.status);
 
   // The header date bounds the history, so stepping back shows what you had done by then.
   const exercises = query.data.exercises
@@ -111,5 +111,34 @@ function SessionRow({ session }: { session: ExerciseSession }) {
         </Button>
       </TableCell>
     </TableRow>
+  );
+}
+
+// The exercise picker, the chart, and the sessions table, as placeholders.
+function ProgressSkeleton() {
+  return (
+    <Loading label="Loading your exercises…">
+      <div {...stylex.props(styles.page)}>
+        <div {...stylex.props(styles.toolbar)}>
+          <Bone width={220} height={36} />
+          <Bone width={260} height={12} />
+        </div>
+        <Card {...stylex.props(styles.card)}>
+          <Bone width={180} height={14} />
+          <Bone width="100%" height={220} />
+        </Card>
+        <Card {...stylex.props(styles.tableCard)}>
+          <Table>
+            <TableBody>
+              {Array.from({ length: 5 }, (_, row) => (
+                <TableRow key={row}>
+                  {[70, 160, 60, 40, 60, 32].map((width, cell) => <TableCell key={cell}><Bone width={width} height={12} /></TableCell>)}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Card>
+      </div>
+    </Loading>
   );
 }

@@ -13,8 +13,8 @@ import { foodRoutes } from "./food/routes.js";
 import { idempotencyKeySchema, mutationResponse, revisionHeader } from "./journal/http.js";
 import type { AppDatabase } from "./db/database.js";
 import { getDated, saveDated, type DatedKind, type DatedTable } from "./effective-dated.js";
-import { mealEditSchema, mealInputSchema, mealLogInputSchema, mealLogSchema, savedMealListSchema, savedMealSchema } from "./meals/contract.js";
-import { listMeals, logMeal, mutateMeal } from "./meals/meals.js";
+import { mealInputSchema, mealLogInputSchema, mealLogSchema, savedMealListSchema, savedMealSchema } from "./meals/contract.js";
+import { fillDailyMeals, listMeals, logMeal, mutateMeal } from "./meals/meals.js";
 import { integrationRoutes } from "./wearables/routes.js";
 import { error, errorSchema } from "./http-error.js";
 import type { WearableRuntime } from "./wearables/provider.js";
@@ -79,7 +79,7 @@ export function createApp(db: AppDatabase, identity: Identity, packagedFoods: Pa
     }
   }
 
-  for (const path of ["/", "/food", "/overview", "/progress", "/review"]) {
+  for (const path of ["/", "/food", "/meals", "/meals/*", "/overview", "/progress", "/review"]) {
     app.get(path, async () => new Response(await indexPage(), {
       headers: { ...pageHeaders, "Content-Type": "text/html; charset=utf-8" },
     }));
@@ -151,6 +151,15 @@ export function createApp(db: AppDatabase, identity: Identity, packagedFoods: Pa
     await next();
   });
 
+  // Daily meals log themselves on read: the reads that show logged foods (a day, a week, recent foods) bring the
+  // journal up to date first, so none of them misses a daily meal. Nothing due costs one indexed query.
+  for (const path of ["/v1/days/:date", "/v1/review/:date", "/v1/foods/recent"]) {
+    app.get(path, async (context, next) => {
+      await fillDailyMeals(db, context.get("userId"));
+      await next();
+    });
+  }
+
   app.route("/", integrationRoutes(db, wearables));
 
   app.route("/", foodRoutes(db, packagedFoods));
@@ -158,7 +167,7 @@ export function createApp(db: AppDatabase, identity: Identity, packagedFoods: Pa
   app.get("/v1/saved-meals", async (context) => context.json(await listMeals(db, context.get("userId"))));
   app.openAPIRegistry.registerPath({ method: "get", path: "/v1/saved-meals", responses: { 200: { description: "Saved meals, newest first", ...json(savedMealListSchema) } } });
 
-  // Saving a meal is missing a chosen food entry; the other meal routes are missing the saved meal.
+  // Saving a meal is missing a chosen food entry or catalog food; the other meal routes are missing the saved meal.
   app.post("/v1/saved-meals", async (context) => {
     const input = mealInputSchema.safeParse(await context.req.json().catch(() => null));
 
@@ -166,7 +175,7 @@ export function createApp(db: AppDatabase, identity: Identity, packagedFoods: Pa
 
     return mutationResponse(await mutateMeal(db, context.get("userId"), context.get("idempotencyKey"), { kind: "create", input: input.data }), "Food entry not found");
   });
-  app.openAPIRegistry.registerPath({ method: "post", path: "/v1/saved-meals", request: { headers: mutationHeaders, body: json(mealInputSchema) }, responses: { 201: { description: "A saved meal copying the chosen entries' foods at the given amounts", ...json(savedMealSchema) }, 400: failure("Invalid request or an amount outside the journal's limits"), 404: failure("Food entry not found"), 409: failure("Idempotency conflict") } });
+  app.openAPIRegistry.registerPath({ method: "post", path: "/v1/saved-meals", request: { headers: mutationHeaders, body: json(mealInputSchema) }, responses: { 201: { description: "A saved meal of logged entries, Ciqual foods, and typed or scanned foods at the given amounts", ...json(savedMealSchema) }, 400: failure("Invalid request or an amount outside the journal's limits"), 404: failure("Food entry or catalog food not found"), 409: failure("Idempotency conflict") } });
 
   app.post("/v1/saved-meals/:id/logs", async (context) => {
     const id = z.uuid().safeParse(context.req.param("id"));
@@ -181,13 +190,13 @@ export function createApp(db: AppDatabase, identity: Identity, packagedFoods: Pa
   app.patch("/v1/saved-meals/:id", async (context) => {
     const id = z.uuid().safeParse(context.req.param("id"));
     const revision = revisionHeader(context.req.header("If-Match"));
-    const input = mealEditSchema.safeParse(await context.req.json().catch(() => null));
+    const input = mealInputSchema.safeParse(await context.req.json().catch(() => null));
 
     if (!id.success || revision === null || !input.success) return error(400, "Invalid saved meal edit");
 
     return mutationResponse(await mutateMeal(db, context.get("userId"), context.get("idempotencyKey"), { kind: "edit", id: id.data, revision, input: input.data }), "Saved meal not found");
   });
-  app.openAPIRegistry.registerPath({ method: "patch", path: "/v1/saved-meals/{id}", request: { params: z.object({ id: z.uuid() }), headers: editHeaders, body: json(mealEditSchema) }, responses: { 200: { description: "The renamed meal with the listed items at their new amounts; items left out are removed", ...json(savedMealSchema) }, 400: failure("Invalid request, an item the meal lacks, or an amount outside the journal's limits"), 404: failure("Saved meal not found"), 409: failure("Revision or idempotency conflict") } });
+  app.openAPIRegistry.registerPath({ method: "patch", path: "/v1/saved-meals/{id}", request: { params: z.object({ id: z.uuid() }), headers: editHeaders, body: json(mealInputSchema) }, responses: { 200: { description: "The meal replaced whole: saved items listed by id are kept at their new amounts, other items are added, and items left out are removed. A daily meal's foods are logged on every day from today at its time; null stops future days", ...json(savedMealSchema) }, 400: failure("Invalid request, an item the meal lacks, or an amount outside the journal's limits"), 404: failure("Saved meal, food entry, or catalog food not found"), 409: failure("Revision or idempotency conflict") } });
 
   app.delete("/v1/saved-meals/:id", async (context) => {
     const id = z.uuid().safeParse(context.req.param("id"));

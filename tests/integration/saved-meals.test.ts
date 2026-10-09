@@ -37,7 +37,7 @@ void test("saved meals copy logged foods and log them again in one request", asy
     assert.deepEqual(await (await app.request("/v1/saved-meals", { headers })).json(), { meals: [] });
 
     // Saving copies each food at the chosen amount; an unknown nutrient stays unknown.
-    const body = { name: "Usual breakfast", items: [{ entryId: oats.id, amount: 60 }, { entryId: apple.id, amount: 150 }] };
+    const body = { name: "Usual breakfast", items: [{ entryId: oats.id, amount: 60 }, { entryId: apple.id, amount: 150 }], daily: null };
     const [saved, simultaneous] = await Promise.all([post(app, "/v1/saved-meals", "meal-1", body), post(app, "/v1/saved-meals", "meal-1", body)]);
     assert.equal(saved.status, 201);
     const meal = await saved.json();
@@ -52,11 +52,13 @@ void test("saved meals copy logged foods and log them again in one request", asy
     // Editing or deleting the day it came from never changes the meal.
     assert.equal((await app.request(`/v1/food-entries/${oats.id}`, { method: "DELETE", headers: { ...headers, "Idempotency-Key": "oats-delete", "If-Match": '"1"' } })).status, 204);
     assert.deepEqual((await (await app.request("/v1/saved-meals", { headers })).json()).meals, [meal]);
-    assert.equal((await post(app, "/v1/saved-meals", "meal-gone", { name: "Gone", items: [{ entryId: oats.id, amount: 60 }] })).status, 404);
-    assert.equal((await post(app, "/v1/saved-meals", "meal-foreign", { name: "Foreign", items: [{ entryId: apple.id, amount: 1 }] })).status, 201);
-    assert.equal((await post(otherApp, "/v1/saved-meals", "meal-foreign", { name: "Foreign", items: [{ entryId: apple.id, amount: 1 }] })).status, 404);
-    assert.equal((await post(app, "/v1/saved-meals", "meal-empty", { name: "Empty", items: [] })).status, 400);
-    assert.equal((await post(app, "/v1/saved-meals", "meal-twice", { name: "Twice", items: [{ entryId: apple.id, amount: 1 }, { entryId: apple.id, amount: 2 }] })).status, 400);
+    assert.equal((await post(app, "/v1/saved-meals", "meal-gone", { name: "Gone", items: [{ entryId: oats.id, amount: 60 }], daily: null })).status, 404);
+    assert.equal((await post(app, "/v1/saved-meals", "meal-foreign", { name: "Foreign", items: [{ entryId: apple.id, amount: 1 }], daily: null })).status, 201);
+    assert.equal((await post(otherApp, "/v1/saved-meals", "meal-foreign", { name: "Foreign", items: [{ entryId: apple.id, amount: 1 }], daily: null })).status, 404);
+    assert.equal((await post(app, "/v1/saved-meals", "meal-empty", { name: "Empty", items: [], daily: null })).status, 400);
+    const savedItem = crypto.randomUUID();
+    assert.equal((await post(app, "/v1/saved-meals", "meal-twice", { name: "Twice", items: [{ id: savedItem, amount: 1 }, { id: savedItem, amount: 2 }], daily: null })).status, 400);
+    assert.equal((await post(app, "/v1/saved-meals", "meal-unknown-item", { name: "Unknown", items: [{ id: savedItem, amount: 1 }], daily: null })).status, 400);
 
     // Logging writes the chosen items at one time, in the meal's order, scaled to today's amounts.
     const [oatsItem, appleItem] = meal.items;

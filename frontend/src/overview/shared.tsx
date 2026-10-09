@@ -3,6 +3,7 @@ import { useId, type ReactNode } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Trash2 } from "lucide-react";
+import { Bone } from "../loading";
 import { styles } from "../overview-styles";
 
 export function Section({ title, description, icon, color, action, children }: { title: string; description: string; icon: ReactNode; color: string; action?: ReactNode; children: ReactNode }) {
@@ -91,3 +92,39 @@ export function Sparkline({ points }: { points: number[] }) {
   );
 }
 
+
+const skeletonStyles = stylex.create({
+  gap: { display: "block", height: 6 },
+  push: { flexGrow: 1 },
+});
+
+// A section header over a row of tiles, each a title, a value, and a caption, while the overview loads.
+export function SectionSkeleton({ tiles }: { tiles: number }) {
+  return (
+    <section {...stylex.props(styles.section)}>
+      <header {...stylex.props(styles.sectionHeader)}>
+        <Bone width={36} height={36} />
+        <div {...stylex.props(styles.sectionText)}>
+          <Bone width={110} height={16} />
+          <span {...stylex.props(skeletonStyles.gap)} />
+          <Bone width="40%" height={11} />
+        </div>
+      </header>
+      <div {...stylex.props(styles.grid)}>
+        {Array.from({ length: tiles }, (_, index) => (
+          <Card key={index} {...stylex.props(styles.tile)}>
+            <CardHeader {...stylex.props(styles.tileHeader)}>
+              <Bone width={90} height={13} />
+            </CardHeader>
+            <CardContent {...stylex.props(styles.tileContent)}>
+              <Bone width={100} height={30} />
+              <Bone width="70%" height={11} />
+              <span {...stylex.props(skeletonStyles.push)} />
+              <Bone width="50%" height={11} />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </section>
+  );
+}

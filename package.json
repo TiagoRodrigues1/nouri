@@ -10,6 +10,7 @@
     "dev:web": "pnpm --dir frontend dev",
     "dev:api": "node --env-file-if-exists=.env --import=tsx src/server.ts",
     "dev": "pnpm build:web && concurrently --kill-others --names api,web \"pnpm dev:api\" \"pnpm dev:web\"",
+    "start": "node --env-file-if-exists=.env --import=tsx src/server.ts",
     "db:migrate": "node --env-file-if-exists=.env --import=tsx src/db/migrate.ts",
     "test:unit": "node --import=tsx --test tests/unit/*.test.ts",
     "test:integration": "node --env-file-if-exists=.env --import=tsx --test tests/integration/*.test.ts"
@@ -20,7 +21,6 @@
     "concurrently": "^10.0.5",
     "oxlint": "1.85.0",
     "oxlint-tsgolint": "7.0.2003",
-    "tsx": "^4.23.15",
     "typescript": "7.0.2"
   },
   "dependencies": {
@@ -31,6 +31,7 @@
     "drizzle-orm": "^0.45.3",
     "hono": "^4.13.9",
     "postgres": "^3.4.9",
+    "tsx": "^4.23.15",
     "zod": "^4.6.5"
   }
 }

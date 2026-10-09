@@ -41,29 +41,32 @@ const recordedRefSchema = z.object({
   version: z.string().optional(),
 }).strict();
 
-export const manualInputSchema = z.object({
-  occurredAt: occurredAtSchema,
-  timeZone: timeZoneSchema,
-  food: z.object({
-    name: z.string().trim().min(1).max(200),
-    quantity: quantitySchema,
-    nutrients: nutrientsSchema,
-    catalogRef: recordedRefSchema.optional(),
-  }).strict(),
+const manualFoodSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  quantity: quantitySchema,
+  nutrients: nutrientsSchema,
+  catalogRef: recordedRefSchema.optional(),
 }).strict();
 
-export const catalogInputSchema = z.object({
-  occurredAt: occurredAtSchema,
-  timeZone: timeZoneSchema,
-  food: z.object({
-    kind: z.literal("catalog"),
-    ref: catalogRefSchema,
-    quantity: z.object({ amount: positiveAmount.max(10_000), unit: z.literal("g") }).strict(),
-  }).strict(),
+const catalogFoodSchema = z.object({
+  kind: z.literal("catalog"),
+  ref: catalogRefSchema,
+  quantity: z.object({ amount: positiveAmount.max(10_000), unit: z.literal("g") }).strict(),
 }).strict();
 
-export const submissionSchema = z.union([manualInputSchema, catalogInputSchema]).refine((input) =>
-  !("catalogRef" in input.food && input.food.catalogRef?.provider === "ciqual"));
+// A typed food may name its source, but never Ciqual: a Ciqual food is sent by reference so the server measures it.
+const unforged = (food: z.infer<typeof manualFoodSchema> | z.infer<typeof catalogFoodSchema>) =>
+  !("catalogRef" in food && food.catalogRef?.provider === "ciqual");
+
+// A food as a write sends it: typed or scanned with its nutrients, or a Ciqual food in grams. Logging and saving a
+// meal both take it.
+export const submittedFoodSchema = z.union([manualFoodSchema, catalogFoodSchema]).refine(unforged);
+
+export const manualInputSchema = z.object({ occurredAt: occurredAtSchema, timeZone: timeZoneSchema, food: manualFoodSchema }).strict();
+
+export const catalogInputSchema = z.object({ occurredAt: occurredAtSchema, timeZone: timeZoneSchema, food: catalogFoodSchema }).strict();
+
+export const submissionSchema = z.union([manualInputSchema, catalogInputSchema]).refine((input) => unforged(input.food));
 
 // Logging a saved entry again copies what was recorded, so it keeps working after the catalog it came from changes.
 // An amount scales the recorded food; without one it is logged at the amount recorded.
@@ -74,7 +77,7 @@ export const repeatInputSchema = z.object({
 }).strict();
 
 // A food as the journal recorded it. Repeats, recent foods and saved meals copy it rather than re-reading the catalog.
-export const recordedFoodSchema = manualInputSchema.shape.food.extend({ catalogRef: recordedRefSchema.nullable() });
+export const recordedFoodSchema = manualFoodSchema.extend({ catalogRef: recordedRefSchema.nullable() });
 
 export const entrySchema = recordBaseSchema.extend({ food: recordedFoodSchema });
 
@@ -132,6 +135,8 @@ export type CatalogFoodInput = z.infer<typeof catalogInputSchema>;
 
 export type FoodSubmission = z.infer<typeof submissionSchema>;
 
+export type SubmittedFood = z.infer<typeof submittedFoodSchema>;
+
 export type RepeatInput = z.infer<typeof repeatInputSchema>;
 
 export type FoodEntry = z.infer<typeof entrySchema>;
@@ -168,9 +173,34 @@ export function scaleFood(food: RecordedFood, amount: number): RecordedFood {
   };
 }
 
+// The foods' totals, rounded to the thousandth the journal stores. A nutrient is known only when every food has
+// it, and unknown for no foods. A day's totals and a meal's both come from this.
+export function totalNutrients(foods: Array<RecordedFood["nutrients"]>): RecordedFood["nutrients"] {
+  const total = (pick: (nutrients: RecordedFood["nutrients"]) => number | null): number | null => {
+    if (foods.length === 0) return null;
+    let sum = 0;
+
+    for (const nutrients of foods) {
+      const value = pick(nutrients);
+
+      if (value === null) return null;
+      sum += value;
+    }
+
+    return Math.round(sum * 1000) / 1000;
+  };
+
+  return { kcal: total((n) => n.kcal), proteinG: total((n) => n.proteinG), carbsG: total((n) => n.carbsG), fatG: total((n) => n.fatG) };
+}
+
 // A recorded food as a manual write sends it: the body leaves out a reference it lacks rather than sending null.
 export function manualFood({ catalogRef, ...food }: RecordedFood): FoodInput["food"] {
   return catalogRef ? { ...food, catalogRef } : food;
+}
+
+// A food as a manual write sends it, as the journal records it: a reference it lacks is null.
+export function recordedFood(food: FoodInput["food"]): RecordedFood {
+  return { ...food, catalogRef: food.catalogRef ?? null };
 }
 
 // A scaled food must still fit the journal's limits, which a tiny recorded amount scaled up can exceed.

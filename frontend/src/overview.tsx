@@ -4,11 +4,13 @@ import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs";
 import { useTargetsQuery } from "./lib/use-targets";
-import { queryStatus } from "./query-status";
+import { queryFallback, queryStatus } from "./query-status";
 import { SportsSection } from "./overview/sports";
 import { MeasurementsSection } from "./overview/measurements";
 import { SleepSection } from "./overview/sleep";
 import { ActivitySection } from "./overview/activity";
+import { SectionSkeleton } from "./overview/shared";
+import { Loading } from "./loading";
 import { styles } from "./overview-styles";
 import { maxPhotoBytes, maxThumbnailBytes } from "../../src/photos/contract";
 import type { RecordPath } from "./lib/api";
@@ -109,8 +111,6 @@ export function Overview() {
     sleep: <SleepSection sleep={data.sleep} goalMinutes={targets?.sleepMinutes} busy={busy} onDelete={remove(recordPaths.sleep, "Sleep session")} />,
   } : { sports: null, activity: null, measurements: null, sleep: null };
 
-  const status = queryStatus(query, "Loading your overview…");
-
   return (
     <>
       <Tabs value={tab} onValueChange={(next) => setTab(next === "all" ? "all" : (categories.find((category) => category.id === next)?.id ?? "all"))}>
@@ -120,8 +120,15 @@ export function Overview() {
             <TabsTrigger key={category.id} value={category.id}>{category.name}</TabsTrigger>
           ))}
         </TabsList>
-        {status ? (
-          <p {...stylex.props(styles.status)}>{status}</p>
+        {!data || query.isError ? (
+          queryFallback(query, (
+            <Loading label="Loading your overview…">
+              <div {...stylex.props(styles.sections)}>
+                <SectionSkeleton tiles={4} />
+                <SectionSkeleton tiles={2} />
+              </div>
+            </Loading>
+          ), styles.status)
         ) : (
           <>
             {targetsStatus && <p {...stylex.props(styles.targetsNotice)}>{targetsStatus}</p>}

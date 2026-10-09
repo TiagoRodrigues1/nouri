@@ -10,9 +10,7 @@ import { Label } from "./components/ui/label";
 import { ApiError, lookupBarcode, searchFoods, type Candidate, type PackagedProduct, type SearchResult } from "./lib/api";
 import { nutrientLine, unitLabels } from "./lib/food-text";
 import { typedAmount } from "./lib/typed-amount";
-import { isBarcode, manualFood, scaleFood, type FoodSubmission, type RecordedFood } from "../../src/food/contract";
-
-type FoodInput = FoodSubmission["food"];
+import { isBarcode, manualFood, scaleFood, type RecordedFood, type SubmittedFood } from "../../src/food/contract";
 
 // A food the tab offers. `per100` is 100 g or ml of it, which previews any amount. Ciqual foods log by reference,
 // so the server measures them; a scanned product logs as the scaled label, carrying its Open Food Facts reference.
@@ -21,7 +19,7 @@ type Choice = {
   per100: RecordedFood;
   brand: string | null;
   serving: PackagedProduct["serving"];
-  toFood: (amount: number) => FoodInput;
+  toFood: (amount: number) => SubmittedFood;
 };
 
 function catalogChoice(candidate: Candidate): Choice {
@@ -60,7 +58,11 @@ async function findChoices(term: string): Promise<{ choices: Choice[]; attributi
 // Only an outage is worth asking again; a missing product stays missing.
 const retryOutage = (failures: number, error: Error) => failures < 1 && error instanceof ApiError && error.status === 502;
 
-export function SearchFoodsTab({ pending, onSave }: { pending: boolean; onSave: (event: FormEvent<HTMLFormElement>, food: FoodInput) => void }) {
+// `onPick` gets the food as logging sends it and the same food as it would be recorded, for previews.
+type PickChoice = (food: SubmittedFood, preview: RecordedFood) => void;
+
+// Ciqual search and barcode lookup. The log dialog logs the food picked; the meal editor adds it to the meal.
+export function SearchFoodPicker({ actionLabel, pending = false, onPick }: { actionLabel: string; pending?: boolean; onPick: PickChoice }) {
   const [draft, setDraft] = useState("");
   const [term, setTerm] = useState("");
   const [scanning, setScanning] = useState(false);
@@ -157,7 +159,7 @@ export function SearchFoodsTab({ pending, onSave }: { pending: boolean; onSave: 
         </ul>
       )}
       {/* Keyed by choice, so choosing another food restarts from its default amount. */}
-      {selected && <ChoiceForm key={selected.key} choice={selected} pending={pending} onSave={onSave} />}
+      {selected && <ChoiceForm key={selected.key} choice={selected} pending={pending} actionLabel={actionLabel} onPick={onPick} />}
       {query.data?.attribution.map((source) => (
         <a
           {...stylex.props(styles.sourceLink)}
@@ -173,14 +175,18 @@ export function SearchFoodsTab({ pending, onSave }: { pending: boolean; onSave: 
   );
 }
 
-function ChoiceForm({ choice, pending, onSave }: { choice: Choice; pending: boolean; onSave: (event: FormEvent<HTMLFormElement>, food: FoodInput) => void }) {
+function ChoiceForm({ choice, pending, actionLabel, onPick }: { choice: Choice; pending: boolean; actionLabel: string; onPick: PickChoice }) {
   const unit = unitLabels[choice.per100.quantity.unit];
   const [amount, setAmount] = useState(String(choice.serving?.amount ?? 100));
   const typed = typedAmount(amount);
   const preview = typed === null ? choice.per100 : scaleFood(choice.per100, typed);
 
   return (
-    <form {...stylex.props(styles.selectedForm)} onSubmit={(event) => (typed === null ? event.preventDefault() : onSave(event, choice.toFood(typed)))}>
+    <form {...stylex.props(styles.selectedForm)} onSubmit={(event) => {
+      event.preventDefault();
+
+      if (typed !== null) onPick(choice.toFood(typed), preview);
+    }}>
       <strong {...stylex.props(styles.selectedName)}>{choice.per100.name}</strong>
       <Label {...stylex.props(styles.formLabel, styles.selectedLabel)} htmlFor="search-amount">Amount in {unit}</Label>
       <Input
@@ -196,7 +202,7 @@ function ChoiceForm({ choice, pending, onSave }: { choice: Choice; pending: bool
       {choice.serving && <small {...stylex.props(styles.resultsMeta)}>One serving is {choice.serving.amount} {unit}.</small>}
       <small {...stylex.props(styles.resultsMeta)}>{nutrientLine(preview.nutrients)}</small>
       <Button type="submit" disabled={pending} {...stylex.props(styles.selectedButton)}>
-        Add to log
+        {actionLabel}
       </Button>
     </form>
   );

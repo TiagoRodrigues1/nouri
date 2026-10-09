@@ -1,5 +1,7 @@
 # Saved meals
 
+> Superseded in part by [meals-page-design.md](meals-page-design.md): meals are now built and managed on a Meals page from any food, and the Save as meal dialog is gone.
+
 ## Problem
 
 Log again repeats one food, so a usual breakfast still takes one action per food. A saved meal keeps several foods and their amounts together and logs them in one action. The rules that protect a single entry still apply. The client never sends Ciqual nutrients, since a manual body that carries a Ciqual reference is rejected as forgery. An unknown nutrient stays `null`. A retry never logs the meal twice. A crash never leaves half a meal logged.

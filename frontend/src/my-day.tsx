@@ -5,17 +5,21 @@ import { Beef, BookmarkPlus, Droplet, Flame, Pencil, RotateCcw, Trash2, Wheat } 
 import { Button } from "./components/ui/button";
 import { colors } from "./theme.stylex";
 import { styles } from "./my-day-styles";
+import { styles as dashboardStyles } from "./dashboard-styles";
 import { DashboardCardsDialog, useDashboardCards } from "./dashboard-cards";
 import { clock, entryHour, entryTime } from "./lib/time";
 import { useTargetsQuery } from "./lib/use-targets";
-import { workoutSummaryQueryOptions } from "./lib/day-query";
+import { dayQueryOptions, workoutSummaryQueryOptions } from "./lib/day-query";
 import { useLogAgain } from "./lib/use-log-again";
-import { queryStatus } from "./query-status";
+import { queryError } from "./query-status";
 import { useSupplements } from "./lib/use-supplements";
 import { useDashboardPage } from "./dashboard-page-context";
 import { SupplementsCard } from "./my-day/supplements-card";
-import { format, type CardId, type Day, type FoodEntry } from "./lib/api";
+import { format, type CardId, type FoodEntry } from "./lib/api";
 import { recordPaths } from "../../src/journal/paths";
+import { defaultCards } from "../../src/dashboard/contract";
+import { Bone } from "./loading";
+import { CardSkeleton, CardsSkeleton, TimelineSkeleton } from "./my-day/skeletons";
 import { ActivityCard, FastingCard, Gauge, LargestCard, MealsCard, MixCard, WaterCard, WindowCard } from "./my-day/cards";
 
 type Row =
@@ -23,16 +27,23 @@ type Row =
   | { kind: "entry"; entry: FoodEntry; at: Date }
   | { kind: "now" };
 
-type MyDayProps = { day: Day | undefined; status: ReactNode };
-
-export function MyDay({ day, status }: MyDayProps) {
+// The Today page: the day's timeline beside its cards.
+export function MyDay() {
   const { date, isToday, onEditFood: onEdit, onSaveMeal, foodDelete, journal, onManageSupplements, customizingCards, onCustomizingCardsChange } = useDashboardPage();
   const supplements = useSupplements(date);
   const logAgain = useLogAgain(date);
   const busy = foodDelete.isPending || logAgain.pending;
   const onDelete = (entry: FoodEntry) => foodDelete.mutate(entry);
   const now = useNow();
+  const dayQuery = useQuery(dayQueryOptions(date));
+  const day = dayQuery.data;
+  const loading = dayQuery.isPending;
   const entries = day?.food.entries ?? [];
+
+  // While the day loads, the timeline and cards show their skeletons instead of a message.
+  const status = loading ? null : queryError(dayQuery)
+    ?? (entries.length === 0 ? <strong {...stylex.props(dashboardStyles.emptyTitle)}>No foods logged yet</strong> : null);
+
   const totals = day?.food.totals;
   const times = entries.map((entry) => new Date(entry.occurredAt)).sort((a, b) => a.getTime() - b.getTime());
   const eaten = isToday ? times.filter((time) => time <= now) : times;
@@ -46,8 +57,11 @@ export function MyDay({ day, status }: MyDayProps) {
   // Cards wait for the targets too, so no gauge draws against a value about to change.
   const shown = targets && layout.cards;
 
+  // A card drawn from the day shows its skeleton until the day is here. Activity reads its own summary.
+  const fromDay = (id: CardId, card: ReactNode) => (loading ? <CardSkeleton id={id} /> : card);
+
   const cards: Record<CardId, ReactNode> | undefined = targets && {
-    totals: (
+    totals: fromDay("totals",
       <section {...stylex.props(styles.card, styles.full)}>
         <div {...stylex.props(styles.cardHead)}>
           <h2 {...stylex.props(styles.cardTitle, styles.energy)}>
@@ -61,31 +75,31 @@ export function MyDay({ day, status }: MyDayProps) {
           <Gauge icon={<Wheat size={14} />} label="Carbs" unit="g" value={totals?.carbsG} target={targets.carbsG} color={colors.carbs} />
           <Gauge icon={<Droplet size={14} />} label="Fat" unit="g" value={totals?.fatG} target={targets.fatG} color={colors.fat} />
         </div>
-      </section>
+      </section>,
     ),
-    water: (
+    water: fromDay("water",
       <WaterCard
         goalMl={targets.waterMl}
         entries={day?.water.entries ?? []}
         totalMl={day?.water.totalMl}
         pending={journal.create.isPending || journal.remove.isPending}
         onDelete={(entry) => journal.remove.mutate({ path: recordPaths.water, label: "Water", ...entry })}
-      />
+      />,
     ),
-    supplements: (
+    supplements: fromDay("supplements",
       <SupplementsCard
         day={day?.supplements}
         pending={supplements.pending}
         onTake={supplements.take}
         onRemove={supplements.remove}
         onManage={onManageSupplements}
-      />
+      />,
     ),
-    mix: <MixCard kcal={totals?.kcal} proteinG={totals?.proteinG} carbsG={totals?.carbsG} fatG={totals?.fatG} />,
+    mix: fromDay("mix", <MixCard kcal={totals?.kcal} proteinG={totals?.proteinG} carbsG={totals?.carbsG} fatG={totals?.fatG} />),
     activity: <ActivityCard date={date} targets={targets} />,
-    fasting: isToday && last ? <FastingCard since={now.getTime() - last.getTime()} last={last} goalHours={targets.fastingHours} /> : <WindowCard first={times[0]} last={times.at(-1)} />,
-    largest: <LargestCard entries={entries} totalKcal={totals?.kcal} />,
-    meals: <MealsCard times={times} entries={entries} />,
+    fasting: fromDay("fasting", isToday && last ? <FastingCard since={now.getTime() - last.getTime()} last={last} goalHours={targets.fastingHours} /> : <WindowCard first={times[0]} last={times.at(-1)} />),
+    largest: fromDay("largest", <LargestCard entries={entries} totalKcal={totals?.kcal} />),
+    meals: fromDay("meals", <MealsCard times={times} entries={entries} />),
   };
 
   return (
@@ -95,16 +109,19 @@ export function MyDay({ day, status }: MyDayProps) {
         now={isToday ? now : null}
         logAgainWhen={isToday ? "now" : "today"}
         summary={`${entries.length} ${entries.length === 1 ? "food" : "foods"} · ${format(totals?.kcal)} kcal`}
+        loading={loading}
         status={status}
         busy={busy}
         onLogAgain={logAgain.logAgain}
         onEdit={onEdit}
         onDelete={onDelete}
-        onSaveMeal={() => onSaveMeal({ entryIds: entries.map((entry) => entry.id), name: "" })}
+        onSaveMeal={onSaveMeal}
       />
       <div {...stylex.props(styles.side)}>
-        {!targets ? (
-          <p {...stylex.props(styles.noCards)}>{queryStatus(targetsQuery, "Loading your targets…", "Targets could not load: ")}</p>
+        {!targets && targetsQuery.isError ? (
+          <p {...stylex.props(styles.noCards)}>{queryError(targetsQuery, "Targets could not load: ")}</p>
+        ) : !targets || !layout.cards ? (
+          <CardsSkeleton cards={layout.cards ?? defaultCards} />
         ) : shown?.length === 0 ? (
           <p {...stylex.props(styles.noCards)}>All cards are hidden. Use the customize button at the top to bring some back.</p>
         ) : (
@@ -177,6 +194,8 @@ type TimelineProps = {
   // Logging again always lands today, so a past day says so rather than implying it adds to this one.
   logAgainWhen: "now" | "today";
   summary: string;
+  // The day is still loading, so the timeline shows placeholder rows.
+  loading: boolean;
   status: ReactNode;
   busy: boolean;
   onLogAgain: (entry: FoodEntry) => void;
@@ -185,7 +204,7 @@ type TimelineProps = {
   onSaveMeal: () => void;
 };
 
-function Timeline({ entries, now, logAgainWhen, summary, status, busy, onLogAgain, onEdit, onDelete, onSaveMeal }: TimelineProps) {
+function Timeline({ entries, now, logAgainWhen, summary, loading, status, busy, onLogAgain, onEdit, onDelete, onSaveMeal }: TimelineProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const focusRef = useRef<HTMLLIElement>(null);
   const hasNow = now !== null;
@@ -205,7 +224,7 @@ function Timeline({ entries, now, logAgainWhen, summary, status, busy, onLogAgai
       <header {...stylex.props(styles.timelineHeader)}>
         <h2 {...stylex.props(styles.timelineTitle)}>Timeline</h2>
         <span {...stylex.props(styles.timelineSummary)}>
-          {summary}
+          {loading ? <Bone width={92} height={11} /> : summary}
           {entries.length > 0 && (
             <Button variant="ghost" size="icon" {...stylex.props(styles.entryAction)} aria-label="Save foods as a meal" title="Save as meal" disabled={busy} onClick={onSaveMeal}>
               <BookmarkPlus size={14} />
@@ -215,8 +234,9 @@ function Timeline({ entries, now, logAgainWhen, summary, status, busy, onLogAgai
       </header>
       <div {...stylex.props(styles.timelineBody)}>
         <div ref={scrollRef} {...stylex.props(styles.timelineScroll)}>
+          {loading && <TimelineSkeleton />}
           {status && <div {...stylex.props(styles.timelineMessage)}>{status}</div>}
-          <ol {...stylex.props(styles.timeline)} aria-label="Logged foods">
+          {!loading && <ol {...stylex.props(styles.timeline)} aria-label="Logged foods">
             {rows.map((row, index) => {
               const ref = index === focusIndex ? focusRef : undefined;
 
@@ -281,7 +301,7 @@ function Timeline({ entries, now, logAgainWhen, summary, status, busy, onLogAgai
                 </li>
               );
             })}
-          </ol>
+          </ol>}
         </div>
       </div>
     </section>

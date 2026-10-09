@@ -2,28 +2,48 @@ import { useQuery } from "@tanstack/react-query";
 import { createSavedMeal, deleteSavedMeal, getSavedMeals, logSavedMeal, updateSavedMeal, type SavedMeal } from "./api";
 import { useIdempotentDelete, useIdempotentWrite } from "./use-idempotent";
 import { queryRefresh } from "./query-refresh";
-import type { MealEdit, MealInput, MealLogInput } from "../../../src/meals/contract";
+import type { MealDaily, MealInput, MealLogInput } from "../../../src/meals/contract";
 
 type PendingLog = { meal: SavedMeal; input: MealLogInput };
 
-type PendingEdit = { meal: SavedMeal; input: MealEdit };
+type PendingSave = { meal: SavedMeal | null; input: MealInput };
+
+// A meal saved as daily may fill today, so the day's reads refresh with the list.
+const mealRefresh = ["saved-meals", ...queryRefresh.food];
 
 export function useSavedMeals() {
   return useQuery({ queryKey: ["saved-meals"], queryFn: getSavedMeals });
 }
 
-export function useSaveMeal(onSaved: () => void) {
-  return useIdempotentWrite<MealInput>((input, key) => createSavedMeal(key, input), {
-    refresh: ["saved-meals"], success: (input) => `${input.name} saved.`, onSuccess: onSaved,
-  });
+// Creates the meal, or replaces it when one is given. The revision is part of an edit, so an edit made after
+// another one gets its own key.
+function useMealWrite(success: (pending: PendingSave) => string, onSaved?: () => void) {
+  return useIdempotentWrite<PendingSave>(
+    ({ meal, input }, key) => (meal ? updateSavedMeal(key, meal, input) : createSavedMeal(key, input)),
+    {
+      refresh: mealRefresh, success, onSuccess: onSaved,
+      signature: ({ meal, input }) => JSON.stringify([meal?.id ?? null, meal?.revision ?? null, input]),
+    },
+  );
 }
 
-// The revision is part of the request, so an edit made after another one gets its own key.
-export function useEditMeal(onSaved: () => void) {
-  return useIdempotentWrite<PendingEdit>((pending, key) => updateSavedMeal(key, pending.meal, pending.input), {
-    refresh: ["saved-meals"], success: (pending) => `${pending.input.name} saved.`, onSuccess: onSaved,
-    signature: (pending) => JSON.stringify([pending.meal.id, pending.meal.revision, pending.input]),
-  });
+export function useSaveMeal(onSaved: () => void) {
+  return useMealWrite(({ input }) => `${input.name} saved.`, onSaved);
+}
+
+// The one-tap daily toggle: the meal sent back as it is, with only its daily setting changed.
+export function useMealDaily() {
+  const write = useMealWrite(({ input }) => (input.daily
+    ? `${input.name} will be logged every day at ${input.daily.time}.`
+    : `${input.name} will no longer be logged every day.`));
+
+  return {
+    isPending: write.isPending,
+    set: (meal: SavedMeal, daily: MealDaily | null) => write.mutate({
+      meal,
+      input: { name: meal.name, items: meal.items.map(({ id, food }) => ({ id, amount: food.quantity.amount })), daily },
+    }),
+  };
 }
 
 // A meal logs as one request, so a retry after a dropped response never adds its foods twice.
@@ -34,8 +54,8 @@ export function useLogMeal(onLogged: () => void) {
   });
 }
 
-export function useDeleteMeal() {
+export function useDeleteMeal(onDeleted: () => void) {
   return useIdempotentDelete<SavedMeal>((meal, key) => deleteSavedMeal(meal, key), {
-    refresh: ["saved-meals"], success: (meal) => `${meal.name} removed from your saved meals.`,
+    refresh: ["saved-meals"], success: (meal) => `${meal.name} deleted. Foods already logged from it stay.`, onSuccess: onDeleted,
   });
 }
