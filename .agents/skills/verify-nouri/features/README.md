@@ -9,6 +9,8 @@ This index is the maintained list of Nouri's user paths. Read the relevant file 
 - Start from an empty database and open the journal page.
 - The header date is a shadcn date picker, not a text input. Choose the `Choose log date` button (`Choose the last day of the week` on Review), use `Go to the Previous Month` or `Go to the Next Month` if needed, then choose the day button, named like `Friday, September 25th, 2026`. To return to the current date, use the popover's `Today` button (match it exactly; the calendar's current day is named `Today, Friday, …`).
 - The chosen date sticks for the browser tab. The sidebar `Today` link opens My Day on that remembered date, not on today, so check the `h1` reads `Today` before a recipe that says to stay on today's date.
+- `+ Log` opens a popover whose choices (`Food`, `Water`, `Sleep`, `Exercise`, `Measurement`) are buttons, not menu items: use `getByRole("dialog").getByRole("button", { name: "Food", exact: true })`.
+- Below 680px wide the sidebar becomes a top bar holding `+ Log`, the `Targets`, `Supplements`, and `Wearables` icon buttons, and `Open user menu` (the account's name or address is hidden), and the page links move to a bottom tab bar. Names stay the same, so recipes that say "sidebar" work at phone width too.
 - Keep screenshots and redacted snapshots in `/tmp/nouri-verification-evidence/$RUN_ID`.
 
 ## Proof rules
@@ -40,3 +42,4 @@ This index is the maintained list of Nouri's user paths. Read the relevant file 
 - [Meals](saved-meals.md): Meals page in the main navigation, build a meal from search, recent, and manual foods, edit and delete it, start one from the Timeline's Save as meal, log it from the Meals tab of `+ Log` > `Food`, make it log itself every day.
 - [Supplements](supplements.md): sidebar dialog edits the list from today, My Day checklist ticks and unticks intakes, earlier days keep their list.
 - [Targets](targets.md): sidebar dialog, save, pages reflect new targets, earlier days keep old ones.
+- [MCP server](mcp.md): `/mcp` refuses requests without an OAuth token and points clients at Clerk; the tools themselves need a registered OAuth client.

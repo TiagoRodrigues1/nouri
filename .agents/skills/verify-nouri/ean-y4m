@@ -1,0 +1,30 @@
+#!/usr/bin/env python3
+"""Write an EAN-13 barcode as a Y4M video for Chrome's fake camera: ean-y4m CODE OUT.y4m"""
+import sys
+
+if len(sys.argv) != 3 or not (sys.argv[1].isdigit() and len(sys.argv[1]) == 13):
+    sys.exit("Usage: ean-y4m 13-DIGIT-CODE OUT.y4m")
+
+code, out = sys.argv[1], sys.argv[2]
+left_odd = ["0001101", "0011001", "0010011", "0111101", "0100011", "0110001", "0101111", "0111011", "0110111", "0001011"]
+left_even = ["0100111", "0110011", "0011011", "0100001", "0011101", "0111001", "0000101", "0010001", "0001001", "0010111"]
+right = ["1110010", "1100110", "1101100", "1000010", "1011100", "1001110", "1010000", "1000100", "1001000", "1110100"]
+# The first digit is not drawn; it picks which left digits use the even-parity patterns.
+parity = ["LLLLLL", "LLGLGG", "LLGGLG", "LLGGGL", "LGLLGG", "LGGLLG", "LGGGLL", "LGLGLG", "LGLGGL", "LGGLGL"][int(code[0])]
+modules = "101" + "".join((left_odd if p == "L" else left_even)[int(d)] for p, d in zip(parity, code[1:7])) + "01010" + "".join(right[int(d)] for d in code[7:]) + "101"
+
+# White 640x480 frames with black bars 5 px per module across the middle half.
+width, height, module = 640, 480, 5
+start = (width - len(modules) * module) // 2
+row = bytearray([235] * width)
+for i, bit in enumerate(modules):
+    if bit == "1":
+        row[start + i * module:start + (i + 1) * module] = bytes([16] * module)
+blank = bytes([235] * width)
+luma = b"".join(bytes(row) if height // 4 <= y < height * 3 // 4 else blank for y in range(height))
+chroma = bytes([128]) * (width * height // 2)
+
+with open(out, "wb") as f:
+    f.write(b"YUV4MPEG2 W640 H480 F10:1 Ip A1:1 C420jpeg\n")
+    for _ in range(20):
+        f.write(b"FRAME\n" + luma + chroma)
