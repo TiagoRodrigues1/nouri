@@ -290,7 +290,6 @@ export class FakeGoogle {
     if (!since) return json(400, { error: "INVALID_ARGUMENT" });
 
     const points = [...this.days].flatMap(([date, day]) => date >= since && day.restingBpm !== undefined ? [{
-      name: `users/4f7c2a/dataTypes/daily-resting-heart-rate/dataPoints/${date.replaceAll("-", "")}`,
       dailyRestingHeartRate: { date: civil(date), beatsPerMinute: this.unreadableResting ? "many" : String(day.restingBpm), dailyRestingHeartRateMetadata: { calculationMethod: "WITH_SLEEP" } },
     }] : []);
 

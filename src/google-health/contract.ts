@@ -103,13 +103,13 @@ export type ExerciseDataPoint = z.infer<typeof exerciseDataPointSchema>;
 
 // A page of any data type. Each point is parsed on its own, so one odd record does not stop the rest.
 export const dataPageSchema = z.object({
-  dataPoints: z.array(z.object({ name: z.string().min(1) }).loose()).default([]),
+  // Google leaves name empty or omits it for data types without individual IDs.
+  dataPoints: z.array(z.object({ name: z.string().optional() }).loose()).default([]),
   nextPageToken: z.string().optional(),
 });
 
 // One resting heart rate per local day, from the daily-resting-heart-rate data type.
 export const restingHeartRatePointSchema = z.object({
-  name: z.string().min(1),
   dailyRestingHeartRate: z.object({ date: civilDateSchema, beatsPerMinute: numberSchema }),
 });
 
