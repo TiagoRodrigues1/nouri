@@ -51,6 +51,7 @@ On the client, the existing code passed `token: string` through about 30 hooks a
 
 ## Not in this version
 
-- Account deletion and data export (GDPR erasure, portability). Clerk's `user.deleted` webhook should trigger deleting that user's rows.
+Account deletion and data export arrived later; see [account-data-design.md](account-data-design.md).
+
 - Organizations, roles, and billing.
 - A native app. It would send Clerk session tokens the same way.

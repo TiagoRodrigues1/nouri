@@ -9,6 +9,7 @@ import {
   CalendarRange,
   ChartColumn,
   CookingPot,
+  Download,
   Droplet,
   Dumbbell,
   Moon,
@@ -24,7 +25,7 @@ import { toast } from "sonner";
 import { Button } from "./components/ui/button";
 import { DatePicker } from "./components/ui/date-picker";
 import { UserButton, useUser } from "@clerk/react";
-import { createFood, deleteFood } from "./lib/api";
+import { createFood, deleteFood, downloadAccountExport } from "./lib/api";
 import { dateLabel, localDate, occurredAt, shiftDate, weekLabel, timeZone as zone } from "./lib/time";
 import { useIdempotentWrite, useIdempotentDelete } from "./lib/use-idempotent";
 import { queryRefresh } from "./lib/query-refresh";
@@ -212,7 +213,15 @@ export function Dashboard() {
         </nav>
         <div {...stylex.props(styles.sidebarBottom)}>
           <div {...stylex.props(styles.profile)}>
-            <UserButton />
+            <UserButton>
+              <UserButton.MenuItems>
+                <UserButton.Action
+                  label="Download my data"
+                  labelIcon={<Download size={16} />}
+                  onClick={() => void downloadAccountExport().catch((failure: Error) => toast.error(failure.message))}
+                />
+              </UserButton.MenuItems>
+            </UserButton>
             <div {...stylex.props(styles.profileName)}>
               <strong {...stylex.props(styles.profileText)}>{user?.fullName ?? user?.primaryEmailAddress?.emailAddress ?? "Your account"}</strong>
               {user?.fullName && <small {...stylex.props(styles.profileText, styles.profileSubtext)}>{user.primaryEmailAddress?.emailAddress}</small>}

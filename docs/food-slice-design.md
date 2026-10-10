@@ -36,7 +36,7 @@ If-Match: "2"
 
 ## Shape
 
-`food_entries` holds the current version of each entry, including a nutrient snapshot, `local_date`, revision, and deletion marker. `idempotency_keys` holds the request fingerprint and first HTTP result under a unique `(user_id, key)` constraint. A write transaction owns both rows. A retry with the same fingerprint returns the saved result before checking the current revision. Reusing a key for a different request fails. Receipt rows have no expiry in this slice, so old create retries remain safe.
+`food_entries` holds the current version of each entry, including a nutrient snapshot, `local_date`, revision, and deletion marker. `idempotency_keys` holds the request fingerprint and first HTTP result under a unique `(user_id, key)` constraint. A write transaction owns both rows. A retry with the same fingerprint returns the saved result before checking the current revision. Reusing a key for a different request fails. Receipts now expire after 30 days; [account-data-design.md](account-data-design.md) explains the rule.
 
 ```ts
 type FoodInput = { occurredAt: string; timeZone: string; food: FoodPortion };
@@ -113,7 +113,7 @@ I compared a mutable current-entry table with an append-only table of full entry
 
 ## Open questions and risks
 
-- How long should the service retain retry receipts once account deletion and retention policy are designed? Removing them without another stable create identity would reopen duplicate risk for late retries.
+- Receipts expire after 30 days ([account-data-design.md](account-data-design.md)). A retry sent later creates a duplicate, so offline clients must drop older queued writes.
 - Should a later day view re-group every entry in one chosen display zone? This slice follows the current architecture's recorded-zone rule.
 
 ## Next implementation step

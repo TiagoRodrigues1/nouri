@@ -28,8 +28,9 @@ export function mcpRoutes(db: AppDatabase, identity: Identity, publicUrl?: strin
 
   app.post("/mcp", async (context) => {
     const clerkUserId = await identity.authenticateAgent(context.req.raw);
+    const userId = clerkUserId && await userFor(db, clerkUserId);
 
-    if (!clerkUserId) {
+    if (!userId) {
       const response = error(401, "Unauthorized");
 
       response.headers.set("WWW-Authenticate", `Bearer resource_metadata="${originOf(context.req.raw)}${metadataPath}"`);
@@ -37,7 +38,7 @@ export function mcpRoutes(db: AppDatabase, identity: Identity, publicUrl?: strin
       return response;
     }
 
-    const server = nouriMcpServer(db, await userFor(db, clerkUserId));
+    const server = nouriMcpServer(db, userId);
     const transport = new WebStandardStreamableHTTPServerTransport({ enableJsonResponse: true });
 
     await server.connect(transport);

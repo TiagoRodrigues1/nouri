@@ -9,9 +9,12 @@ import type { Activity, StrengthExercise } from "../workouts/contract.js";
 import { sql } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 
+// Each person's records reference their users row, so deleting it erases them.
+const ownerColumn = () => uuid("user_id").notNull().references((): AnyPgColumn => users.id, { onDelete: "cascade" });
+
 const journalColumns = {
   id: uuid("id").primaryKey(),
-  userId: uuid("user_id").notNull(),
+  userId: ownerColumn(),
   timeZone: text("time_zone").notNull(),
   localDate: date("local_date").notNull(),
   revision: integer("revision").notNull().default(1),
@@ -40,7 +43,7 @@ export const foodEntries = pgTable("food_entries", {
 
 export const savedMeals = pgTable("saved_meals", {
   id: uuid("id").primaryKey(),
-  userId: uuid("user_id").notNull(),
+  userId: ownerColumn(),
   name: text("name").notNull(),
   items: jsonb("items").$type<StoredMealItem[]>().notNull(),
   dailyTime: text("daily_time"),
@@ -98,7 +101,7 @@ export const sleepSessions = pgTable("sleep_sessions", {
 }, (table) => [activeDayIndex("sleep_sessions", table), uniqueIndex("sleep_sessions_user_source_idx").on(table.userId, table.source, table.sourceId).where(sql`source_id IS NOT NULL`)]);
 
 const dailyTotalColumns = {
-  userId: uuid("user_id").notNull(),
+  userId: ownerColumn(),
   localDate: date("local_date").notNull(),
   source: text("source").$type<WearableProvider>().notNull(),
   sourceFingerprint: text("source_fingerprint").notNull(),
@@ -120,7 +123,7 @@ export const dailyHeartRate = pgTable("daily_heart_rate", {
 }, (table) => [primaryKey({ columns: [table.userId, table.localDate, table.source] })]);
 
 export const wearableConnections = pgTable("wearable_connections", {
-  userId: uuid("user_id").notNull(),
+  userId: ownerColumn(),
   provider: text("provider").$type<WearableProvider>().notNull(),
   scope: text("scope").notNull(),
   refreshToken: text("refresh_token"),
@@ -133,7 +136,7 @@ export const wearableConnections = pgTable("wearable_connections", {
 
 export const wearableOauthStates = pgTable("wearable_oauth_states", {
   stateHash: text("state_hash").primaryKey(),
-  userId: uuid("user_id").notNull(),
+  userId: ownerColumn(),
   provider: text("provider").$type<WearableProvider>().notNull(),
   codeVerifier: text("code_verifier").notNull(),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
@@ -152,13 +155,13 @@ export const progressPhotos = pgTable("progress_photos", {
 }, (table) => [activeDayIndex("progress_photos", table)]);
 
 export const dashboardLayouts = pgTable("dashboard_layouts", {
-  userId: uuid("user_id").primaryKey(),
+  userId: ownerColumn().primaryKey(),
   cards: text("cards").array().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const userTargets = pgTable("user_targets", {
-  userId: uuid("user_id").notNull(),
+  userId: ownerColumn(),
   effectiveFrom: date("effective_from").notNull(),
   kcal: integer("kcal").notNull(),
   proteinG: integer("protein_g").notNull(),
@@ -176,7 +179,7 @@ export const userTargets = pgTable("user_targets", {
 }, (table) => [primaryKey({ columns: [table.userId, table.effectiveFrom] })]);
 
 export const supplementStacks = pgTable("supplement_stacks", {
-  userId: uuid("user_id").notNull(),
+  userId: ownerColumn(),
   effectiveFrom: date("effective_from").notNull(),
   supplements: jsonb("supplements").$type<Supplement[]>().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -192,16 +195,22 @@ export const supplementIntakes = pgTable("supplement_intakes", {
 }, (table) => [activeDayIndex("supplement_intakes", table)]);
 
 export const mutationReceipts = pgTable("mutation_receipts", {
-  userId: uuid("user_id").notNull(),
+  userId: ownerColumn(),
   key: text("key").notNull(),
   requestHash: text("request_hash").notNull(),
   outcome: text("outcome").$type<"created" | "updated" | "deleted" | "missing" | "stale" | "key-reuse">(),
   body: jsonb("body").$type<unknown>(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-}, (table) => [primaryKey({ columns: [table.userId, table.key] })]);
+}, (table) => [primaryKey({ columns: [table.userId, table.key] }), index("mutation_receipts_created_idx").on(table.createdAt)]);
 
 export const users = pgTable("users", {
   id: uuid("id").primaryKey(),
   clerkUserId: text("clerk_user_id").notNull().unique(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Clerk users whose account was erased; a session token issued before the erasure cannot create a new account.
+export const erasedUsers = pgTable("erased_users", {
+  clerkUserId: text("clerk_user_id").primaryKey(),
+  erasedAt: timestamp("erased_at", { withTimezone: true }).notNull().defaultNow(),
 });

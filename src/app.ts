@@ -4,6 +4,7 @@ import type { RouteConfig } from "@hono/zod-openapi";
 import { bodyLimit } from "hono/body-limit";
 import { compress } from "hono/compress";
 import { z } from "zod";
+import { eraseAccount, exportAccount } from "./account/account.js";
 import { dashboardSchema } from "./dashboard/contract.js";
 import { getDashboard, saveDashboard } from "./dashboard/dashboard.js";
 import { daySchema } from "./days/contract.js";
@@ -130,7 +131,10 @@ export function createApp(db: AppDatabase, identity: Identity, packagedFoods: Pa
     let userId = userIds.get(clerkUserId);
 
     if (!userId) {
-      userId = await userFor(db, clerkUserId);
+      const found = await userFor(db, clerkUserId);
+
+      if (!found) return error(401, "Unauthorized");
+      userId = found;
 
       // Bounds memory; clearing only costs the next request of each person one lookup.
       if (userIds.size >= 10_000) userIds.clear();
@@ -139,6 +143,21 @@ export function createApp(db: AppDatabase, identity: Identity, packagedFoods: Pa
 
     context.set("userId", userId);
     await next();
+  });
+
+  // Clerk sends this when a person deletes their account in Clerk, and Nouri erases their records. Outside /v1:
+  // Clerk signs the request instead of sending a session. A failure answers 500, and Clerk retries.
+  app.post("/webhooks/clerk", async (context) => {
+    const event = await identity.readWebhook(context.req.raw);
+
+    if (event === "forged") return error(401, "Invalid webhook signature");
+
+    if (event.deletedUser) {
+      await eraseAccount(db, wearables, event.deletedUser);
+      userIds.delete(event.deletedUser);
+    }
+
+    return context.body(null, 204);
   });
 
   app.use("/v1/*", async (context, next) => {
@@ -382,6 +401,19 @@ export function createApp(db: AppDatabase, identity: Identity, packagedFoods: Pa
   datedRoutes("/v1/targets", targetsKind, { label: "targets", read: "Targets in force on the local day; defaults until the user saves some", save: "Targets saved to take effect on the local day, until the next change", invalid: "Missing or out-of-range target" });
   datedRoutes(recordPaths.supplementStack, stackKind, { label: "supplement stack", read: "Supplements in force on the local day; empty until the user saves some", save: "Supplements saved to take effect on the local day, until the next change", invalid: "Invalid supplement or repeated id" });
 
+
+  app.get("/v1/account/export", (context) => {
+    const now = new Date();
+
+    return new Response(exportAccount(db, context.get("userId"), now), {
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        "Content-Disposition": `attachment; filename="nouri-export-${now.toISOString().slice(0, 10)}.json"`,
+        "Cache-Control": "private, no-store",
+      },
+    });
+  });
+  app.openAPIRegistry.registerPath({ method: "get", path: "/v1/account/export", responses: { 200: { description: "Every record stored for the account, including deleted entries and retry receipts, as JSON keyed by table. Binary columns are base64; provider tokens are left out", content: { "application/json": { schema: z.object({ format: z.literal("nouri-export/1"), exportedAt: z.iso.datetime(), account: z.object({ id: z.uuid(), created_at: z.string() }), tables: z.record(z.string(), z.array(z.record(z.string(), z.unknown()))) }) } } } } });
 
   app.doc31("/openapi.json", { openapi: "3.1.0", info: { title: "Nouri API", version: "1.0.0" } });
 

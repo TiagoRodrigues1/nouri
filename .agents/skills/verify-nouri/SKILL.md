@@ -1,6 +1,6 @@
 ---
 name: verify-nouri
-description: Verify Nouri's signed-in food journal web page and API through an isolated local PostgreSQL instance and a real browser. Use after changes to account access, food search, food or water logging, food edits, saved meals, daily totals, date navigation, deletion, My Day cards, targets, supplements (the list and daily ticks on My Day), the Overview page (measurements, workouts, sleep, progress photos), workout history on the Progress page, or the seven-day Review page, including Google Health sleep, workout, steps, active energy, and heart rate import.
+description: Verify Nouri's signed-in food journal web page and API through an isolated local PostgreSQL instance and a real browser. Use after changes to account access, data export, food search, food or water logging, food edits, saved meals, daily totals, date navigation, deletion, My Day cards, targets, supplements (the list and daily ticks on My Day), the Overview page (measurements, workouts, sleep, progress photos), workout history on the Progress page, or the seven-day Review page, including Google Health sleep, workout, steps, active energy, and heart rate import.
 ---
 
 # Verify Nouri
