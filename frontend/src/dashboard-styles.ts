@@ -24,7 +24,14 @@ export const styles = stylex.create({
     alignItems: { default: "stretch", "@media (max-width: 680px)": "center" },
     justifyContent: { default: "normal", "@media (max-width: 680px)": "space-between" },
     minHeight: { default: "100vh", "@media (max-width: 680px)": 0 },
-    padding: { default: "32px 18px 22px", "@media (max-width: 680px)": "13px 16px" },
+    padding: { default: "32px 18px 22px", "@media (max-width: 680px)": "10px 14px" },
+    gap: { default: 0, "@media (max-width: 680px)": 8 },
+    position: { default: "static", "@media (max-width: 680px)": "sticky" },
+    top: 0,
+    zIndex: 20,
+  },
+  brandName: {
+    display: { default: "inline", "@media (max-width: 680px)": "none" },
   },
   brand: {
     display: "flex",
@@ -117,17 +124,19 @@ export const styles = stylex.create({
   },
   sidebarBottom: {
     marginTop: "auto",
-    display: { default: "block", "@media (max-width: 680px)": "none" },
   },
   profile: {
-    borderTopWidth: 1, borderTopStyle: "solid", borderTopColor: colors.border,
+    borderTopWidth: { default: 1, "@media (max-width: 680px)": 0 },
+    borderTopStyle: "solid",
+    borderTopColor: colors.border,
     display: "flex",
     alignItems: "center",
     gap: "10px",
-    padding: "17px 8px 0",
+    padding: { default: "17px 8px 0", "@media (max-width: 680px)": 0 },
   },
   profileName: {
     minWidth: 0,
+    display: { default: "block", "@media (max-width: 680px)": "none" },
   },
   mainArea: {
     minWidth: "0",
@@ -135,7 +144,10 @@ export const styles = stylex.create({
   pageContent: {
     maxWidth: "1270px",
     margin: "0 auto",
-    padding: { default: "42px 40px 80px", "@media (max-width: 680px)": "26px 18px 60px" },
+    padding: {
+      default: "42px 40px 80px",
+      "@media (max-width: 680px)": "22px 16px calc(96px + env(safe-area-inset-bottom))",
+    },
   },
   dateActions: {
     display: "flex",
@@ -144,7 +156,32 @@ export const styles = stylex.create({
   },
   sidebarNav: {
     marginTop: { default: "38px", "@media (max-width: 680px)": 0 },
+    marginLeft: { default: 0, "@media (max-width: 680px)": "auto" },
+  },
+  // On phones the page links become a bottom tab bar and settings stay in the top bar as icons.
+  navPages: {
+    position: { default: "static", "@media (max-width: 680px)": "fixed" },
+    insetInline: 0,
+    bottom: 0,
+    zIndex: 20,
     display: { default: "block", "@media (max-width: 680px)": "flex" },
+    padding: { default: 0, "@media (max-width: 680px)": "4px 6px env(safe-area-inset-bottom)" },
+    backgroundColor: colors.sidebar,
+    borderTopWidth: { default: 0, "@media (max-width: 680px)": 1 },
+    borderTopStyle: "solid",
+    borderTopColor: colors.border,
+  },
+  navSettings: {
+    display: { default: "block", "@media (max-width: 680px)": "flex" },
+  },
+  tabItem: {
+    flex: { default: "none", "@media (max-width: 680px)": "1 1 0" },
+    flexDirection: { default: "row", "@media (max-width: 680px)": "column" },
+    justifyContent: { default: "flex-start", "@media (max-width: 680px)": "center" },
+    gap: { default: "15px", "@media (max-width: 680px)": "3px" },
+    minHeight: { default: "43px", "@media (max-width: 680px)": "52px" },
+    padding: { default: "0 15px", "@media (max-width: 680px)": "0 2px" },
+    fontSize: { default: "13px", "@media (max-width: 680px)": "10px" },
   },
   navCaptionData: {
     marginTop: "42px",

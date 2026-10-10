@@ -33,9 +33,8 @@ lastSession(exercises, " SQUAT", "2026-10-01"); // the 24 Sep session, matched b
 src/workouts/contract.ts      exerciseKey(name), exerciseSessionSchema, exerciseHistorySchema, exerciseHistoryListSchema
 src/workouts/workouts.ts      getExerciseHistory(db, userId): fold strength workouts into per-exercise sessions
 src/app.ts                    GET /v1/workouts/exercises
-frontend/src/lib/exercise-history.ts   query options, lastSession(exercises, name, date), exerciseNames(exercises, date), sessionsUpTo(exercise, date)
-frontend/src/components/ui/autocomplete.tsx   free-text input with suggestions: Base UI's Autocomplete root around shadcn's Combobox parts
-frontend/src/overview-dialogs.tsx      name suggestions, LastTime line, and Repeat in each exercise card
+frontend/src/lib/exercise-history.ts   query options, lastSession(exercises, name, date)
+frontend/src/overview-dialogs.tsx      LastTime line and Repeat in each exercise card
 frontend/src/progress.tsx              the /progress page: picker, chart, session table
 frontend/src/overview/sports.tsx       exercise names link to /progress
 ```
@@ -79,15 +78,10 @@ B gives indexed per-exercise reads, but it stores every exercise twice, adds a s
 - We accept reading all of a user's strength workouts on each history request in exchange for no schema change and no second copy of the data. If history grows past a few thousand sessions, the read can move to SQL (`jsonb_array_elements`) or a cap without changing the response.
 - Names are matched by `exerciseKey` only. "Back squat" and "Squat" remain separate exercises; there is no rename or merge.
 - A session's chart value is its top weight. Rep progress at the same weight shows in the table, not the line.
-- The name field suggests exercises done on or before the dialog's date, most recently done first, but accepts any name. Picking a suggestion fills in its latest spelling.
 
 ## Name autocomplete
 
-The shadcn Combobox is built on Base UI's Combobox, which only accepts one of its items. An exercise name is free text, and a new one is the normal case the first time, so the field uses Base UI's Autocomplete root instead. Its parts are the same primitives as the Combobox's (`Autocomplete.Item` is `Combobox.Item`), so shadcn's styled `ComboboxInput`, `ComboboxContent`, `ComboboxList`, and `ComboboxItem` render it unchanged. `Autocomplete` takes `value`, `onValueChange`, `suggestions`, and input attributes, and hides the rest.
-
-The control filters the suggestions itself and keeps the popup closed when none match or the only match is what was already typed. Base UI would otherwise open an empty popup, and an open popup marks the rest of the dialog `aria-hidden`. The popup portals to the body, which the Radix dialog makes inert to the pointer, so the popup turns pointer events back on. Radix still treats those clicks as inside the dialog, because the portal is inside the dialog's React tree.
-
-A creatable Combobox, with a `Use "…"` item for a new name, was rejected: it loses text typed and not picked, and makes every new exercise one more step. A listbox built by hand on the Popover would have re-implemented the combobox keyboard and ARIA behaviour that Base UI already provides.
+The free-text name field with suggestions was replaced by the exercise picker; [exercise-library-design.md](exercise-library-design.md) explains it. Exercises are still matched by `exerciseKey(name)`.
 
 ## Alternatives considered
 

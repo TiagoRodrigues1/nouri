@@ -1,7 +1,6 @@
 import * as stylex from "@stylexjs/stylex";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Autocomplete } from "./components/ui/autocomplete";
 import { Button } from "./components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "./components/ui/dialog";
 import { Input } from "./components/ui/input";
@@ -11,7 +10,10 @@ import { TimePicker } from "./components/ui/time-picker";
 import { styles as formStyles } from "./form-styles";
 import { colors } from "./theme.stylex";
 import { useExitingRows } from "./lib/use-exiting-rows";
-import { exerciseHistoryQueryOptions, exerciseNames, lastSession, setsLabel } from "./lib/exercise-history";
+import { ExercisePicker } from "./exercise-picker";
+import { exerciseHistoryQueryOptions, lastSession, setsLabel } from "./lib/exercise-history";
+import { exerciseDetail, exerciseLibraryQueryOptions } from "./lib/exercise-library";
+import { exerciseKey } from "../../src/workouts/contract";
 import { selectValue } from "./lib/select-value";
 import type { MeasurementInput } from "../../src/measurements/contract";
 import type { StrengthExercise, WorkoutInput } from "../../src/workouts/contract";
@@ -182,15 +184,22 @@ export function WorkoutDialog({ open, onOpenChange, ...props }: RecordDialogProp
 function WorkoutForm({ date, pending, onSave }: FormProps<WorkoutInput>) {
   const [activity, setActivity] = useState<Activity>("run");
   const [time, setTime] = useState(currentTime);
-  const [exercises, setExercises] = useState(() => [{ id: crypto.randomUUID(), name: "", sets: "", reps: "", weight: "" }]);
+  // Every card holds a picked exercise: Add exercise opens the picker first, and a card's name button changes it.
+  const [exercises, setExercises] = useState<{ id: string; name: string; sets: string; reps: string; weight: string }[]>([]);
+  // The card the picker is choosing for, or "new" for one it adds.
+  const [picking, setPicking] = useState<string | null>(null);
   const { add, remove, rowProps, busy } = useExitingRows();
   const history = useQuery({ ...exerciseHistoryQueryOptions(), enabled: activity === "strength" });
-  const names = history.data ? exerciseNames(history.data.exercises, date) : [];
+  const library = useQuery({ ...exerciseLibraryQueryOptions(), enabled: activity === "strength" });
 
-  function addExercise() {
-    const id = crypto.randomUUID();
-    add(id);
-    setExercises((current) => [...current, { id, name: "", sets: "", reps: "", weight: "" }]);
+  function pickExercise(name: string) {
+    if (picking === "new") {
+      const id = crypto.randomUUID();
+      add(id);
+      setExercises((current) => [...current, { id, name, sets: "", reps: "", weight: "" }]);
+    } else if (picking) {
+      updateExercise(picking, { name });
+    }
   }
 
   function removeExercise(id: string) {
@@ -225,82 +234,93 @@ function WorkoutForm({ date, pending, onSave }: FormProps<WorkoutInput>) {
   }
 
   return (
-    <form {...stylex.props(formStyles.formStack)} onSubmit={submit}>
-      <div {...stylex.props(formStyles.manualGrid)}>
-        <div>
-          <Label htmlFor="workout-activity" {...stylex.props(formStyles.formLabel)}>Activity</Label>
-          <Select value={activity} onValueChange={(next) => setActivity(selectValue(activities, next, "other"))}>
-            <SelectTrigger id="workout-activity" {...stylex.props(formStyles.selectTrigger)}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {activities.map((option) => (
-                <SelectItem key={option} value={option}>
-                  {activityLabels[option]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div>
-          <Label htmlFor="workout-duration" {...stylex.props(formStyles.formLabel)}>Duration (min)</Label>
-          <Input id="workout-duration" name="duration" type="number" inputMode="numeric" min={1} max={1440} step={1} required />
-        </div>
-        {activity !== "strength" && (
+    <>
+      <form {...stylex.props(formStyles.formStack)} onSubmit={submit}>
+        <div {...stylex.props(formStyles.manualGrid)}>
           <div>
-            <Label htmlFor="workout-distance" {...stylex.props(formStyles.formLabel)}>Distance (km, optional)</Label>
-            <Input id="workout-distance" name="distance" type="number" inputMode="decimal" min={0.01} max={1000} step={0.01} />
+            <Label htmlFor="workout-activity" {...stylex.props(formStyles.formLabel)}>Activity</Label>
+            <Select value={activity} onValueChange={(next) => setActivity(selectValue(activities, next, "other"))}>
+              <SelectTrigger id="workout-activity" {...stylex.props(formStyles.selectTrigger)}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {activities.map((option) => (
+                  <SelectItem key={option} value={option}>
+                    {activityLabels[option]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label htmlFor="workout-duration" {...stylex.props(formStyles.formLabel)}>Duration (min)</Label>
+            <Input id="workout-duration" name="duration" type="number" inputMode="numeric" min={1} max={1440} step={1} required />
+          </div>
+          {activity !== "strength" && (
+            <div>
+              <Label htmlFor="workout-distance" {...stylex.props(formStyles.formLabel)}>Distance (km, optional)</Label>
+              <Input id="workout-distance" name="distance" type="number" inputMode="decimal" min={0.01} max={1000} step={0.01} />
+            </div>
+          )}
+          <div>
+            <Label htmlFor="workout-energy" {...stylex.props(formStyles.formLabel)}>Energy (kcal, optional)</Label>
+            <Input id="workout-energy" name="energy" type="number" inputMode="numeric" min={0} max={10000} step={1} />
+          </div>
+        </div>
+        {activity === "strength" && (
+          <div data-exercise-list="" {...stylex.props(styles.exerciseList)}>
+            <p {...stylex.props(formStyles.formSubhead)}>EXERCISES</p>
+            {exercises.length === 0 && <p {...stylex.props(formStyles.fieldHint)}>Add the exercises you did to follow them on Progress.</p>}
+            {exercises.map((exercise, index) => {
+              const known = library.data?.exercises.find((candidate) => candidate.key === exerciseKey(exercise.name));
+              const detail = known ? exerciseDetail(known) : null;
+
+              return (
+                <div key={exercise.id} {...rowProps(exercise.id)} {...stylex.props(styles.exerciseCard)}>
+                  <div {...stylex.props(styles.exerciseHeader)}>
+                    <strong>Exercise {index + 1}</strong>
+                    <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() => removeExercise(exercise.id)}>Remove</Button>
+                  </div>
+                  <div>
+                    <Button type="button" variant="outline" aria-label={`${exercise.name}, change exercise`} onClick={() => setPicking(exercise.id)} {...stylex.props(styles.exerciseChoice)}>
+                      <span {...stylex.props(styles.exerciseChoiceName)}>{exercise.name}</span>
+                      {detail && <span {...stylex.props(styles.exerciseChoiceDetail)}>{detail}</span>}
+                    </Button>
+                    <LastTime
+                      session={history.data ? lastSession(history.data.exercises, exercise.name, date) : null}
+                      onRepeat={({ sets, reps, weightKg }) => updateExercise(exercise.id, { sets: String(sets), reps: String(reps), weight: weightKg === null ? "" : String(weightKg) })}
+                    />
+                  </div>
+                  <div {...stylex.props(styles.exerciseFields)}>
+                    <div>
+                      <Label htmlFor={`exercise-sets-${exercise.id}`} {...stylex.props(formStyles.formLabel)}>Sets</Label>
+                      <Input id={`exercise-sets-${exercise.id}`} type="number" inputMode="numeric" min={1} max={100} step={1} value={exercise.sets} onChange={(event) => updateExercise(exercise.id, { sets: event.target.value })} required />
+                    </div>
+                    <div>
+                      <Label htmlFor={`exercise-reps-${exercise.id}`} {...stylex.props(formStyles.formLabel)}>Reps per set</Label>
+                      <Input id={`exercise-reps-${exercise.id}`} type="number" inputMode="numeric" min={1} max={1000} step={1} value={exercise.reps} onChange={(event) => updateExercise(exercise.id, { reps: event.target.value })} required />
+                    </div>
+                    <div>
+                      <Label htmlFor={`exercise-weight-${exercise.id}`} {...stylex.props(formStyles.formLabel)}>Weight (kg, optional)</Label>
+                      <Input id={`exercise-weight-${exercise.id}`} type="number" inputMode="decimal" min={0} max={1000} step={0.1} value={exercise.weight} onChange={(event) => updateExercise(exercise.id, { weight: event.target.value })} />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+            <Button type="button" variant="outline" size="sm" disabled={exercises.length >= 30 || busy} onClick={() => setPicking("new")}>Add exercise</Button>
           </div>
         )}
-        <div>
-          <Label htmlFor="workout-energy" {...stylex.props(formStyles.formLabel)}>Energy (kcal, optional)</Label>
-          <Input id="workout-energy" name="energy" type="number" inputMode="numeric" min={0} max={10000} step={1} />
+        <div {...stylex.props(formStyles.timeField)}>
+          <Label htmlFor="workout-time" {...stylex.props(formStyles.formLabel, formStyles.timeLabel)}>Started at</Label>
+          <TimePicker id="workout-time" value={time} onChange={setTime} onNow={() => setTime(currentTime())} />
         </div>
-      </div>
-      {activity === "strength" && (
-        <div data-exercise-list="" {...stylex.props(styles.exerciseList)}>
-          <p {...stylex.props(formStyles.formSubhead)}>EXERCISES</p>
-          {exercises.map((exercise, index) => (
-            <div key={exercise.id} {...rowProps(exercise.id)} {...stylex.props(styles.exerciseCard)}>
-              <div {...stylex.props(styles.exerciseHeader)}>
-                <strong>Exercise {index + 1}</strong>
-                <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() => removeExercise(exercise.id)}>Remove</Button>
-              </div>
-              <div>
-                <Label htmlFor={`exercise-name-${exercise.id}`} {...stylex.props(formStyles.formLabel)}>Exercise name</Label>
-                <Autocomplete id={`exercise-name-${exercise.id}`} placeholder="e.g. Squat" maxLength={80} value={exercise.name} onValueChange={(name) => updateExercise(exercise.id, { name })} suggestions={names} required />
-                <LastTime
-                  session={history.data ? lastSession(history.data.exercises, exercise.name, date) : null}
-                  onRepeat={({ sets, reps, weightKg }) => updateExercise(exercise.id, { sets: String(sets), reps: String(reps), weight: weightKg === null ? "" : String(weightKg) })}
-                />
-              </div>
-              <div {...stylex.props(styles.exerciseFields)}>
-                <div>
-                  <Label htmlFor={`exercise-sets-${exercise.id}`} {...stylex.props(formStyles.formLabel)}>Sets</Label>
-                  <Input id={`exercise-sets-${exercise.id}`} type="number" inputMode="numeric" min={1} max={100} step={1} value={exercise.sets} onChange={(event) => updateExercise(exercise.id, { sets: event.target.value })} required />
-                </div>
-                <div>
-                  <Label htmlFor={`exercise-reps-${exercise.id}`} {...stylex.props(formStyles.formLabel)}>Reps per set</Label>
-                  <Input id={`exercise-reps-${exercise.id}`} type="number" inputMode="numeric" min={1} max={1000} step={1} value={exercise.reps} onChange={(event) => updateExercise(exercise.id, { reps: event.target.value })} required />
-                </div>
-                <div>
-                  <Label htmlFor={`exercise-weight-${exercise.id}`} {...stylex.props(formStyles.formLabel)}>Weight (kg, optional)</Label>
-                  <Input id={`exercise-weight-${exercise.id}`} type="number" inputMode="decimal" min={0} max={1000} step={0.1} value={exercise.weight} onChange={(event) => updateExercise(exercise.id, { weight: event.target.value })} />
-                </div>
-              </div>
-            </div>
-          ))}
-          <Button type="button" variant="outline" size="sm" disabled={exercises.length >= 30} onClick={addExercise}>Add exercise</Button>
+        <div {...stylex.props(formStyles.dialogActions)}>
+          <Button type="submit" disabled={pending || busy}>{pending ? "Saving…" : "Save workout"}</Button>
         </div>
-      )}
-      <div {...stylex.props(formStyles.timeField)}>
-        <Label htmlFor="workout-time" {...stylex.props(formStyles.formLabel, formStyles.timeLabel)}>Started at</Label>
-        <TimePicker id="workout-time" value={time} onChange={setTime} onNow={() => setTime(currentTime())} />
-      </div>
-      <div {...stylex.props(formStyles.dialogActions)}>
-        <Button type="submit" disabled={pending || busy}>{pending ? "Saving…" : "Save workout"}</Button>
-      </div>
-    </form>
+      </form>
+      <ExercisePicker open={picking !== null} onOpenChange={(open) => { if (!open) setPicking(null); }} date={date} onPick={pickExercise} />
+    </>
   );
 }
 
@@ -395,11 +415,14 @@ function SleepForm({ date, pending, onSave }: FormProps<SleepInput>) {
 }
 
 const styles = stylex.create({
-  exerciseList: { display: "grid", gap: 12 },
-  exerciseCard: { display: "grid", gap: 12, padding: 14, borderWidth: 1, borderStyle: "solid", borderColor: "#e1e4e5", borderRadius: 8 },
+  exerciseList: { display: "grid", gridTemplateColumns: "minmax(0, 1fr)", minWidth: 0, gap: 12 },
+  exerciseCard: { display: "grid", gridTemplateColumns: "minmax(0, 1fr)", minWidth: 0, gap: 12, padding: 14, borderWidth: 1, borderStyle: "solid", borderColor: "#e1e4e5", borderRadius: 8 },
   exerciseHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13 },
   lastTime: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 6, fontSize: 12, color: colors.mutedForeground },
   lastTimeText: { minWidth: 0, fontVariantNumeric: "tabular-nums" },
+  exerciseChoice: { width: "100%", minWidth: 0, height: "auto", justifyContent: "space-between", gap: 8, paddingBlock: 8 },
+  exerciseChoiceName: { minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: 600 },
+  exerciseChoiceDetail: { flexShrink: 0, fontSize: 12, fontWeight: 400, color: colors.mutedForeground },
   exerciseFields: { display: "grid", gridTemplateColumns: { default: "repeat(3, minmax(0, 1fr))", "@media (max-width: 520px)": "1fr 1fr" }, gap: 10 },
   presets: { display: "grid", gridTemplateColumns: { default: "minmax(0, 1fr) auto auto", "@media (max-width: 520px)": "1fr 1fr" }, gap: 8 },
   times: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: "12px 20px" },

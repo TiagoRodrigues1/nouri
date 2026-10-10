@@ -1,4 +1,5 @@
 import { bigint, customType, date, integer, jsonb, pgTable, primaryKey, text, timestamp, uuid, index, uniqueIndex } from "drizzle-orm/pg-core";
+import type { Equipment, Muscle } from "../exercises/contract.js";
 import type { FoodQuantity } from "../food/contract.js";
 import type { StoredMealItem } from "../meals/contract.js";
 import type { MeasurementKind } from "../measurements/contract.js";
@@ -85,6 +86,19 @@ export const workouts = pgTable("workouts", {
   sourceDevice: text("source_device"),
   sourceTitle: text("source_title"),
 }, (table) => [activeDayIndex("workouts", table), uniqueIndex("workouts_user_source_idx").on(table.userId, table.source, table.sourceId).where(sql`source_id IS NOT NULL`)]);
+
+export const customExercises = pgTable("custom_exercises", {
+  id: uuid("id").primaryKey(),
+  userId: ownerColumn(),
+  name: text("name").notNull(),
+  key: text("key").notNull(),
+  muscle: text("muscle").$type<Muscle>().notNull(),
+  equipment: text("equipment").$type<Equipment>(),
+  revision: integer("revision").notNull().default(1),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [uniqueIndex("custom_exercises_user_key_active_idx").on(table.userId, table.key).where(sql`deleted_at IS NULL`)]);
 
 export const sleepSessions = pgTable("sleep_sessions", {
   ...journalColumns,

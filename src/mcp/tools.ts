@@ -34,12 +34,14 @@ import { instantAt, localDate, shiftDate, timeZoneSchema } from "../time.js";
 import { waterInputSchema } from "../water/contract.js";
 import type { WaterEntry } from "../water/contract.js";
 import { waterRecords } from "../water/water.js";
-import { activities, strengthExerciseSchema, workoutInputSchema } from "../workouts/contract.js";
+import type { LibraryExercise } from "../exercises/contract.js";
+import { getExerciseLibrary } from "../exercises/exercises.js";
+import { activities, exerciseKey, strengthExerciseSchema, workoutInputSchema } from "../workouts/contract.js";
 import type { Workout, WorkoutDay } from "../workouts/contract.js";
 import { getWorkoutDay, workoutRecords } from "../workouts/workouts.js";
 
 const instructions = `Nouri is the person's food, training, and body journal. Log what they ate with log_meal, or log_saved_meal for a meal from list_saved_meals, and fix a logged food with edit_food.
-Log training with log_workout, water with log_water, supplements from their stack with take_supplements, a night or nap with log_sleep, and weight, height, body fat, or waist with log_measurement.
+Log training with log_workout, naming exercises as search_exercises finds them, water with log_water, supplements from their stack with take_supplements, a night or nap with log_sleep, and weight, height, body fat, or waist with log_measurement.
 Prefer a catalog food from search_foods when one matches; otherwise estimate the nutrients yourself and use null for any you cannot estimate.
 Dates and times are the person's own wall clock. Leave them out for "now". Check your work with get_day, and remove a wrong entry with delete_entry.`;
 
@@ -82,6 +84,7 @@ type ToolOutput =
   | Logged<FoodEntry>
   | Logged<SupplementIntake>
   | Day & { workouts: WorkoutDay; sleep: SleepDay; measurements: MeasurementSummary; targets: TargetsForDay }
+  | { exercises: LibraryExercise[]; more: number }
   | { deleted: { kind: "food" | (typeof recordKinds)[number]; id: string } };
 
 // Results go back as JSON text, which every MCP client shows to its model.
@@ -170,6 +173,22 @@ export function nouriMcpServer(db: AppDatabase, userId: string): McpServer {
     return text({ date: localDate(at.occurredAt, at.timeZone), timeZone: at.timeZone, entries: result.entries });
   });
 
+  server.registerTool("search_exercises", {
+    title: "Search exercises",
+    description: "Search the exercises the person picks from when logging strength training: the built-in catalog, their custom exercises, and names from their past workouts. Log exercises under these exact names so their history stays together.",
+    inputSchema: { query: z.string().trim().min(2).max(80).describe("Words of the name, such as \"bench press\" or \"squat\".") },
+    annotations: { readOnlyHint: true },
+  }, async ({ query }) => {
+    const words = exerciseKey(query).split(" ");
+    const { exercises } = await getExerciseLibrary(db, userId);
+
+    // The person's own exercises first, since they are the names their history already uses.
+    const matches = exercises.filter((exercise) => words.every((word) => exercise.key.includes(word)))
+      .sort((a, b) => Number(a.origin === "catalog") - Number(b.origin === "catalog"));
+
+    return text({ exercises: matches.slice(0, 25), more: Math.max(0, matches.length - 25) });
+  });
+
   server.registerTool("log_workout", {
     title: "Log a workout",
     description: "Log one workout. Strength workouts list their exercises and have no distance; other activities have no exercises.",
@@ -179,7 +198,7 @@ export function nouriMcpServer(db: AppDatabase, userId: string): McpServer {
       durationMinutes: z.number().int().min(1).max(1440),
       distanceM: z.number().int().min(1).max(1_000_000).optional().describe("Metres, for runs, walks, rides, and swims."),
       energyKcal: z.number().int().min(0).max(10_000).optional().describe("Only when a device or the person reported it."),
-      exercises: z.array(strengthExerciseSchema).max(30).optional().describe("One row per exercise; weightKg null for bodyweight."),
+      exercises: z.array(strengthExerciseSchema).max(30).optional().describe("One row per exercise; weightKg null for bodyweight. Name each one as search_exercises returns it."),
     },
   }, async ({ date, time, timeZone, activity, durationMinutes, distanceM, energyKcal, exercises }) => {
     const at = await resolveWhen(db, userId, { date, time, timeZone });

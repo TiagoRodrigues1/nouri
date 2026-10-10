@@ -17,7 +17,7 @@ export function revisionHeader(value: string | undefined): number | null {
 type MutationResult<Entry> =
   | { outcome: "created" | "updated"; entry: Entry }
   | { outcome: "deleted" | "missing" | "stale" | "key-reuse" | "catalog-missing" | "invalid-item" | "invalid-amount" }
-  | { outcome: "unknown-reference"; message: string };
+  | { outcome: "unknown-reference" | "duplicate"; message: string };
 
 // Every write answers the same way; routes differ only in what a missing record is called.
 export function mutationResponse<Entry>(result: MutationResult<Entry>, missing: string): Response {
@@ -37,6 +37,8 @@ export function mutationResponse<Entry>(result: MutationResult<Entry>, missing: 
       return error(400, "Invalid saved meal item");
     case "invalid-amount":
       return error(400, "Amount out of range");
+    case "duplicate":
+      return error(409, result.message);
     case "stale":
       return error(409, "Revision conflict");
     case "key-reuse":

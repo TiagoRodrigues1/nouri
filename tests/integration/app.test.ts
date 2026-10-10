@@ -139,8 +139,9 @@ void test("food CRUD, stable retries, day totals, and concurrent writes", async 
     assert.equal(editedCatalog.food.nutrients.kcal, 54);
     assert.equal(editedCatalog.revision, 2);
 
-    const missingFat = { ...catalogBody, food: { ...catalogBody.food, ref: { provider: "ciqual", id: "13620", version: "2025" } } };
-    const missingCreated = await app.request("/v1/food-entries", { method: "POST", headers: { ...headers, "Idempotency-Key": "catalog-apple-2" }, body: JSON.stringify(missingFat) });
+    // Canned chestnut puree is one of the few foods Ciqual never measured fat for ("-"), so its fat stays unknown.
+    const missingFat = { ...catalogBody, food: { ...catalogBody.food, ref: { provider: "ciqual", id: "15015", version: "2025" } } };
+    const missingCreated = await app.request("/v1/food-entries", { method: "POST", headers: { ...headers, "Idempotency-Key": "catalog-chestnut-1" }, body: JSON.stringify(missingFat) });
     assert.equal(missingCreated.status, 201);
     const missingLogged = await missingCreated.json();
     assert.equal(missingLogged.food.nutrients.fatG, null);

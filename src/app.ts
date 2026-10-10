@@ -5,6 +5,8 @@ import { bodyLimit } from "hono/body-limit";
 import { compress } from "hono/compress";
 import { z } from "zod";
 import { eraseAccount, exportAccount } from "./account/account.js";
+import { customExerciseInputSchema, customExerciseSchema, exerciseLibrarySchema } from "./exercises/contract.js";
+import { getExerciseLibrary, mutateCustomExercise } from "./exercises/exercises.js";
 import { dashboardSchema } from "./dashboard/contract.js";
 import { getDashboard, saveDashboard } from "./dashboard/dashboard.js";
 import { daySchema } from "./days/contract.js";
@@ -295,6 +297,28 @@ export function createApp(db: AppDatabase, identity: Identity, packagedFoods: Pa
 
   app.get(`${recordPaths.workout}/exercises`, async (context) => context.json(await getExerciseHistory(db, context.get("userId"))));
   app.openAPIRegistry.registerPath({ method: "get", path: `${recordPaths.workout}/exercises`, responses: { 200: { description: "Every strength exercise logged, most recently done first, with its sessions oldest first. Names that differ only in case or spacing are one exercise", ...json(exerciseHistoryListSchema) } } });
+
+  app.get("/v1/exercises", async (context) => context.json(await getExerciseLibrary(db, context.get("userId"))));
+  app.openAPIRegistry.registerPath({ method: "get", path: "/v1/exercises", responses: { 200: { description: "Exercises to pick when logging a strength workout, sorted by name: the built-in catalog, your custom exercises, and names from your workouts that are in neither", ...json(exerciseLibrarySchema) } } });
+
+  app.post("/v1/exercises", async (context) => {
+    const input = customExerciseInputSchema.safeParse(await context.req.json().catch(() => null));
+
+    if (!input.success) return error(400, "Invalid custom exercise");
+
+    return mutationResponse(await mutateCustomExercise(db, context.get("userId"), context.get("idempotencyKey"), { kind: "create", input: input.data }), "Exercise not found");
+  });
+  app.openAPIRegistry.registerPath({ method: "post", path: "/v1/exercises", request: { headers: mutationHeaders, body: json(customExerciseInputSchema) }, responses: { 201: { description: "A custom exercise. It may take a name only your workouts have, which gives that history a muscle and equipment", ...json(customExerciseSchema) }, 400: failure("Invalid request"), 409: failure("A catalog or custom exercise has that name, or an idempotency conflict") } });
+
+  app.delete("/v1/exercises/:id", async (context) => {
+    const id = z.uuid().safeParse(context.req.param("id"));
+    const revision = revisionHeader(context.req.header("If-Match"));
+
+    if (!id.success || revision === null) return error(400, "Invalid custom exercise deletion");
+
+    return mutationResponse(await mutateCustomExercise(db, context.get("userId"), context.get("idempotencyKey"), { kind: "delete", id: id.data, revision }), "Custom exercise not found");
+  });
+  app.openAPIRegistry.registerPath({ method: "delete", path: "/v1/exercises/{id}", request: { params: z.object({ id: z.uuid() }), headers: editHeaders }, responses: { 204: { description: "Deleted custom exercise; workouts that used it keep its name" }, 404: failure("Custom exercise not found"), 409: failure("Revision or idempotency conflict") } });
 
   const uploadSchema = z.object({ file: z.instanceof(File), thumbnail: z.instanceof(File).optional(), occurredAt: occurredAtSchema, timeZone: timeZoneSchema });
 
