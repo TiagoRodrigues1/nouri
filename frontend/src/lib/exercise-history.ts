@@ -15,18 +15,6 @@ export function lastSession(exercises: ExerciseHistory[], name: string, date: st
   return exercise?.sessions.findLast((session) => session.date <= date) ?? null;
 }
 
-// The names of the exercises done on or before the date, the most recently done first, to suggest while typing.
-export function exerciseNames(exercises: ExerciseHistory[], date: string): string[] {
-  return exercises
-    .flatMap((exercise) => {
-      const last = exercise.sessions.findLast((session) => session.date <= date);
-
-      return last ? [{ name: exercise.name, date: last.date }] : [];
-    })
-    .sort((a, b) => b.date.localeCompare(a.date))
-    .map((exercise) => exercise.name);
-}
-
 // "3 × 8 · 60 kg, 1 × 12 · 50 kg"
 export function setsLabel(session: ExerciseSession): string {
   return session.sets.map((set) => `${set.sets} × ${set.reps}${set.weightKg === null ? "" : ` · ${format(set.weightKg, 1)} kg`}`).join(", ");

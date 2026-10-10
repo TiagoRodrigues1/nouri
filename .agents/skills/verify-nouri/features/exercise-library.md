@@ -1,0 +1,11 @@
+# Exercise library
+
+Open `+ Log` > `Exercise`, switch Activity to `Strength training`, and choose `Add exercise`. A `Choose an exercise` dialog opens over the workout dialog with a `Search exercises` field, `Muscle` and `Equipment` selects, and the catalog sorted by name, each row with its muscle and equipment, such as `Abs · Bodyweight`. The footer links `Catalog: Free Exercise DB` and has `Create exercise`.
+
+Type `bench` and set Equipment to `Barbell`. Every option contains "bench" and reads `· Barbell`. Choose `Barbell Bench Press - Medium Grip`. The picker closes, and the workout dialog has an `Exercise 1` card whose button reads the name with `Chest · Barbell`. Choosing that button opens the picker again to change the exercise.
+
+Choose `Add exercise` and type `Landmine row`. The list reads `No exercise matches.`, and the footer button reads `Create "Landmine row"`. Choose it. The `Create an exercise` form has the name filled in. Its `Create exercise` button stays disabled until `Main muscle` is chosen. Choose `Upper back` and Equipment `Barbell`, then create. The toast reads `Landmine row added to your exercises.`, and an `Exercise 2` card holds it. Creating `barbell squat` in the same way answers `An exercise named barbell squat already exists`.
+
+Save the workout with sets, reps, and weights, and read `GET /v1/overview/<day>`: `sports.entries[].strengthExercises` names both exercises as picked. `GET /v1/exercises` lists about 740 exercises, with `Landmine row` as `origin: "custom"`, `muscle: "middle back"`.
+
+On a later day, `Add exercise` shows both under `Recent`, the custom one with a `Custom` badge and a `Delete Landmine row` button. Delete it. The toast reads `Landmine row removed from your exercises.`, and the row stays in Recent without detail or badge, because the logged name is still pickable. `GET /v1/exercises` lists it as `origin: "logged"`.

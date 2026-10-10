@@ -4,7 +4,8 @@ import { recordPaths } from "../../../src/journal/paths";
 export const queryRefresh = {
   food: ["day", "overview", "review", "recent-foods"],
   water: ["day", "overview"],
-  workout: ["overview", "review", "workout-summary", "exercise-history"],
+  workout: ["overview", "review", "workout-summary", "exercise-history", "exercise-library"],
+  exercises: ["exercise-library"],
   sleep: ["overview", "review"],
   measurement: ["overview", "review"],
   photo: ["overview"],

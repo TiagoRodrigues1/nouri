@@ -53,7 +53,7 @@ void test("the MCP server signs in through Clerk OAuth and logs meals and workou
     const client = await connect(app);
     const { tools } = await client.listTools();
     assert.deepEqual(tools.map((tool) => tool.name).sort(), [
-      "delete_entry", "edit_food", "get_day", "list_saved_meals", "log_meal", "log_measurement", "log_saved_meal", "log_sleep", "log_water", "log_workout", "search_foods", "take_supplements",
+      "delete_entry", "edit_food", "get_day", "list_saved_meals", "log_meal", "log_measurement", "log_saved_meal", "log_sleep", "log_water", "log_workout", "search_exercises", "search_foods", "take_supplements",
     ]);
 
     const toast = { name: "Wholemeal toast", amount: 35, unit: "g", nutrients: { kcal: 85, proteinG: 4, carbsG: 15, fatG: null } };
@@ -82,6 +82,11 @@ void test("the MCP server signs in through Clerk OAuth and logs meals and workou
     assert.ok(!workout.isError, workout.text);
     assert.equal(workout.json().occurredAt, "2026-10-07T17:00:00.000Z");
     assert.equal(workout.json().timeZone, "Europe/Lisbon");
+
+    // The logged name joins the catalog in search, ahead of it, so the assistant keeps using the person's spelling.
+    const squats = (await call(client, "search_exercises", { query: "SQUAT" })).json();
+    assert.deepEqual(squats.exercises[0], { origin: "logged", key: "squat", name: "Squat" });
+    assert.ok(squats.exercises.some((exercise: { name: string }) => exercise.name === "Barbell Squat"));
 
     const invalid = await call(client, "log_workout", { activity: "strength", durationMinutes: 40, distanceM: 1000 });
     assert.ok(invalid.isError);

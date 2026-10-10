@@ -9,6 +9,8 @@ import type { IntakeInput } from "../../../src/supplements/contract";
 import type { WorkoutInput } from "../../../src/workouts/contract";
 import { exerciseHistoryListSchema, workoutSummarySchema } from "../../../src/workouts/contract";
 import type { ExerciseHistoryList, WorkoutSummary } from "../../../src/workouts/contract";
+import { customExerciseSchema, exerciseLibrarySchema } from "../../../src/exercises/contract";
+import type { CustomExercise, CustomExerciseInput, ExerciseLibrary } from "../../../src/exercises/contract";
 import { dashboardSchema } from "../../../src/dashboard/contract";
 import type { Dashboard } from "../../../src/dashboard/contract";
 import { daySchema } from "../../../src/days/contract";
@@ -53,6 +55,8 @@ export type { Targets } from "../../../src/targets/contract";
 export type { CallbackResult, ConnectionStatus, ImportKind, WearableProvider } from "../../../src/wearables/contract";
 
 export type { Activity, ExerciseHistory, ExerciseSession, Workout } from "../../../src/workouts/contract";
+
+export type { CustomExercise, Equipment, LibraryExercise, Muscle } from "../../../src/exercises/contract";
 
 export type RecordPath = (typeof recordPaths)[keyof typeof recordPaths];
 
@@ -209,6 +213,18 @@ export async function getWorkoutSummary(date: string): Promise<WorkoutSummary> {
 
 export async function getExerciseHistory(): Promise<ExerciseHistoryList> {
   return request(`${recordPaths.workout}/exercises`, exerciseHistoryListSchema);
+}
+
+export async function getExerciseLibrary(): Promise<ExerciseLibrary> {
+  return request("/v1/exercises", exerciseLibrarySchema);
+}
+
+export async function createCustomExercise(key: string, input: CustomExerciseInput): Promise<CustomExercise> {
+  return write("/v1/exercises", customExerciseSchema, { method: "POST", key, json: input });
+}
+
+export async function deleteCustomExercise(exercise: CustomExercise, key: string): Promise<void> {
+  await write(`/v1/exercises/${encodeURIComponent(exercise.id)}`, z.null(), { method: "DELETE", key, revision: exercise.revision });
 }
 
 export async function createRecord(key: string, command: RecordCommand): Promise<void> {
