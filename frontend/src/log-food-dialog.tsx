@@ -45,16 +45,16 @@ export function LogFoodDialog({ open, onOpenChange, date, isToday, pending, onSa
           </div>
           <Tabs defaultValue="recent">
             <TabsList {...stylex.props(styles.widthFull)}>
-              <TabsTrigger value="recent" {...stylex.props(styles.flexOne)}>
+              <TabsTrigger value="recent" {...stylex.props(styles.flexOne, styles.compactTab)}>
                 Recent
               </TabsTrigger>
-              <TabsTrigger value="search" {...stylex.props(styles.flexOne)}>
+              <TabsTrigger value="search" {...stylex.props(styles.flexOne, styles.compactTab)}>
                 Search foods
               </TabsTrigger>
-              <TabsTrigger value="meals" {...stylex.props(styles.flexOne)}>
+              <TabsTrigger value="meals" {...stylex.props(styles.flexOne, styles.compactTab)}>
                 Meals
               </TabsTrigger>
-              <TabsTrigger value="manual" {...stylex.props(styles.flexOne)}>
+              <TabsTrigger value="manual" {...stylex.props(styles.flexOne, styles.compactTab)}>
                 Add manually
               </TabsTrigger>
             </TabsList>

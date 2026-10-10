@@ -133,7 +133,7 @@ export function Dashboard() {
           <span {...stylex.props(styles.brandIcon)}>
             <UtensilsCrossed size={17} strokeWidth={2.5} />
           </span>
-          <span>NOURI</span>
+          <span {...stylex.props(styles.brandName)}>NOURI</span>
         </Link>
         <Popover open={logMenuOpen} onOpenChange={setLogMenuOpen}>
           <PopoverTrigger asChild>
@@ -150,66 +150,70 @@ export function Dashboard() {
           </PopoverContent>
         </Popover>
         <nav {...stylex.props(styles.sidebarNav)} aria-label="Main navigation">
-          <Link
-            to="/"
-            {...stylex.props(styles.navItem, view === "today" && styles.navItemActive)}
-          >
-            <LayoutDashboard size={17} {...stylex.props(view === "today" && styles.iconAccent)} />
-            Today
-          </Link>
-          <Link
-            to="/meals"
-            {...stylex.props(styles.navItem, view === "meals" && styles.navItemActive)}
-          >
-            <CookingPot size={17} {...stylex.props(view === "meals" && styles.iconAccent)} />
-            Meals
-          </Link>
-          <Link
-            to="/overview"
-            {...stylex.props(styles.navItem, view === "overview" && styles.navItemActive)}
-          >
-            <ChartColumn size={17} {...stylex.props(view === "overview" && styles.iconAccent)} />
-            Overview
-          </Link>
-          <Link
-            to="/progress"
-            {...stylex.props(styles.navItem, view === "progress" && styles.navItemActive)}
-          >
-            <TrendingUp size={17} {...stylex.props(view === "progress" && styles.iconAccent)} />
-            Progress
-          </Link>
-          <Link
-            to="/review"
-            {...stylex.props(styles.navItem, view === "review" && styles.navItemActive)}
-          >
-            <CalendarRange size={17} {...stylex.props(view === "review" && styles.iconAccent)} />
-            Review
-          </Link>
+          <div {...stylex.props(styles.navPages)}>
+            <Link
+              to="/"
+              {...stylex.props(styles.navItem, styles.tabItem, view === "today" && styles.navItemActive)}
+            >
+              <LayoutDashboard size={17} {...stylex.props(view === "today" && styles.iconAccent)} />
+              Today
+            </Link>
+            <Link
+              to="/meals"
+              {...stylex.props(styles.navItem, styles.tabItem, view === "meals" && styles.navItemActive)}
+            >
+              <CookingPot size={17} {...stylex.props(view === "meals" && styles.iconAccent)} />
+              Meals
+            </Link>
+            <Link
+              to="/overview"
+              {...stylex.props(styles.navItem, styles.tabItem, view === "overview" && styles.navItemActive)}
+            >
+              <ChartColumn size={17} {...stylex.props(view === "overview" && styles.iconAccent)} />
+              Overview
+            </Link>
+            <Link
+              to="/progress"
+              {...stylex.props(styles.navItem, styles.tabItem, view === "progress" && styles.navItemActive)}
+            >
+              <TrendingUp size={17} {...stylex.props(view === "progress" && styles.iconAccent)} />
+              Progress
+            </Link>
+            <Link
+              to="/review"
+              {...stylex.props(styles.navItem, styles.tabItem, view === "review" && styles.navItemActive)}
+            >
+              <CalendarRange size={17} {...stylex.props(view === "review" && styles.iconAccent)} />
+              Review
+            </Link>
+          </div>
           <p {...stylex.props(styles.navCaption, styles.navCaptionData)}>SETTINGS</p>
-          <button
-            type="button"
-            {...stylex.props(styles.navItem, targetsOpen && styles.navItemActive)}
-            onClick={() => setTargetsOpen(true)}
-          >
-            <Target size={17} {...stylex.props(targetsOpen && styles.iconAccent)} />
-            Targets
-          </button>
-          <button
-            type="button"
-            {...stylex.props(styles.navItem, supplementsOpen && styles.navItemActive)}
-            onClick={() => setSupplementsOpen(true)}
-          >
-            <Pill size={17} {...stylex.props(supplementsOpen && styles.iconAccent)} />
-            Supplements
-          </button>
-          <button
-            type="button"
-            {...stylex.props(styles.navItem, wearablesOpen && styles.navItemActive)}
-            onClick={() => setWearablesOpen(true)}
-          >
-            <Watch size={17} {...stylex.props(wearablesOpen && styles.iconAccent)} />
-            Wearables
-          </button>
+          <div {...stylex.props(styles.navSettings)}>
+            <button
+              type="button"
+              {...stylex.props(styles.navItem, targetsOpen && styles.navItemActive)}
+              onClick={() => setTargetsOpen(true)}
+            >
+              <Target size={17} {...stylex.props(targetsOpen && styles.iconAccent)} />
+              Targets
+            </button>
+            <button
+              type="button"
+              {...stylex.props(styles.navItem, supplementsOpen && styles.navItemActive)}
+              onClick={() => setSupplementsOpen(true)}
+            >
+              <Pill size={17} {...stylex.props(supplementsOpen && styles.iconAccent)} />
+              Supplements
+            </button>
+            <button
+              type="button"
+              {...stylex.props(styles.navItem, wearablesOpen && styles.navItemActive)}
+              onClick={() => setWearablesOpen(true)}
+            >
+              <Watch size={17} {...stylex.props(wearablesOpen && styles.iconAccent)} />
+              Wearables
+            </button>
+          </div>
         </nav>
         <div {...stylex.props(styles.sidebarBottom)}>
           <div {...stylex.props(styles.profile)}>

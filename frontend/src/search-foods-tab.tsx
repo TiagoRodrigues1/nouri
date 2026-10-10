@@ -114,6 +114,7 @@ export function SearchFoodPicker({ actionLabel, pending = false, onPick }: { act
         <div {...stylex.props(styles.searchFormRow)}>
           <Input
             id="search-query"
+            {...stylex.props(styles.searchFormInput)}
             type="search"
             minLength={2}
             maxLength={80}
@@ -122,10 +123,10 @@ export function SearchFoodPicker({ actionLabel, pending = false, onPick }: { act
             onChange={(event) => setDraft(event.target.value)}
             required
           />
-          <Button type="submit">
+          <Button type="submit" {...stylex.props(styles.searchFormButton)}>
             <Search size={16} /> Search
           </Button>
-          <Button type="button" variant="outline" aria-pressed={scanning} onClick={() => setScanning(!scanning)}>
+          <Button type="button" variant="outline" {...stylex.props(styles.searchFormButton)} aria-pressed={scanning} onClick={() => setScanning(!scanning)}>
             <ScanBarcode size={16} /> Scan
           </Button>
         </div>

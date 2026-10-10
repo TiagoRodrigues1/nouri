@@ -94,8 +94,12 @@ export const styles = stylex.create({
   },
   searchFormRow: {
     display: "flex",
+    flexWrap: { default: "nowrap", "@media (max-width: 520px)": "wrap" },
     gap: "8px",
   },
+  // On phones the query gets its own line and the buttons share the next one.
+  searchFormInput: { flexBasis: { default: "auto", "@media (max-width: 520px)": "100%" } },
+  searchFormButton: { flex: { default: "none", "@media (max-width: 520px)": "1" } },
   resultsItemBorder: {
     borderTopWidth: 1, borderTopStyle: "solid", borderTopColor: colors.border,
   },
@@ -135,6 +139,12 @@ export const styles = stylex.create({
   },
   widthFull: { width: "100%" },
   flexOne: { flex: 1 },
+  // Four tabs share a phone-width dialog, so they tighten up below 520px.
+  compactTab: {
+    minWidth: 0,
+    paddingInline: { default: null, "@media (max-width: 520px)": 4 },
+    fontSize: { default: null, "@media (max-width: 520px)": 12.5 },
+  },
   resultsButtonSelected: { backgroundColor: colors.accent },
   mealRows: {
     listStyle: "none",
