@@ -23,6 +23,11 @@ export function localDate(instant: string, zone: string): string {
   return `${year}-${month}-${day}`;
 }
 
+// The zone's wall-clock time ("HH:MM") at an instant.
+export function localTime(instant: string, zone: string): string {
+  return new Intl.DateTimeFormat("en-GB", { timeZone: zone, hourCycle: "h23", hour: "2-digit", minute: "2-digit" }).format(new Date(instant));
+}
+
 export function shiftDate(date: string, days: number): string {
   const shifted = new Date(`${date}T00:00:00Z`);
 

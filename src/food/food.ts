@@ -4,7 +4,7 @@ import type { AppDatabase, Transaction } from "../db/database.js";
 import { softDelete } from "../journal/records.js";
 import { withReceipt } from "../journal/receipt.js";
 import { foodEntries } from "../db/schema.js";
-import { localDate } from "../time.js";
+import { instantAt, localDate, localTime } from "../time.js";
 import { catalogFood } from "./catalog.js";
 import { entrySchema, manualFood, recordedFood, scaledFood, totalNutrients } from "./contract.js";
 import type { CatalogFoodInput, CatalogSelection, FoodEntry, FoodInput, FoodSubmission, RecentFoods, RecordedFood, RepeatInput, SubmittedFood } from "./contract.js";
@@ -171,13 +171,45 @@ async function insert(tx: Transaction, userId: string, input: FoodInput): Promis
   return { outcome: "created", entry: entry(row) };
 }
 
-async function update(tx: Transaction, userId: string, id: string, revision: number, input: FoodInput): Promise<FoodMutationResult> {
+async function update(tx: Transaction, userId: string, id: string, revision: number, input: FoodInput): Promise<{ outcome: "updated"; entry: FoodEntry } | { outcome: "missing" | "stale" }> {
   const [row] = await tx.update(foodEntries)
     .set({ ...values(input), revision: sql`${foodEntries.revision} + 1`, updatedAt: new Date() })
     .where(and(eq(foodEntries.userId, userId), eq(foodEntries.id, id), eq(foodEntries.revision, revision), isNull(foodEntries.deletedAt)))
     .returning();
 
   return row ? { outcome: "updated", entry: entry(row) } : missingOrStale(tx, userId, id);
+}
+
+// A change to a logged food. A date or time left out keeps the entry's own, read on its wall clock, and the zone
+// never changes. A new amount scales the recorded nutrients unless nutrients are given for it.
+export type FoodEdit = { date?: string | undefined; time?: string | undefined; name?: string | undefined; amount?: number | undefined; nutrients?: RecordedFood["nutrients"] | undefined };
+
+// Edits an entry in place against the revision it is read at, so the change applies to what is stored now.
+export async function editFood(db: AppDatabase, userId: string, id: string, edit: FoodEdit): Promise<{ outcome: "updated"; entry: FoodEntry } | { outcome: "missing" | "stale" | "invalid-amount" }> {
+  return db.transaction(async (tx) => {
+    const [row] = await tx.select().from(foodEntries)
+      .where(and(eq(foodEntries.userId, userId), eq(foodEntries.id, id), isNull(foodEntries.deletedAt))).for("update");
+
+    if (!row) return { outcome: "missing" };
+    const current = entry(row);
+    const scaled = edit.amount === undefined ? current.food : scaledFood(current.food, edit.amount);
+
+    if (!scaled) return { outcome: "invalid-amount" };
+    const food = { ...scaled };
+
+    if (edit.name !== undefined) food.name = edit.name;
+
+    // Own nutrients are no longer the catalog's, so the food stops claiming its source.
+    if (edit.nutrients !== undefined) {
+      food.nutrients = edit.nutrients;
+      food.catalogRef = null;
+    }
+
+    const moved = edit.date !== undefined || edit.time !== undefined;
+    const occurredAt = moved ? instantAt(edit.date ?? current.localDate, edit.time ?? localTime(current.occurredAt, current.timeZone), current.timeZone) : current.occurredAt;
+
+    return update(tx, userId, id, row.revision, { occurredAt, timeZone: current.timeZone, food: manualFood(food) });
+  });
 }
 
 export async function mutateFood(db: AppDatabase, userId: string, key: string, command: FoodCommand): Promise<FoodMutationResult> {

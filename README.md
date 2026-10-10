@@ -145,4 +145,4 @@ The image listens on `0.0.0.0:3000`; set `PORT` if the host assigns one. The bar
 
 ## Logging from Claude or ChatGPT
 
-`/mcp` is an MCP server with five tools: search foods, log a meal, log a workout, read a day, and delete an entry. Claude and ChatGPT sign in through Clerk's OAuth consent page, so turn on dynamic client registration under **OAuth applications** in the Clerk dashboard, then add `https://<your host>/mcp` as a custom connector. Set `NOURI_PUBLIC_URL` when a proxy or tunnel hides the public origin from the server. [docs/mcp-design.md](docs/mcp-design.md) explains the design.
+`/mcp` is an MCP server whose tools search foods; log a meal, a saved meal, a workout, water, supplements, sleep, and body measurements; edit a logged food; read a day; and delete an entry. Claude and ChatGPT sign in through Clerk's OAuth consent page, so turn on dynamic client registration under **OAuth applications** in the Clerk dashboard, then add `https://<your host>/mcp` as a custom connector. Set `NOURI_PUBLIC_URL` when a proxy or tunnel hides the public origin from the server. [docs/mcp-design.md](docs/mcp-design.md) explains the design.
