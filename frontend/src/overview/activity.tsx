@@ -4,18 +4,20 @@ import { format, type Overview as OverviewData } from "../lib/api";
 import { providerDetails } from "../lib/wearables";
 import { colors } from "../theme.stylex";
 import { Caption, Empty, Section, Stat, Tile, Value } from "./shared";
+import { WorkoutsTile, type WorkoutsProps } from "./workouts";
 
-type ActivityProps = { activity: OverviewData["activity"]; heartRate: OverviewData["heartRate"]; stepsGoal: number | undefined };
+type ActivityProps = WorkoutsProps & { activity: OverviewData["activity"]; heartRate: OverviewData["heartRate"]; stepsGoal: number | undefined };
 
-// Daily totals come only from wearables, so an empty tile says nothing was imported rather than showing zero.
-export function ActivitySection({ activity, heartRate, stepsGoal }: ActivityProps) {
+// Workouts share a row with steps. Daily totals come only from wearables, so an empty tile says nothing was imported rather than showing zero.
+export function ActivitySection({ sports, busy, onDelete, activity, heartRate, stepsGoal }: ActivityProps) {
   return (
     <Section
       title="Activity"
-      description="Steps, active energy, and heart rate your wearables recorded for the day."
+      description="Workouts you log or import, plus steps, active energy, and heart rate from your wearables."
       icon={<Footprints size={18} />}
       color={colors.activity}
     >
+      <WorkoutsTile sports={sports} busy={busy} onDelete={onDelete} />
       <Tile title="Steps" icon={<Footprints size={16} />} aside={stepsGoal !== undefined && `${format(stepsGoal)} goal`} wide>
         <Value value={format(activity?.steps)} unit={activity?.steps == null ? undefined : "steps"} />
         {stepsGoal !== undefined && <Progress value={activity?.steps ?? 0} max={stepsGoal} color={colors.activity} aria-label="Steps against your goal" />}
