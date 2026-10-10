@@ -100,7 +100,8 @@ EOF
     # GETs an API path with the signed-in browser's session. Clerk only accepts tokens minted for the page's origin, so they come from the page.
     path=${3:?Usage: $0 readback RUN_ID /v1/PATH}
     [[ $path =~ ^/v1/[A-Za-z0-9/_.-]+$ ]] || { echo 'Path must be a /v1 API path.' >&2; exit 2; }
-    "$0" browser "$run_id" eval "async () => JSON.stringify(await (await fetch('$path', { headers: { Authorization: 'Bearer ' + await window.Clerk.session.getToken() } })).json())"
+    # --raw prints only the returned value, so the output is the response's JSON and nothing else.
+    "$0" browser "$run_id" --raw eval "async () => (await fetch('$path', { headers: { Authorization: 'Bearer ' + await window.Clerk.session.getToken() } })).json()"
     ;;
   sign-in-url)
     # Opening this URL signs the browser in as the run's user through Clerk's sign-in token flow.
