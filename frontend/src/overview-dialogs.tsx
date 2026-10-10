@@ -1,6 +1,7 @@
 import * as stylex from "@stylexjs/stylex";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Autocomplete } from "./components/ui/autocomplete";
 import { Button } from "./components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "./components/ui/dialog";
 import { Input } from "./components/ui/input";
@@ -10,7 +11,7 @@ import { TimePicker } from "./components/ui/time-picker";
 import { styles as formStyles } from "./form-styles";
 import { colors } from "./theme.stylex";
 import { useExitingRows } from "./lib/use-exiting-rows";
-import { exerciseHistoryQueryOptions, lastSession, setsLabel } from "./lib/exercise-history";
+import { exerciseHistoryQueryOptions, exerciseNames, lastSession, setsLabel } from "./lib/exercise-history";
 import { selectValue } from "./lib/select-value";
 import type { MeasurementInput } from "../../src/measurements/contract";
 import type { StrengthExercise, WorkoutInput } from "../../src/workouts/contract";
@@ -184,6 +185,7 @@ function WorkoutForm({ date, pending, onSave }: FormProps<WorkoutInput>) {
   const [exercises, setExercises] = useState(() => [{ id: crypto.randomUUID(), name: "", sets: "", reps: "", weight: "" }]);
   const { add, remove, rowProps, busy } = useExitingRows();
   const history = useQuery({ ...exerciseHistoryQueryOptions(), enabled: activity === "strength" });
+  const names = history.data ? exerciseNames(history.data.exercises, date) : [];
 
   function addExercise() {
     const id = crypto.randomUUID();
@@ -266,7 +268,7 @@ function WorkoutForm({ date, pending, onSave }: FormProps<WorkoutInput>) {
               </div>
               <div>
                 <Label htmlFor={`exercise-name-${exercise.id}`} {...stylex.props(formStyles.formLabel)}>Exercise name</Label>
-                <Input id={`exercise-name-${exercise.id}`} placeholder="e.g. Squat" maxLength={80} value={exercise.name} onChange={(event) => updateExercise(exercise.id, { name: event.target.value })} required />
+                <Autocomplete id={`exercise-name-${exercise.id}`} placeholder="e.g. Squat" maxLength={80} value={exercise.name} onValueChange={(name) => updateExercise(exercise.id, { name })} suggestions={names} required />
                 <LastTime
                   session={history.data ? lastSession(history.data.exercises, exercise.name, date) : null}
                   onRepeat={({ sets, reps, weightKg }) => updateExercise(exercise.id, { sets: String(sets), reps: String(reps), weight: weightKg === null ? "" : String(weightKg) })}

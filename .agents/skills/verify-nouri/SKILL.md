@@ -11,7 +11,7 @@ Read [features/README.md](features/README.md) and the relevant feature file befo
 
 Run from the repository root. Docker, `pnpm`, `pg_isready`, `curl`, Python 3, and `playwright cli` must be on `PATH`. The repository `.env` must hold `CLERK_SECRET_KEY` and `CLERK_PUBLISHABLE_KEY` for a Clerk development instance; the helper refuses live keys. Dependencies are described in the root and `frontend/package.json` files; run `pnpm install` if `node_modules` is absent. The helper starts a disposable `postgres:16-alpine` container on a random localhost port, runs `pnpm db:migrate` (`db/schema.sql`, then the numbered files in `db/migrations`), and starts `src/server.ts` on another free localhost port. Each run creates its own Clerk test user (a `+clerk_test` address that never receives mail) and deletes it at cleanup.
 
-The server serves the built page from `web/dist`. `launch` refuses to start when that build is missing or older than `frontend/index.html` or the TypeScript and CSS under `frontend/src` and `src` (the page imports its contracts from `src`). Run `pnpm build:web` first. The helper does not build for you, because rebuilding replaces assets under any other run serving the same `web/dist`.
+The server serves the built page from `web/dist`. `launch` refuses to start when that build is missing or older than `frontend/index.html` or the TypeScript and CSS under `frontend/src` and `src` (the page imports its contracts from `src`). Run `pnpm build:web` first. The helper does not build for you, because rebuilding replaces assets under any other run serving the same `web/dist`. A running server keeps serving the `index.html` it started with, so after rebuilding, clean up and launch a new run.
 
 ```sh
 RUN_ID="nouri-$(date +%s)-$$"
