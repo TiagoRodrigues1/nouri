@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import * as stylex from "@stylexjs/stylex";
 import { ChevronDown, Clock } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "./popover";
@@ -79,27 +79,53 @@ const styles = stylex.create({
 });
 
 // An "HH:MM" picker in the shadcn Popover style: hours on the left, 5-minute steps on the right.
+// While it is open, typing digits sets the time: "7" is 07, "12" is 12, and "1230" is 12:30.
 export function TimePicker({ id, value, onChange, onNow, onClose }: TimePickerProps) {
   const [open, setOpen] = useState(false);
   const [hour, minute] = value.split(":");
   // Keep an off-step minute such as 16:57 selectable after the default fills it in.
   const minutes = [...new Set([...steps, minute])].sort();
+  const typed = useRef("");
+  const typedAt = useRef(0);
+
+  function changeOpen(next: boolean) {
+    setOpen(next);
+    typed.current = "";
+
+    if (!next) onClose?.();
+  }
+
+  function type(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key === "Enter" && typed.current) {
+      event.preventDefault();
+      changeOpen(false);
+
+      return;
+    }
+
+    if (!/^[0-9]$/.test(event.key)) return;
+    event.preventDefault();
+    // A pause starts a new time instead of continuing the last one.
+    const fresh = event.timeStamp - typedAt.current > 1500;
+    typedAt.current = event.timeStamp;
+    const next = appendDigit(fresh ? "" : typed.current, event.key);
+
+    if (next === null) return;
+    typed.current = next.length === 4 ? "" : next;
+    onChange(next.length <= 2 ? `${next.padStart(2, "0")}:${minute}` : `${next.slice(0, 2)}:${next.slice(2).padEnd(2, "0")}`);
+
+    if (next.length === 4) changeOpen(false);
+  }
 
   return (
-    <Popover
-      open={open}
-      onOpenChange={(next) => {
-        setOpen(next);
-
-        if (!next) onClose?.();
-      }}
-    >
+    // Modal so the hour and minute lists scroll inside a dialog, whose scroll lock blocks everything outside it.
+    <Popover modal open={open} onOpenChange={changeOpen}>
       <PopoverTrigger id={id} {...stylex.props(styles.trigger)}>
         <Clock size={14} {...stylex.props(styles.icon)} />
         {value}
         <ChevronDown size={14} {...stylex.props(styles.icon)} />
       </PopoverTrigger>
-      <PopoverContent>
+      <PopoverContent onKeyDown={type}>
         <div {...stylex.props(styles.columns)}>
           <Column label="Hour" options={hours} selected={hour} onSelect={(next) => onChange(`${next}:${minute}`)} />
           <Column label="Minute" options={minutes} selected={minute} onSelect={(next) => onChange(`${hour}:${next}`)} />
@@ -117,13 +143,19 @@ export function TimePicker({ id, value, onChange, onNow, onClose }: TimePickerPr
 function Column({ label, options, selected, onSelect }: { label: string; options: string[]; selected: string; onSelect: (value: string) => void }) {
   const ref = useRef<HTMLDivElement>(null);
 
-  // Center the selected option when the popover opens.
+  const opened = useRef(false);
+
+  // Center the selected option when the popover opens, then keep it in view as typing changes it.
   useEffect(() => {
     const column = ref.current;
     const option = column?.querySelector<HTMLElement>("[aria-pressed=true]");
 
-    if (column && option) column.scrollTop = option.offsetTop - (column.clientHeight - option.offsetHeight) / 2;
-  }, []);
+    if (!column || !option) return;
+
+    if (opened.current) option.scrollIntoView({ block: "nearest" });
+    else column.scrollTop = option.offsetTop - (column.clientHeight - option.offsetHeight) / 2;
+    opened.current = true;
+  }, [selected]);
 
   return (
     <div ref={ref} role="group" aria-label={label} {...stylex.props(styles.column)}>
@@ -141,6 +173,18 @@ function Column({ label, options, selected, onSelect }: { label: string; options
       ))}
     </div>
   );
+}
+
+// Appends a typed digit to "H", "HH", "HHM", or "HHMM". A first hour digit above 2 or a first minute digit
+// above 5 can only mean one value, so it is padded at once. Returns null for a digit that cannot fit.
+function appendDigit(sofar: string, digit: string): string | null {
+  if (sofar === "" && digit > "2") return `0${digit}`;
+
+  if (sofar.length === 1 && Number(sofar + digit) > 23) return null;
+
+  if (sofar.length === 2 && digit > "5") return `${sofar}0${digit}`;
+
+  return sofar + digit;
 }
 
 function pad(value: number): string {
