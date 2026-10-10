@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { searchResultSchema, nutrientsSchema } from "../../src/food/contract.js";
-import { searchFoods } from "../../src/food/catalog.js";
+import { catalogFood, searchFoods } from "../../src/food/catalog.js";
 import { portugueseTerms, readQuery } from "../../src/food/portuguese.js";
 
 const first = (query: string, locale = "en") => searchFoods(query, locale).items[0]?.name;
@@ -101,4 +101,11 @@ void test("search responses retain catalog precision without loosening journal i
   assert.deepEqual(searchResultSchema.parse(result), result);
   assert.ok(result.items.some((item) => !nutrientsSchema.safeParse(item.nutrients).success));
   assert.equal(nutrientsSchema.safeParse({ kcal: 1, proteinG: 0.0015, carbsG: 0, fatG: 0 }).success, false);
+});
+
+test("a nutrient Ciqual lists as traces or below a limit is known, so it does not blank the day's total", () => {
+  // Ciqual gives raw banana "< 0,5" g fat; the catalog counts half the limit.
+  const banana = catalogFood({ provider: "ciqual", id: "13005", version: "2025" }, 120);
+
+  assert.equal(banana?.nutrients.fatG, 0.3);
 });

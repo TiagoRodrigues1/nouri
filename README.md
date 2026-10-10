@@ -50,7 +50,7 @@ curl 'http://localhost:3000/v1/foods/search?q=peito%20de%20frango&locale=pt-PT' 
   -H "Authorization: Bearer $NOURI_TOKEN"
 ```
 
-Choose a search result and send its `ref` with a quantity in grams. The server calculates and stores the portion nutrients, including `null` for missing values.
+Choose a search result and send its `ref` with a quantity in grams. The server calculates and stores the portion nutrients, including `null` for missing values. Ciqual marks some amounts as `traces` or below a limit, such as `< 0,5`; the catalog reads those as 0 and half the limit, so only values Ciqual never measured (`-`) are `null`. A day's total for a nutrient is `null` when any food that day lacks it.
 
 ```json
 {
