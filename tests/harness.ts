@@ -21,12 +21,20 @@ export function createHarness(wearables?: WearableRuntime) {
   const otherUserId = "22222222-2222-4222-8222-222222222222";
   const token = "test-session-token";
   const agentToken = "test-oauth-token";
+  const webhookSignature = "test-webhook-signature";
   const db = drizzle(client);
 
   // Stands in for Clerk: the test tokens sign in as whichever Clerk user the app was built for.
   const identity = (clerkUserId: string) => ({
     authenticate: async (request: Request) => request.headers.get("Authorization") === `Bearer ${token}` ? clerkUserId : null,
     authenticateAgent: async (request: Request) => request.headers.get("Authorization") === `Bearer ${agentToken}` ? clerkUserId : null,
+    // Stands in for Clerk's signed webhook: the test signature passes, and a user.deleted body names the user.
+    readWebhook: async (request: Request) => {
+      if (request.headers.get("Webhook-Signature") !== webhookSignature) return "forged" as const;
+      const event: { type?: string; data?: { id?: string } } = await request.json();
+
+      return { deletedUser: event.type === "user.deleted" ? event.data?.id ?? null : null };
+    },
     publishableKey,
   });
 
@@ -37,7 +45,7 @@ export function createHarness(wearables?: WearableRuntime) {
   const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
 
   return {
-    app, otherApp, client, db, token, agentToken, userId, headers, products,
+    app, otherApp, client, db, token, agentToken, webhookSignature, userId, otherUserId, headers, products,
     signedInAs: (clerkUserId: string) => createApp(db, identity(clerkUserId), packagedFoods, wearables),
     setup: async () => {
       await admin.unsafe(`CREATE SCHEMA "${schema}"`);

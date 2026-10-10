@@ -112,6 +112,22 @@ export async function request<Schema extends z.ZodType>(
   return schema.parse(body);
 }
 
+// Saves everything Nouri stores for the account as a JSON file, under the name the server gives it.
+export async function downloadAccountExport(): Promise<void> {
+  const response = await authorized("/v1/account/export");
+
+  if (!response.ok) throw new ApiError(response.status === 401 ? "Your session has ended. Reload the page to sign in again." : "Your data could not be exported. Try again.", response.status);
+  const name = /filename="([^"]+)"/.exec(response.headers.get("Content-Disposition") ?? "")?.[1] ?? "nouri-export.json";
+  const url = URL.createObjectURL(await response.blob());
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download = name;
+  link.click();
+  // The download has started reading the blob by the next task, so the URL can go.
+  setTimeout(() => URL.revokeObjectURL(url));
+}
+
 // A write sends its own Idempotency-Key, and the revision it replaces when it edits or deletes a record.
 type Write = { method: "POST" | "PATCH" | "DELETE"; key: string; revision?: number; json?: unknown; form?: FormData };
 

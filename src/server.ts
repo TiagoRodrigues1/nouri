@@ -2,6 +2,7 @@ import { serve } from "@hono/node-server";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { z } from "zod";
+import { sweepExpired } from "./account/account.js";
 import { createApp } from "./app.js";
 import { openFoodFacts } from "./food/packaged.js";
 import { wearablesFromEnv } from "./google-health/config.js";
@@ -19,9 +20,21 @@ const wearables = wearablesFromEnv(process.env, fetch);
 
 const client = postgres(settings.DATABASE_URL);
 
-const app = createApp(drizzle(client), identityFromEnv(process.env), openFoodFacts(fetch), wearables, settings.NOURI_PUBLIC_URL);
+const db = drizzle(client);
+
+const app = createApp(db, identityFromEnv(process.env), openFoodFacts(fetch), wearables, settings.NOURI_PUBLIC_URL);
 
 const server = serve({ fetch: app.fetch, port: settings.PORT, hostname: settings.HOST });
 
+// Retry receipts and other short-lived rows expire by age. The Dockerfile runs one instance, so this process sweeps.
+const sweep = () => void sweepExpired(db, new Date()).catch((failure: Error) => console.error(`Retention sweep failed: ${failure.message}`));
+
+const sweeps = setInterval(sweep, 60 * 60_000);
+
+sweep();
+
 // Hosts stop the app with SIGTERM on each deploy; finish open requests before releasing the database connections.
-process.once("SIGTERM", () => server.close(() => void client.end()));
+process.once("SIGTERM", () => {
+  clearInterval(sweeps);
+  server.close(() => void client.end());
+});

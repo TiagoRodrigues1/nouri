@@ -113,6 +113,12 @@ curl -X POST http://localhost:3000/v1/progress-photos \
 
 The server accepts JPEG, PNG, and WebP up to 8 MB. It identifies the type from the file's first bytes, not from its name. The bytes are stored in PostgreSQL. `GET /v1/progress-photos/{id}/image` returns them. Deleting a photo erases its bytes.
 
+### Account deletion and data export
+
+`GET /v1/account/export` returns every record Nouri stores for the account as one JSON file, including deleted entries and retry receipts. Photos are base64 inside it. The web app offers it as **Download my data** in the account menu.
+
+People delete their account in Clerk's account panel. Clerk then sends `user.deleted` to `POST /webhooks/clerk`, and Nouri revokes any Google Health grant and deletes every row that belongs to the person. To set it up, enable account deletion in the Clerk dashboard, add a webhook endpoint at `<your origin>/webhooks/clerk` subscribed to `user.deleted`, and set `CLERK_WEBHOOK_SIGNING_SECRET` to its signing secret. The server will not start without that secret when `NODE_ENV=production`, as in the Docker image. Retry receipts are kept for 30 days. [docs/account-data-design.md](docs/account-data-design.md) explains the design.
+
 ### Google Health sleep, workouts, and activity
 
 Nouri can import sleep, workouts, steps, active energy, and heart rate from Google Health, which is where a Fitbit Air syncs through the phone app. Nouri's server signs in to Google with the read-only sleep, activity-and-fitness, and health-metrics scopes and keeps the tokens encrypted in PostgreSQL. The page never sees them. Set these in `.env` and restart:
