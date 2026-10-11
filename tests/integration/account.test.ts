@@ -129,7 +129,10 @@ void test("account export, erasure on Clerk's user.deleted, and retention", asyn
     assert.deepEqual(kept.map((receipt) => receipt.key), ["recent", "water-other"]);
 
     // A day on, every token from before the erasure has expired, and the tombstone goes too.
-    await sweepExpired(db, new Date("2026-10-12T12:00:00Z"));
+    const [erased] = await client<{ erased_at: string }[]>`SELECT erased_at::text FROM erased_users WHERE clerk_user_id = 'user_test_1'`;
+
+    assert.ok(erased);
+    await sweepExpired(db, new Date(new Date(erased.erased_at).getTime() + 2 * 86_400_000));
     assert.equal((await client`SELECT 1 FROM erased_users`).length, 0);
   } finally {
     await cleanup();

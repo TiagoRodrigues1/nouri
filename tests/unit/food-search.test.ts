@@ -103,7 +103,7 @@ void test("search responses retain catalog precision without loosening journal i
   assert.equal(nutrientsSchema.safeParse({ kcal: 1, proteinG: 0.0015, carbsG: 0, fatG: 0 }).success, false);
 });
 
-test("a nutrient Ciqual lists as traces or below a limit is known, so it does not blank the day's total", () => {
+void test("a nutrient Ciqual lists as traces or below a limit is known, so it does not blank the day's total", () => {
   // Ciqual gives raw banana "< 0,5" g fat; the catalog counts half the limit.
   const banana = catalogFood({ provider: "ciqual", id: "13005", version: "2025" }, 120);
 

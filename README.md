@@ -149,6 +149,8 @@ The image listens on `0.0.0.0:3000`; set `PORT` if the host assigns one. The bar
 
 `pnpm typecheck` and `pnpm lint` run without a database. `pnpm test:integration` needs `DATABASE_URL` for PostgreSQL and a built frontend. The test creates and removes its own schema.
 
+GitHub Actions runs these checks on pushes and pull requests, along with `pnpm test:unit` and `pnpm build:web`. The [CI workflow](.github/workflows/ci.yml) uses Node 26, the pnpm version from `package.json`, a frozen lockfile install, and a temporary PostgreSQL 16 database. It needs no repository secrets and can also be started manually from the Actions tab.
+
 ## Logging from Claude or ChatGPT
 
 `/mcp` is an MCP server whose tools search foods and exercises; log a meal, a saved meal, a workout, water, supplements, sleep, and body measurements; edit a logged food; read a day; and delete an entry. Claude and ChatGPT sign in through Clerk's OAuth consent page, so turn on dynamic client registration under **OAuth applications** in the Clerk dashboard, then add `https://<your host>/mcp` as a custom connector. Set `NOURI_PUBLIC_URL` when a proxy or tunnel hides the public origin from the server. [docs/mcp-design.md](docs/mcp-design.md) explains the design.
