@@ -5,8 +5,11 @@ export type Theme = "light" | "dark";
 
 // index.html reads the same key before first paint, so a dark page never flashes light.
 const storageKey = "nouri.theme";
+
 const systemDark = window.matchMedia("(prefers-color-scheme: dark)");
+
 const listeners = new Set<() => void>();
+
 let latest: ViewTransition | undefined;
 
 function stored(): Theme | null {
@@ -36,6 +39,7 @@ systemDark.addEventListener("change", (event) => {
 export function useTheme(): Theme {
   return useSyncExternalStore((listener) => {
     listeners.add(listener);
+
     return () => listeners.delete(listener);
   }, current);
 }
@@ -46,6 +50,7 @@ export function setTheme(theme: Theme, origin: HTMLElement) {
 
   if (!document.startViewTransition) {
     apply(theme);
+
     return;
   }
 

@@ -62,6 +62,7 @@ function MealGrid({ meals }: { meals: SavedMeal[] }) {
       for (const { target, borderBoxSize } of entries) {
         const height = borderBoxSize[0]?.blockSize ?? target.getBoundingClientRect().height;
 
+        // SAFETY: The observer watches only this list's direct children, which are rendered as HTML li elements.
         (target as HTMLElement).style.gridRowEnd = `span ${Math.ceil(height) + cardGap}`;
       }
     });
