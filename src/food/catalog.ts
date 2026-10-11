@@ -22,7 +22,8 @@ const byId = new Map(data.foods.map((food) => [food.id, food]));
 
 const attribution = { provider: "ciqual", label: "Anses. 2025. Table de composition nutritionnelle des aliments Ciqual", url: "https://doi.org/10.57745/RDMHWY" };
 
-function normalize(value: string): string {
+// A name or query as search compares it: lowercase, without accents. Community food search uses it too.
+export function searchKey(value: string): string {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase().trim();
 }
 
@@ -31,8 +32,8 @@ function words(value: string): string[] {
 }
 
 const indexed = data.foods.map((food) => {
-  const french = normalize(food.nameFr);
-  const english = normalize(food.nameEn);
+  const french = searchKey(food.nameFr);
+  const english = searchKey(food.nameEn);
 
   return { food, french, english, tokens: [...new Set(words(`${english} ${french}`))] };
 });
@@ -195,7 +196,7 @@ function rank(foods: Entry[], parts: Part[]) {
 }
 
 export function searchFoods(query: string, locale: string) {
-  const normalizedQuery = normalize(query);
+  const normalizedQuery = searchKey(query);
   const parts = readQuery(normalizedQuery.split(/[\s-]+/).filter(Boolean)).map(part);
 
   const foods = byLanguage[locale.startsWith("fr") ? "fr" : "en"];

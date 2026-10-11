@@ -19,8 +19,9 @@ type MutationResult<Entry> =
   | { outcome: "deleted" | "missing" | "stale" | "key-reuse" | "catalog-missing" | "invalid-item" | "invalid-amount" }
   | { outcome: "unknown-reference" | "duplicate"; message: string };
 
-// Every write answers the same way; routes differ only in what a missing record is called.
-export function mutationResponse<Entry>(result: MutationResult<Entry>, missing: string): Response {
+// Every write answers the same way; routes differ only in what a missing record is called. A write that never
+// finds a record missing names none.
+export function mutationResponse<Entry>(result: MutationResult<Entry>, missing = "Not found"): Response {
   switch (result.outcome) {
     case "created":
     case "updated":

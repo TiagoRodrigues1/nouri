@@ -1,11 +1,11 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { customExercises } from "../db/schema.js";
 import type { AppDatabase } from "../db/database.js";
 import { softDelete } from "../journal/records.js";
-import { withReceipt } from "../journal/receipt.js";
+import { requestHash, withReceipt } from "../journal/receipt.js";
 import { exerciseKey } from "../workouts/contract.js";
 import { customExerciseSchema, equipment, muscles } from "./contract.js";
 import type { CustomExercise, CustomExerciseInput, ExerciseLibrary, LibraryExercise } from "./contract.js";
@@ -69,7 +69,7 @@ export type CustomExerciseResult =
   | { outcome: "duplicate"; message: string };
 
 function hash(command: CustomExerciseCommand): string {
-  return createHash("sha256").update(JSON.stringify({ ...command, kind: `custom-exercise-${command.kind}` })).digest("hex");
+  return requestHash({ ...command, kind: `custom-exercise-${command.kind}` });
 }
 
 // A custom exercise may take a name only the person's history has, which gives that history a muscle and

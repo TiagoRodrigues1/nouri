@@ -67,7 +67,8 @@ void test("account export, erasure on Clerk's user.deleted, and retention", asyn
       FROM information_schema.columns c WHERE c.table_schema = current_schema() AND c.column_name = 'user_id'`;
 
     assert.ok(owned.length >= 16);
-    assert.deepEqual(owned.filter((table) => !table.cascades), []);
+    // Community foods are shared, so erasure keeps them and forgets who added them; the community foods tests check that.
+    assert.deepEqual(owned.filter((table) => !table.cascades), [{ table: "community_foods", cascades: false }]);
 
     assert.equal((await post(app, "/v1/food-entries", "oats-1", oats)).status, 201);
     assert.equal((await post(app, "/v1/water-entries", "water-1", glass)).status, 201);

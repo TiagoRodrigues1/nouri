@@ -62,7 +62,7 @@ export function LogFoodDialog({ open, onOpenChange, date, isToday, pending, onSa
               <RecentFoodsTab date={date} time={time} onLogged={() => onOpenChange(false)} />
             </TabsContent>
             <TabsContent value="search">
-              <SearchFoodPicker actionLabel="Add to log" pending={pending} onPick={(food) => onSave(food, time)} />
+              <SearchFoodPicker actionLabel="Add to log" pending={pending} onPick={({ submitted }) => onSave(submitted, time)} />
             </TabsContent>
             <TabsContent value="meals">
               <SavedMealsTab date={date} time={time} onLogged={() => onOpenChange(false)} onManage={() => onOpenChange(false)} />

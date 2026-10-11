@@ -12,12 +12,12 @@ type Refresh<Input> =
 type Feedback<Input> = { success?: (input: Input) => string; onSuccess?: (input: Input) => void };
 
 // One key per distinct request, reused while it is retried. Serves creates and edits alike.
-export function useIdempotentWrite<Input>(
-  send: (input: Input, key: string) => Promise<object | void>,
+export function useIdempotentWrite<Input, Result extends object | void = object | void>(
+  send: (input: Input, key: string) => Promise<Result>,
   options: Refresh<Input> & Feedback<Input> & { signature?: (input: Input) => string },
 ) {
   const client = useQueryClient();
-  const pending = useRef(new PendingWrites<Input, object | void>());
+  const pending = useRef(new PendingWrites<Input, Result>());
 
   const refresh = (input: Input) => {
     const names = "refreshFor" in options ? options.refreshFor(input) : options.refresh;

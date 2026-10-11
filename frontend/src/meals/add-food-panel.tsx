@@ -34,7 +34,7 @@ export function AddFoodPanel({ onAdd }: { onAdd: (row: DraftRow) => void }) {
         <TabsContent value="search">
           <SearchFoodPicker
             actionLabel="Add to meal"
-            onPick={(food, preview) => onAdd(draftRow({ kind: "submitted", food }, preview))}
+            onPick={({ submitted, preview }) => onAdd(draftRow({ kind: "submitted", food: submitted }, preview))}
           />
         </TabsContent>
         <TabsContent value="manual">
