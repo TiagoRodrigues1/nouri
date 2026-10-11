@@ -17,6 +17,7 @@ import { draftItems, entryRows, maxMealItems, rowFood, savedRows, type DraftRow 
 import { totalNutrients } from "../../../src/food/contract";
 import { currentTime, dateLabel, timeZone } from "../lib/time";
 import { useDeleteMeal, useSaveMeal, useSavedMeals } from "../lib/use-saved-meals";
+import { useExitingRows } from "../lib/use-exiting-rows";
 import { Bone, Loading } from "../loading";
 import { queryFallback } from "../query-status";
 import { styles as formStyles } from "../form-styles";
@@ -75,12 +76,14 @@ function MealEditor({ meal, initialRows, from }: { meal: SavedMeal | null; initi
   const remove = useDeleteMeal(toList);
   const [name, setName] = useState(meal?.name ?? "");
   const [rows, setRows] = useState(initialRows);
+  const rowMotion = useExitingRows();
   const [daily, setDaily] = useState(Boolean(meal?.daily));
   const [dailyTime, setDailyTime] = useState(meal?.daily?.time ?? "08:00");
   const totals = totalNutrients(rows.map((row) => rowFood(row).nutrients));
   const tooMany = rows.length > maxMealItems;
 
   function add(row: DraftRow) {
+    rowMotion.add(row.key);
     setRows((current) => [...current, row]);
     toast.success(`${row.food.name} added to the meal.`);
   }
@@ -120,7 +123,7 @@ function MealEditor({ meal, initialRows, from }: { meal: SavedMeal | null; initi
                 <p {...stylex.props(styles.noFoods)}>No foods yet. Add some from the panel{" "}<span aria-hidden>→</span></p>
               ) : (
                 <ul {...stylex.props(styles.rows)} aria-label="Foods in this meal">
-                  {rows.map((row, index) => <FoodRow key={row.key} row={row} first={index === 0} onAmount={(amount) => change(row.key, amount)} onRemove={() => setRows((current) => current.filter((other) => other.key !== row.key))} />)}
+                  {rows.map((row, index) => <FoodRow key={row.key} row={row} first={index === 0} motion={rowMotion.rowProps(row.key)} onAmount={(amount) => change(row.key, amount)} onRemove={() => rowMotion.remove(row.key, () => setRows((current) => current.filter((other) => other.key !== row.key)))} />)}
                 </ul>
               )}
               {tooMany && <p {...stylex.props(styles.hint, styles.danger)} role="alert">A meal holds up to {maxMealItems} foods.</p>}
@@ -147,7 +150,7 @@ function MealEditor({ meal, initialRows, from }: { meal: SavedMeal | null; initi
               )}
               <span {...stylex.props(styles.spacer)} />
               <Button type="button" variant="outline" onClick={toList}>Cancel</Button>
-              <Button type="submit" disabled={save.isPending || rows.length === 0 || tooMany}>Save meal</Button>
+              <Button type="submit" disabled={save.isPending || rowMotion.busy || rows.length === 0 || tooMany}>Save meal</Button>
             </div>
           </form>
         </Card>
@@ -157,11 +160,13 @@ function MealEditor({ meal, initialRows, from }: { meal: SavedMeal | null; initi
   );
 }
 
-function FoodRow({ row, first, onAmount, onRemove }: { row: DraftRow; first: boolean; onAmount: (amount: string) => void; onRemove: () => void }) {
+type RowMotionProps = ReturnType<ReturnType<typeof useExitingRows>["rowProps"]>;
+
+function FoodRow({ row, first, motion, onAmount, onRemove }: { row: DraftRow; first: boolean; motion: RowMotionProps; onAmount: (amount: string) => void; onRemove: () => void }) {
   const { name, quantity, nutrients } = rowFood(row);
 
   return (
-    <li {...stylex.props(styles.row, !first && styles.rowBorder)}>
+    <li {...motion} {...stylex.props(styles.row, !first && styles.rowBorder)}>
       <span {...stylex.props(styles.rowText)}>
         <strong {...stylex.props(styles.rowName)}>{name}</strong>
         <small {...stylex.props(styles.rowMeta)}>{nutrientLine(nutrients)}</small>

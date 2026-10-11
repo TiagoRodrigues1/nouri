@@ -1,5 +1,5 @@
 import * as stylex from "@stylexjs/stylex";
-import { useState, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Link2, RefreshCw, Unplug } from "lucide-react";
 import { Badge } from "./components/ui/badge";
 import { Button } from "./components/ui/button";
@@ -61,6 +61,13 @@ function ProviderPanel({ connection }: { connection: ReturnType<typeof useConnec
   const [confirming, setConfirming] = useState(false);
   const { name, description } = providerDetails[provider];
   const data = status.data;
+  const previousState = useRef<ConnectionStatus["connection"] | null>(null);
+  const stateChanged = previousState.current !== null && data !== undefined && previousState.current !== data.connection;
+
+  useLayoutEffect(() => {
+    if (data) previousState.current = data.connection;
+  }, [data?.connection]);
+
   const busy = connect.isPending || sync.isPending || disconnect.isPending;
   const view = data && views[data.connection];
   const badge = data && connectionBadges[data.connection];
@@ -79,7 +86,7 @@ function ProviderPanel({ connection }: { connection: ReturnType<typeof useConnec
       {data && view?.note && <p {...stylex.props(overviewStyles.note)}>{view.note(name, data.windowDays)}</p>}
       {missing.length > 0 && <p {...stylex.props(overviewStyles.note)}>Nouri cannot read {listOr.format(missing.map((kind) => importKindNames[kind]))} with this sign-in. Choose Connect again and allow it to import them too.</p>}
       {data && view?.showStats && (
-        <div {...stylex.props(overviewStyles.rows)}>
+        <div key={data.connection} data-connection-change={stateChanged ? "" : undefined} {...stylex.props(overviewStyles.rows)}>
           <Stat label="Last successful sync" value={lastSync(data.lastSyncedAt)} />
           {importKinds.map((kind) => <Stat key={kind} label={`Imported ${importKindNames[kind]}`} value={countOf(kind, data.imported[kind])} />)}
         </div>
