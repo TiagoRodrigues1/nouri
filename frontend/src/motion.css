@@ -36,6 +36,10 @@
   transition: opacity 180ms var(--ease-ui-out), transform 180ms var(--ease-ui-out);
 }
 
+[data-connection-change] {
+  transition: opacity 180ms var(--ease-ui-out), transform 180ms var(--ease-ui-out);
+}
+
 [data-exiting="true"] {
   opacity: 0;
   transform: translateY(6px);
@@ -46,6 +50,11 @@
 @starting-style {
   [data-form-enter],
   [data-exercise-list] {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  [data-connection-change] {
     opacity: 0;
     transform: translateY(6px);
   }
@@ -88,13 +97,18 @@
     transition: opacity 100ms var(--ease-ui-out);
   }
 
+  [data-connection-change] {
+    transition: opacity 100ms var(--ease-ui-out);
+  }
+
   [data-exiting="true"] {
     transform: none;
   }
 
   @starting-style {
     [data-form-enter],
-  [data-exercise-list] {
+    [data-exercise-list],
+    [data-connection-change] {
       transform: none;
     }
   }
