@@ -36,6 +36,9 @@ export const styles = stylex.create({
     gap: 14,
     gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))",
   },
+  // Rows are 1px tall and each card spans its own height plus the gap, so a card fills in under the shortest column.
+  masonry: { gridAutoRows: 1, rowGap: 0 },
+  masonryItem: { alignSelf: "start" },
   card: { display: "flex", flexDirection: "column", gap: 0 },
   cardBody: { display: "grid", gap: 10, padding: "18px 18px 14px", flexGrow: 1 },
   cardTop: { display: "flex", alignItems: "start", justifyContent: "space-between", gap: 10 },

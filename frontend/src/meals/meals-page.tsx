@@ -1,5 +1,5 @@
 import * as stylex from "@stylexjs/stylex";
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { CookingPot, Plus } from "lucide-react";
 import { Button } from "../components/ui/button";
@@ -45,11 +45,36 @@ export function MealsPage() {
           </Button>
         </div>
       ) : (
-        <ul {...stylex.props(styles.grid)} aria-label="Meals">
-          {meals.map((meal) => <li key={meal.id}><MealCard meal={meal} /></li>)}
-        </ul>
+        <MealGrid meals={meals} />
       )}
     </>
+  );
+}
+
+const cardGap = 14;
+
+// Cards keep their own heights and pack into the shortest column, so a short card moves up under its neighbour.
+function MealGrid({ meals }: { meals: SavedMeal[] }) {
+  const list = useRef<HTMLUListElement>(null);
+
+  useLayoutEffect(() => {
+    const observer = new ResizeObserver((entries) => {
+      for (const { target, borderBoxSize } of entries) {
+        const height = borderBoxSize[0]?.blockSize ?? target.getBoundingClientRect().height;
+
+        (target as HTMLElement).style.gridRowEnd = `span ${Math.ceil(height) + cardGap}`;
+      }
+    });
+
+    for (const item of list.current?.children ?? []) observer.observe(item);
+
+    return () => observer.disconnect();
+  }, [meals]);
+
+  return (
+    <ul ref={list} {...stylex.props(styles.grid, styles.masonry)} aria-label="Meals">
+      {meals.map((meal) => <li key={meal.id} {...stylex.props(styles.masonryItem)}><MealCard meal={meal} /></li>)}
+    </ul>
   );
 }
 
