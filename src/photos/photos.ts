@@ -4,7 +4,7 @@ import { progressPhotos } from "../db/schema.js";
 import type { AppDatabase } from "../db/database.js";
 import type { RecordKind } from "../journal/records.js";
 import { localDate } from "../time.js";
-import { photoSchema } from "./contract.js";
+import { maxAccountPhotoBytes, maxAccountPhotos, maxTotalPhotoBytes, photoSchema } from "./contract.js";
 import type { Photo, PhotoType } from "./contract.js";
 
 export type PhotoInput = { occurredAt: string; timeZone: string; contentType: PhotoType; image: Buffer; thumbnail: Buffer | null };
@@ -47,6 +47,26 @@ export const photoRecords: RecordKind<PhotoInput, Photo> = {
   // A removed photo keeps its row for the revision history but not the picture itself.
   erase: sql`image = ''::bytea, thumbnail = NULL`,
   create: async (tx, userId, input) => {
+    // The shared transaction lock makes the global and per-account checks atomic with the insert, across processes.
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(72841901)`);
+
+    const [usage] = await tx.execute<{ total: string; account: string; photos: string }>(sql`
+      SELECT coalesce(sum(byte_size + coalesce(octet_length(thumbnail), 0)), 0) AS total,
+        coalesce(sum(byte_size + coalesce(octet_length(thumbnail), 0)) FILTER (WHERE user_id = ${userId}), 0) AS account,
+        count(*) FILTER (WHERE user_id = ${userId}) AS photos
+      FROM ${progressPhotos} WHERE deleted_at IS NULL`);
+
+    if (!usage) throw new Error("Photo usage query returned no row");
+    const bytes = input.image.length + (input.thumbnail?.length ?? 0);
+
+    if (Number(usage.account) + bytes > maxAccountPhotoBytes || Number(usage.photos) >= maxAccountPhotos) {
+      return { outcome: "quota-exceeded", message: "Photo storage limit reached. Delete some photos before uploading more." };
+    }
+
+    if (Number(usage.total) + bytes > maxTotalPhotoBytes) {
+      return { outcome: "quota-exceeded", message: "The app's photo storage is full. Try again after space is freed." };
+    }
+
     const [row] = await tx.insert(progressPhotos).values({
       id: randomUUID(),
       userId,
@@ -74,6 +94,16 @@ export async function getRecentPhotos(db: AppDatabase, userId: string, date: str
 }
 
 // The thumbnail falls back to the full image for photos uploaded before thumbnails existed.
+// Read the size first so bandwidth is reserved before fetching the image's bytes from the database.
+export async function getPhotoByteSize(db: AppDatabase, userId: string, id: string, size: "full" | "thumbnail"): Promise<number | null> {
+  const bytes = size === "full" ? progressPhotos.byteSize : sql<number>`coalesce(octet_length(${progressPhotos.thumbnail}), ${progressPhotos.byteSize})`;
+
+  const [row] = await db.select({ bytes }).from(progressPhotos)
+    .where(and(eq(progressPhotos.userId, userId), eq(progressPhotos.id, id), isNull(progressPhotos.deletedAt)));
+
+  return row?.bytes ?? null;
+}
+
 export async function getPhotoImage(db: AppDatabase, userId: string, id: string, size: "full" | "thumbnail"): Promise<{ contentType: PhotoType; image: Buffer } | null> {
   const columns = size === "full"
     ? { contentType: progressPhotos.contentType, image: progressPhotos.image }

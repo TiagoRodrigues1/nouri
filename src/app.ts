@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { OpenAPIHono } from "@hono/zod-openapi";
 import type { RouteConfig } from "@hono/zod-openapi";
 import { bodyLimit } from "hono/body-limit";
+import { requestPolicy } from "./request-policy.js";
 import { compress } from "hono/compress";
 import { z } from "zod";
 import { eraseAccount, exportAccount } from "./account/account.js";
@@ -33,7 +34,7 @@ import { getOverview } from "./overview/overview.js";
 import { reviewSchema } from "./review/contract.js";
 import { getReview } from "./review/review.js";
 import { maxPhotoBytes, maxThumbnailBytes, photoSchema, photoUploadSchema } from "./photos/contract.js";
-import { detectPhotoType, getPhotoImage, photoRecords } from "./photos/photos.js";
+import { detectPhotoType, getPhotoByteSize, getPhotoImage, photoRecords } from "./photos/photos.js";
 import { sleepInputSchema } from "./sleep/contract.js";
 import { sleepRecords } from "./sleep/sleep.js";
 import { intakeInputSchema } from "./supplements/contract.js";
@@ -51,6 +52,12 @@ function escapeHtml(value: string): string {
 
 export function createApp(db: AppDatabase, identity: Identity, packagedFoods: PackagedFoods, wearables?: WearableRuntime, publicUrl?: string) {
   const app = new OpenAPIHono<{ Variables: { userId: string; idempotencyKey: string } }>();
+  const limits = requestPolicy();
+  app.use("/v1/progress-photos", async (context, next) => {
+    if (context.req.method === "POST") return limits.beforeUpload(context, next);
+    await next();
+  });
+  app.use(limits.beforeRequest);
 
   // Clerk loads its scripts from the instance's Frontend API, shows avatars from img.clerk.com, and runs bot protection in a Cloudflare frame.
   const clerk = clerkFrontendOrigin(identity.publishableKey);
@@ -119,7 +126,7 @@ export function createApp(db: AppDatabase, identity: Identity, packagedFoods: Pa
   });
 
   // Outside /v1, so Clerk OAuth access tokens are checked instead of session tokens and no Idempotency-Key is asked for.
-  app.route("/", mcpRoutes(db, identity, publicUrl));
+  app.route("/", mcpRoutes(db, identity, limits.forUser, publicUrl));
 
   const keyParameter = idempotencyKeySchema;
   const mutationHeaders = z.object({ "Idempotency-Key": keyParameter });
@@ -134,6 +141,10 @@ export function createApp(db: AppDatabase, identity: Identity, packagedFoods: Pa
     const clerkUserId = await identity.authenticate(context.req.raw);
 
     if (!clerkUserId) return error(401, "Unauthorized");
+    const refused = limits.forUser(clerkUserId, context.req.method, context.req.path);
+
+    if (refused) return refused;
+    context.header("Cache-Control", "private, no-store");
     let userId = userIds.get(clerkUserId);
 
     if (!userId) {
@@ -354,6 +365,12 @@ export function createApp(db: AppDatabase, identity: Identity, packagedFoods: Pa
       const id = z.uuid().safeParse(context.req.param("id"));
 
       if (!id.success) return error(400, "Invalid photo request");
+      const bytes = await getPhotoByteSize(db, context.get("userId"), id.data, size);
+
+      if (bytes === null) return error(404, "Photo not found");
+      const refused = limits.photoDownload(context.get("userId"), bytes);
+
+      if (refused) return refused;
       const photo = await getPhotoImage(db, context.get("userId"), id.data, size);
 
       if (!photo) return error(404, "Photo not found");
@@ -432,8 +449,11 @@ export function createApp(db: AppDatabase, identity: Identity, packagedFoods: Pa
 
   app.get("/v1/account/export", (context) => {
     const now = new Date();
+    const stream = limits.exportStream(context.get("userId"), () => exportAccount(db, context.get("userId"), now));
 
-    return new Response(exportAccount(db, context.get("userId"), now), {
+    if (stream instanceof Response) return stream;
+
+    return new Response(stream, {
       headers: {
         "Content-Type": "application/json; charset=utf-8",
         "Content-Disposition": `attachment; filename="nouri-export-${now.toISOString().slice(0, 10)}.json"`,

@@ -50,6 +50,10 @@ void test("the MCP server signs in through Clerk OAuth and logs meals and workou
     assert.equal((await app.request("/mcp", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: "{}" })).status, 401);
     assert.equal((await app.request("/v1/days/2026-10-07", { headers: { Authorization: `Bearer ${agentToken}` } })).status, 401);
 
+    const batch = await app.request("/mcp", { method: "POST", headers: { Authorization: `Bearer ${agentToken}`, "Content-Type": "application/json" }, body: JSON.stringify([{ jsonrpc: "2.0", id: 1, method: "tools/list" }, { jsonrpc: "2.0", id: 2, method: "tools/list" }]) });
+    assert.equal(batch.status, 400);
+    assert.match((await batch.json()).error, /one MCP message/);
+
     const client = await connect(app);
     const { tools } = await client.listTools();
     assert.deepEqual(tools.map((tool) => tool.name).sort(), [

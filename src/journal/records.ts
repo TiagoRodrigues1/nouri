@@ -12,7 +12,7 @@ export type RecordCommand<Input> =
 export type RecordMutationResult<Entry> =
   | { outcome: "created"; entry: Entry }
   | { outcome: "deleted" | "missing" | "stale" | "key-reuse" }
-  | { outcome: "unknown-reference"; message: string };
+  | { outcome: "unknown-reference" | "quota-exceeded"; message: string };
 
 export type RecordKind<Input, Entry> = {
   // Receipts share one key space, so the fingerprint names the record kind.
@@ -24,7 +24,7 @@ export type RecordKind<Input, Entry> = {
   erase?: SQL;
   deletable?: SQL;
   create: (tx: Transaction, userId: string, input: Input) => Promise<
-    { outcome: "created"; entry: Entry } | { outcome: "unknown-reference"; message: string }
+    { outcome: "created"; entry: Entry } | { outcome: "unknown-reference" | "quota-exceeded"; message: string }
   >;
 };
 
