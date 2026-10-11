@@ -245,14 +245,6 @@ export function Dashboard() {
               <Watch data-nav-icon size={17} {...stylex.props(wearablesOpen && styles.iconAccent)} />
               Wearables
             </button>
-            <button
-              type="button"
-              {...stylex.props(styles.navItem)}
-              onClick={(event) => setTheme(theme === "dark" ? "light" : "dark", event.currentTarget)}
-            >
-              {theme === "dark" ? <Sun data-nav-icon size={17} /> : <Moon data-nav-icon size={17} />}
-              {theme === "dark" ? "Light theme" : "Dark theme"}
-            </button>
           </div>
         </nav>
         <div {...stylex.props(styles.sidebarBottom)}>
@@ -270,6 +262,16 @@ export function Dashboard() {
               <strong {...stylex.props(styles.profileText)}>{user?.fullName ?? user?.primaryEmailAddress?.emailAddress ?? "Your account"}</strong>
               {user?.fullName && <small {...stylex.props(styles.profileText, styles.profileSubtext)}>{user.primaryEmailAddress?.emailAddress}</small>}
             </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              {...stylex.props(styles.themeToggle)}
+              aria-label={theme === "dark" ? "Light theme" : "Dark theme"}
+              title={theme === "dark" ? "Light theme" : "Dark theme"}
+              onClick={(event) => setTheme(theme === "dark" ? "light" : "dark", event.currentTarget)}
+            >
+              {theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
+            </Button>
           </div>
         </div>
       </aside>
@@ -314,11 +316,11 @@ export function DayLayout() {
         <h1 {...stylex.props(styles.dayHeadline)}>{reviewing ? weekLabel(date, isToday) : isToday ? "Today" : dateLabel(date)}</h1>
         <div {...stylex.props(styles.dateActions)}>
           {view === "today" && (
-            <Button variant="outline" size="icon" aria-label="Customize cards" title="Customize cards" onClick={() => onCustomizingCardsChange(true)}>
+            <Button variant="outline" size="icon-sm" aria-label="Customize cards" title="Customize cards" onClick={() => onCustomizingCardsChange(true)}>
               <SlidersHorizontal size={16} />
             </Button>
           )}
-          <Button variant="outline" size="icon" aria-label={`Previous ${unit}`} onClick={() => pickDate(shiftDate(date, -step))}>
+          <Button variant="outline" size="icon-sm" aria-label={`Previous ${unit}`} onClick={() => pickDate(shiftDate(date, -step))}>
             <ChevronLeft size={17} />
           </Button>
           <DatePicker
@@ -327,7 +329,7 @@ export function DayLayout() {
             days={reviewing ? 7 : 1}
             onChange={pickDate}
           />
-          <Button variant="outline" size="icon" aria-label={`Next ${unit}`} onClick={() => pickDate(shiftDate(date, step))}>
+          <Button variant="outline" size="icon-sm" aria-label={`Next ${unit}`} onClick={() => pickDate(shiftDate(date, step))}>
             <ChevronRight size={17} />
           </Button>
         </div>

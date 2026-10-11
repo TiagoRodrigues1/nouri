@@ -18,6 +18,8 @@ export const styles = stylex.create({
     letterSpacing: "-.03em",
     lineHeight: "1.1",
   },
+  // The day pages keep the top of the page tight; Meals adds back the room its headline needs.
+  pageTop: { marginTop: { default: 24, "@media (max-width: 680px)": 0 } },
   intro: { margin: "0 0 24px", color: colors.mutedForeground, fontSize: 13 },
   back: {
     display: "inline-flex",

@@ -63,7 +63,7 @@ export function EditMealPage() {
 
 function BackLink() {
   return (
-    <Link to="/meals" {...stylex.props(styles.back)}>
+    <Link to="/meals" {...stylex.props(styles.back, styles.pageTop)}>
       <ChevronLeft size={15} /> Meals
     </Link>
   );
