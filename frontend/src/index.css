@@ -50,7 +50,8 @@
 }
 
 :root {
-    /* Nouri palette; keep in sync with theme.stylex.ts. */
+    /* Nouri's light palette. theme.stylex.ts reads these, so StyleX and shadcn styles change theme together. */
+    color-scheme: light;
     --background: #f6f4f1;
     --foreground: #27343b;
     --card: #ffffff;
@@ -58,6 +59,7 @@
     --popover: #ffffff;
     --popover-foreground: #27343b;
     --primary: #2563eb;
+    --primary-hover: #1d4ed8;
     --primary-foreground: #ffffff;
     --secondary: #f0f1f2;
     --secondary-foreground: #27343b;
@@ -69,6 +71,12 @@
     --border: #e1e4e5;
     --input: #d9dfe2;
     --ring: #93b4ff;
+    --nav-foreground: #667882;
+    --water-soft: #e8f6fd;
+    --water-border: #bfe6f8;
+    --water-strong: #0369a1;
+    --activity-strong: #0d9488;
+    --supplements-soft: #fdeef3;
     --chart-1: oklch(0.87 0 0);
     --chart-2: oklch(0.556 0 0);
     --chart-3: oklch(0.439 0 0);
@@ -85,38 +93,47 @@
     --sidebar-ring: #93b4ff;
 }
 
+/* Same slate hue as the light text, so dark reads as the same app at night. Keep --background in step with public/theme.js. */
 .dark {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.205 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.922 0 0);
-    --primary-foreground: oklch(0.205 0 0);
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
-    --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.556 0 0);
+    color-scheme: dark;
+    --background: #12171a;
+    --foreground: #e3e8eb;
+    --card: #1a2125;
+    --card-foreground: #e3e8eb;
+    --popover: #1a2125;
+    --popover-foreground: #e3e8eb;
+    --primary: #3b82f6;
+    --primary-hover: #2563eb;
+    --primary-foreground: #ffffff;
+    --secondary: #232c31;
+    --secondary-foreground: #e3e8eb;
+    --muted: #232c31;
+    --muted-foreground: #8b9aa3;
+    --accent: #1b2a45;
+    --accent-foreground: #a8c5ff;
+    --destructive: #f07a88;
+    --border: #2a3439;
+    --input: #36434b;
+    --ring: #3f6fd6;
+    --nav-foreground: #8b9aa3;
+    --water-soft: #0c2a38;
+    --water-border: #0f4c66;
+    --water-strong: #7dd3fc;
+    --activity-strong: #2dd4bf;
+    --supplements-soft: #3b1a27;
     --chart-1: oklch(0.87 0 0);
     --chart-2: oklch(0.556 0 0);
     --chart-3: oklch(0.439 0 0);
     --chart-4: oklch(0.371 0 0);
     --chart-5: oklch(0.269 0 0);
-    --sidebar: oklch(0.205 0 0);
-    --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.488 0.243 264.376);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.269 0 0);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.556 0 0);
+    --sidebar: #161c20;
+    --sidebar-foreground: #e3e8eb;
+    --sidebar-primary: #3b82f6;
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-accent: #1b2a45;
+    --sidebar-accent-foreground: #a8c5ff;
+    --sidebar-border: #2a3439;
+    --sidebar-ring: #3f6fd6;
 }
 
 @layer base {

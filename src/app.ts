@@ -92,6 +92,10 @@ export function createApp(db: AppDatabase, identity: Identity, packagedFoods: Pa
     headers: { ...pageHeaders, "Content-Type": "image/svg+xml" },
   }));
 
+  app.get("/theme.js", async () => new Response(await readFile(new URL("../web/dist/theme.js", import.meta.url)), {
+    headers: { ...pageHeaders, "Content-Type": "text/javascript; charset=utf-8" },
+  }));
+
   const assetTypes = new Map([
     ["js", "text/javascript; charset=utf-8"],
     ["css", "text/css; charset=utf-8"],

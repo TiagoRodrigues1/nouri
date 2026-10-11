@@ -418,7 +418,7 @@ function SleepForm({ date, pending, onSave }: FormProps<SleepInput>) {
 
 const styles = stylex.create({
   exerciseList: { display: "grid", gridTemplateColumns: "minmax(0, 1fr)", minWidth: 0, gap: 12 },
-  exerciseCard: { display: "grid", gridTemplateColumns: "minmax(0, 1fr)", minWidth: 0, gap: 12, padding: 14, borderWidth: 1, borderStyle: "solid", borderColor: "#e1e4e5", borderRadius: 8 },
+  exerciseCard: { display: "grid", gridTemplateColumns: "minmax(0, 1fr)", minWidth: 0, gap: 12, padding: 14, borderWidth: 1, borderStyle: "solid", borderColor: colors.border, borderRadius: 8 },
   exerciseHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13 },
   lastTime: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 6, fontSize: 12, color: colors.mutedForeground },
   lastTimeText: { minWidth: 0, fontVariantNumeric: "tabular-nums" },

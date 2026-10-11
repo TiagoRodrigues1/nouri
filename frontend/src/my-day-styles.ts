@@ -283,7 +283,7 @@ export const styles = stylex.create({
     padding: "10px 6px 8px",
     borderRadius: 14,
     backgroundColor: { default: colors.card, ":hover": colors.waterSoft },
-    borderColor: { default: colors.border, ":hover": "#bfe6f8" },
+    borderColor: { default: colors.border, ":hover": colors.waterBorder },
     boxShadow: "none",
   },
   vesselIcon: { overflow: "visible" },
