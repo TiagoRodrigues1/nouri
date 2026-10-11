@@ -1,6 +1,6 @@
 ---
 name: verify-nouri
-description: Verify Nouri's signed-in food journal web page and API through an isolated local PostgreSQL instance and a real browser. Use after changes to account access, data export, food search, food or water logging, food edits, saved meals, daily totals, date navigation, deletion, My Day cards, targets, supplements (the list and daily ticks on My Day), the Overview page (measurements, workouts, sleep, progress photos), workout history on the Progress page, or the seven-day Review page, including Google Health sleep, workout, steps, active energy, and heart rate import.
+description: Verify Nouri's signed-in food journal web page and API through an isolated local PostgreSQL instance and a real browser. Use after changes to account access, data export, food search, food or water logging, food edits, saved meals, daily totals, date navigation, deletion, My Day cards, targets, supplements (the list and daily ticks on My Day), the Overview page (measurements, workouts, sleep, progress photos), workout history on the Progress page, or the seven-day Review page, including Google Health sleep, workout, steps, active energy, and heart rate import, the phone layout, and the MCP server's sign-in handshake.
 ---
 
 # Verify Nouri
@@ -43,6 +43,8 @@ Use the helper's `browser` action, which runs `playwright cli` in this run's scr
 
 The sign-in link, session tokens, and the Clerk secret in `env` are secrets. Do not put `env`, the sign-in URL, browser storage, cookies, or request headers into evidence. Use `"$CONTROL" browser "$RUN_ID" run-code 'async (page) => { ... }'` for assertions with Playwright locators when a snapshot is ambiguous. Do not set app state through `page.evaluate` or call internal functions to create the state under test.
 
+Some recipes seed data or race the page through the public API (Review's week, the edit conflict, the Tokyo entry in Log again). Make those writes from the signed-in page, because Clerk only accepts tokens minted for its origin: in `run-code`, call `page.evaluate` with a `fetch` that sends `Authorization: Bearer ${await window.Clerk.session.getToken()}`, `Content-Type: application/json`, a fresh `Idempotency-Key` from `crypto.randomUUID()`, and `If-Match: "<revision>"` for edits and deletes. That is the same API any client uses, not an internal setter. For long scripts, write the function to a file and pass `"$(cat file.js)"`, which avoids shell-quoting the JavaScript.
+
 ## Evidence
 
 Save proof under `$EVIDENCE`; cleanup never removes it. For each feature, record the feature ID and entry point, a screenshot or redacted page snapshot before the user action, the browser action, and the resulting screen. `"$CONTROL" browser "$RUN_ID" screenshot --filename "$EVIDENCE/before.png"` and the same command with `after.png` save screenshots directly. For text proof, write `snapshot` output to `$EVIDENCE`; check it does not contain the address bar's `__clerk_ticket` value.
@@ -69,3 +71,5 @@ Run cleanup after failed attempts too. Never kill by process name or use `playwr
 ## Helpers
 
 `control-nouri` is executable. Its interface is `control-nouri {launch|doctor|sign-in-url|cleanup} RUN_ID`, `control-nouri readback RUN_ID /v1/PATH`, or `control-nouri browser RUN_ID PLAYWRIGHT_COMMAND [ARGS...]`; the commands above invoke each action. It uses an existing local `postgres:16-alpine` image. Docker may pull that image if it is absent.
+
+`ean-y4m` is executable too: `ean-y4m 13-DIGIT-CODE OUT.y4m` writes an EAN-13 barcode as a Y4M video for Chrome's fake camera. [Barcode lookup](features/barcode.md) uses it for the camera scan.
