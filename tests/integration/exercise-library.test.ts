@@ -44,7 +44,8 @@ void test("the exercise library merges the catalog, custom exercises, and logged
     // The catalog is there before anything is logged, sorted by name.
     assert.ok(empty.exercises.length > 700);
     assert.ok(empty.exercises.every((exercise) => exercise.origin === "catalog"));
-    assert.deepEqual(find(empty.exercises, "barbell squat"), { origin: "catalog", key: "barbell squat", name: "Barbell Squat", muscle: "quadriceps", equipment: "barbell" });
+    const images = "https://cdn.jsdelivr.net/gh/yuhonas/free-exercise-db@f00c92c7dcf1216a928a52c3706c7ce8e2f71ed5/exercises/Barbell_Squat";
+    assert.deepEqual(find(empty.exercises, "barbell squat"), { origin: "catalog", key: "barbell squat", name: "Barbell Squat", muscle: "quadriceps", equipment: "barbell", images: [`${images}/0.jpg`, `${images}/1.jpg`] });
     assert.match(empty.attribution.url, /free-exercise-db/);
 
     // Logged names the catalog lacks join as logged exercises, under their latest spelling; catalog names stay catalog.

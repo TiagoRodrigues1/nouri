@@ -8,7 +8,6 @@ import {
   LayoutDashboard,
   CalendarRange,
   ChartColumn,
-  CookingPot,
   Download,
   Droplet,
   Dumbbell,
@@ -54,6 +53,36 @@ type View = "today" | "meals" | "overview" | "progress" | "review";
 type PendingFood = { input: FoodSubmission; signature: string };
 
 type RecordKind = "water" | "workout" | "sleep" | "measurement";
+
+function MealsIcon({ active }: { active: boolean }) {
+  return (
+    <svg
+      data-nav-icon
+      data-pot-active={active}
+      width="17"
+      height="17"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      {...stylex.props(active && styles.iconAccent)}
+    >
+      <path d="M2 12h20" />
+      <path d="M20 12v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8" />
+      <g data-pot-lid="open">
+        <path d="m4 8 16-4" />
+        <path d="m8.86 6.78-.45-1.81a2 2 0 0 1 1.45-2.43l1.94-.48a2 2 0 0 1 2.43 1.46l.45 1.8" />
+      </g>
+      <g data-pot-lid="closed">
+        <path d="M4 10h16" />
+        <path d="M10 10V8a2 2 0 0 1 4 0v2" />
+      </g>
+    </svg>
+  );
+}
 
 function useView(): View {
   const path = useLocation({ select: (location) => location.pathname });
@@ -155,35 +184,35 @@ export function Dashboard() {
               to="/"
               {...stylex.props(styles.navItem, styles.tabItem, view === "today" && styles.navItemActive)}
             >
-              <LayoutDashboard size={17} {...stylex.props(view === "today" && styles.iconAccent)} />
+              <LayoutDashboard data-nav-icon size={17} {...stylex.props(view === "today" && styles.iconAccent)} />
               Today
             </Link>
             <Link
               to="/meals"
               {...stylex.props(styles.navItem, styles.tabItem, view === "meals" && styles.navItemActive)}
             >
-              <CookingPot size={17} {...stylex.props(view === "meals" && styles.iconAccent)} />
+              <MealsIcon active={view === "meals"} />
               Meals
             </Link>
             <Link
               to="/overview"
               {...stylex.props(styles.navItem, styles.tabItem, view === "overview" && styles.navItemActive)}
             >
-              <ChartColumn size={17} {...stylex.props(view === "overview" && styles.iconAccent)} />
+              <ChartColumn data-nav-icon size={17} {...stylex.props(view === "overview" && styles.iconAccent)} />
               Overview
             </Link>
             <Link
               to="/progress"
               {...stylex.props(styles.navItem, styles.tabItem, view === "progress" && styles.navItemActive)}
             >
-              <TrendingUp size={17} {...stylex.props(view === "progress" && styles.iconAccent)} />
+              <TrendingUp data-nav-icon size={17} {...stylex.props(view === "progress" && styles.iconAccent)} />
               Progress
             </Link>
             <Link
               to="/review"
               {...stylex.props(styles.navItem, styles.tabItem, view === "review" && styles.navItemActive)}
             >
-              <CalendarRange size={17} {...stylex.props(view === "review" && styles.iconAccent)} />
+              <CalendarRange data-nav-icon size={17} {...stylex.props(view === "review" && styles.iconAccent)} />
               Review
             </Link>
           </div>
@@ -194,7 +223,7 @@ export function Dashboard() {
               {...stylex.props(styles.navItem, targetsOpen && styles.navItemActive)}
               onClick={() => setTargetsOpen(true)}
             >
-              <Target size={17} {...stylex.props(targetsOpen && styles.iconAccent)} />
+              <Target data-nav-icon size={17} {...stylex.props(targetsOpen && styles.iconAccent)} />
               Targets
             </button>
             <button
@@ -202,7 +231,7 @@ export function Dashboard() {
               {...stylex.props(styles.navItem, supplementsOpen && styles.navItemActive)}
               onClick={() => setSupplementsOpen(true)}
             >
-              <Pill size={17} {...stylex.props(supplementsOpen && styles.iconAccent)} />
+              <Pill data-nav-icon size={17} {...stylex.props(supplementsOpen && styles.iconAccent)} />
               Supplements
             </button>
             <button
@@ -210,7 +239,7 @@ export function Dashboard() {
               {...stylex.props(styles.navItem, wearablesOpen && styles.navItemActive)}
               onClick={() => setWearablesOpen(true)}
             >
-              <Watch size={17} {...stylex.props(wearablesOpen && styles.iconAccent)} />
+              <Watch data-nav-icon size={17} {...stylex.props(wearablesOpen && styles.iconAccent)} />
               Wearables
             </button>
           </div>

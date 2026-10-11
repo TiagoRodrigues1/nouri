@@ -10,6 +10,7 @@ import { Label } from "./components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
 import { styles as formStyles } from "./form-styles";
 import { colors } from "./theme.stylex";
+import { ExerciseImage } from "./exercise-image";
 import { exerciseHistoryQueryOptions } from "./lib/exercise-history";
 import { equipmentLabels, exerciseDetail, exerciseLibraryQueryOptions, muscleLabels, pickerGroups, useCreateExercise, useDeleteExercise, type PickerFilter } from "./lib/exercise-library";
 import { selectValue } from "./lib/select-value";
@@ -58,6 +59,8 @@ function ExerciseList({ date, filter, onFilterChange, onPick, onCreate }: { date
   const library = useQuery(exerciseLibraryQueryOptions());
   const history = useQuery(exerciseHistoryQueryOptions());
   const remove = useDeleteExercise();
+  // The highlighted row, whose photos animate.
+  const [active, setActive] = useState("");
   const { recent, all } = library.data ? pickerGroups(library.data.exercises, history.data?.exercises ?? [], date, filter) : { recent: [], all: [] };
   const typed = filter.query.trim();
 
@@ -67,6 +70,7 @@ function ExerciseList({ date, filter, onFilterChange, onPick, onCreate }: { date
     return (
       <div key={`${group}-${exercise.key}`} {...stylex.props(styles.row)}>
         <CommandItem value={`${group}-${exercise.key}`} onSelect={() => onPick(exercise.name)} {...stylex.props(styles.item)}>
+          <ExerciseImage exercise={exercise} size="row" animate={active === `${group}-${exercise.key}`} />
           <span {...stylex.props(styles.itemText)}>
             <span {...stylex.props(styles.itemName)}>{exercise.name}</span>
             {detail && <span {...stylex.props(styles.itemDetail)}>{detail}</span>}
@@ -84,7 +88,7 @@ function ExerciseList({ date, filter, onFilterChange, onPick, onCreate }: { date
     <>
       <DialogTitle {...stylex.props(formStyles.dialogTitle)}>Choose an exercise</DialogTitle>
       <DialogDescription {...stylex.props(formStyles.dialogDescription)}>Search the library, or create an exercise of your own.</DialogDescription>
-      <Command shouldFilter={false} loop>
+      <Command shouldFilter={false} loop value={active} onValueChange={setActive}>
         <CommandInput placeholder="Search exercises" value={filter.query} onValueChange={(query) => onFilterChange({ ...filter, query })} aria-label="Search exercises" />
         <div {...stylex.props(styles.filters)}>
           <Select value={filter.muscle ?? "all"} onValueChange={(next) => { const muscle = selectValue(muscleOptions, next, "all"); onFilterChange({ ...filter, muscle: muscle === "all" ? null : muscle }); }}>
@@ -106,16 +110,18 @@ function ExerciseList({ date, filter, onFilterChange, onPick, onCreate }: { date
         </div>
         <CommandList {...stylex.props(styles.list)}>
           {library.isPending && <p {...stylex.props(styles.status)}>Loading exercises…</p>}
-          {library.isError && <p {...stylex.props(styles.status)}>Exercises could not be loaded. Close this and try again.</p>}
+          {library.isError && (
+            <div {...stylex.props(styles.status)}>
+              <p>Exercises could not be loaded.</p>
+              <Button type="button" variant="outline" size="sm" disabled={library.isFetching} onClick={() => void library.refetch()}>{library.isFetching ? "Trying…" : "Try again"}</Button>
+            </div>
+          )}
           {library.data && <CommandEmpty>No exercise matches.</CommandEmpty>}
           {recent.length > 0 && <CommandGroup heading="Recent">{recent.map((exercise) => row(exercise, "recent"))}</CommandGroup>}
           {all.length > 0 && <CommandGroup heading={recent.length > 0 ? "All exercises" : undefined}>{all.map((exercise) => row(exercise, "all"))}</CommandGroup>}
         </CommandList>
       </Command>
       <div {...stylex.props(styles.footer)}>
-        {library.data && (
-          <a href={library.data.attribution.url} target="_blank" rel="noreferrer" {...stylex.props(styles.attribution)}>Catalog: Free Exercise DB</a>
-        )}
         <Button type="button" variant="outline" size="sm" onClick={onCreate}>{typed ? `Create "${typed}"` : "Create exercise"}</Button>
       </div>
     </>
@@ -185,8 +191,7 @@ const styles = stylex.create({
   itemText: { display: "grid", minWidth: 0 },
   itemName: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   itemDetail: { fontSize: 12, color: colors.mutedForeground },
-  status: { padding: 16, textAlign: "center", fontSize: 13, color: colors.mutedForeground },
-  footer: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 },
-  attribution: { fontSize: 12, color: colors.mutedForeground },
+  status: { display: "grid", justifyItems: "center", gap: 8, padding: 16, textAlign: "center", fontSize: 13, color: colors.mutedForeground },
+  footer: { display: "flex", justifyContent: "flex-end" },
   createActions: { justifyContent: "space-between" },
 });

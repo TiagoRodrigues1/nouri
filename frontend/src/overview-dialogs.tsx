@@ -10,6 +10,7 @@ import { TimePicker } from "./components/ui/time-picker";
 import { styles as formStyles } from "./form-styles";
 import { colors } from "./theme.stylex";
 import { useExitingRows } from "./lib/use-exiting-rows";
+import { ExerciseImage } from "./exercise-image";
 import { ExercisePicker } from "./exercise-picker";
 import { exerciseHistoryQueryOptions, lastSession, setsLabel } from "./lib/exercise-history";
 import { exerciseDetail, exerciseLibraryQueryOptions } from "./lib/exercise-library";
@@ -283,6 +284,7 @@ function WorkoutForm({ date, pending, onSave }: FormProps<WorkoutInput>) {
                   </div>
                   <div>
                     <Button type="button" variant="outline" aria-label={`${exercise.name}, change exercise`} onClick={() => setPicking(exercise.id)} {...stylex.props(styles.exerciseChoice)}>
+                      <ExerciseImage exercise={known} size="card" animate />
                       <span {...stylex.props(styles.exerciseChoiceName)}>{exercise.name}</span>
                       {detail && <span {...stylex.props(styles.exerciseChoiceDetail)}>{detail}</span>}
                     </Button>
@@ -420,8 +422,8 @@ const styles = stylex.create({
   exerciseHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13 },
   lastTime: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 6, fontSize: 12, color: colors.mutedForeground },
   lastTimeText: { minWidth: 0, fontVariantNumeric: "tabular-nums" },
-  exerciseChoice: { width: "100%", minWidth: 0, height: "auto", justifyContent: "space-between", gap: 8, paddingBlock: 8 },
-  exerciseChoiceName: { minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: 600 },
+  exerciseChoice: { width: "100%", minWidth: 0, height: "auto", justifyContent: "flex-start", gap: 10, paddingBlock: 6, paddingInlineStart: 6 },
+  exerciseChoiceName: { flex: 1, minWidth: 0, textAlign: "start", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: 600 },
   exerciseChoiceDetail: { flexShrink: 0, fontSize: 12, fontWeight: 400, color: colors.mutedForeground },
   exerciseFields: { display: "grid", gridTemplateColumns: { default: "repeat(3, minmax(0, 1fr))", "@media (max-width: 520px)": "1fr 1fr" }, gap: 10 },
   presets: { display: "grid", gridTemplateColumns: { default: "minmax(0, 1fr) auto auto", "@media (max-width: 520px)": "1fr 1fr" }, gap: 8 },
