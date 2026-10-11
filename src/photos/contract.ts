@@ -7,6 +7,12 @@ export const maxPhotoBytes = 8 * 1024 * 1024;
 
 export const maxThumbnailBytes = 256 * 1024;
 
+export const maxAccountPhotoBytes = 256 * 1024 * 1024;
+
+export const maxAccountPhotos = 250;
+
+export const maxTotalPhotoBytes = 1024 * 1024 * 1024;
+
 export const photoSchema = recordBaseSchema.extend({
   contentType: z.enum(photoTypes),
   byteSize: z.number().int().positive(),

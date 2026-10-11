@@ -5,6 +5,7 @@ import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { erasedUsers, users } from "../db/schema.js";
 import type { AppDatabase } from "../db/database.js";
+import { signingKeys } from "./signing-keys.js";
 
 // Who sent a request, as Clerk names them, or null when the request proves nobody.
 export type Authenticate = (request: Request) => Promise<string | null>;
@@ -23,14 +24,29 @@ export type Identity = {
 
 const sessionClaims = z.object({ sub: z.string().min(1) });
 
-// jwtKey verifies against a fixed public key instead of fetching Clerk's; tests use it.
-export function clerkAuthenticator(options: { secretKey: string; jwtKey?: string; authorizedParties: string[] }): Authenticate {
+const tokenHeader = z.object({ alg: z.literal("RS256"), kid: z.string().min(1).max(128) });
+
+// The resolver always supplies a local verification key; token ids never trigger Clerk SDK fetches.
+export function clerkAuthenticator(options: { keyFor: (kid: string) => string | undefined | Promise<string | undefined>; authorizedParties: string[] }): Authenticate {
   return async (request) => {
     const header = request.headers.get("Authorization");
 
-    if (!header?.startsWith("Bearer ")) return null;
+    if (!header?.startsWith("Bearer ") || header.length > 16_384) return null;
+    const token = header.slice(7);
+    const parts = token.split(".");
+
+    if (parts.length !== 3) return null;
+
+    const parsed = tokenHeader.safeParse(
+      (() => { try { return JSON.parse(Buffer.from(parts[0] ?? "", "base64url").toString()); } catch { return null; } })(),
+    );
+
+    if (!parsed.success) return null;
+    const jwtKey = await options.keyFor(parsed.data.kid);
+
+    if (!jwtKey) return null;
     // The exported verifyToken resolves to the claims and throws on any failure, whatever its declared { data, errors } type says.
-    const claims: unknown = await verifyToken(header.slice(7), options).catch(() => null);
+    const claims: unknown = await verifyToken(token, { jwtKey, authorizedParties: options.authorizedParties }).catch(() => null);
 
     return sessionClaims.safeParse(claims).data?.sub ?? null;
   };
@@ -43,7 +59,9 @@ export function clerkAgentAuthenticator(options: { secretKey: string; publishabl
   const clerk = createClerkClient(options);
 
   return async (request) => {
-    if (!request.headers.get("Authorization")?.startsWith("Bearer ")) return null;
+    const header = request.headers.get("Authorization");
+
+    if (!header?.startsWith("Bearer ") || header.length > 16_384) return null;
     const state = await clerk.authenticateRequest(request, { acceptsToken: "oauth_token" }).catch(() => null);
 
     return state?.isAuthenticated ? agentAuth.safeParse(state.toAuth()).data?.userId ?? null : null;
@@ -76,6 +94,7 @@ const clerkSettings = z.object({
   // Origins the web app is served from. Session tokens minted for any other site are refused.
   // Signs the webhook that tells Nouri a Clerk user was deleted, so their records are erased. See docs/account-data-design.md.
   CLERK_WEBHOOK_SIGNING_SECRET: z.string().startsWith("whsec_").optional(),
+  CLERK_JWT_KEY: z.string().min(1).optional(),
   CLERK_AUTHORIZED_PARTIES: z.string().transform((value) => value.split(",").map((origin) => origin.trim()).filter(Boolean)).pipe(z.array(z.url()).min(1)),
 });
 
@@ -88,7 +107,7 @@ export function identityFromEnv(env: Record<string, string | undefined>): Identi
   if (!signingSecret && env.NODE_ENV === "production") throw new Error("CLERK_WEBHOOK_SIGNING_SECRET is required in production");
 
   return {
-    authenticate: clerkAuthenticator({ secretKey: settings.CLERK_SECRET_KEY, authorizedParties: settings.CLERK_AUTHORIZED_PARTIES }),
+    authenticate: clerkAuthenticator({ keyFor: settings.CLERK_JWT_KEY ? () => settings.CLERK_JWT_KEY : signingKeys(`${clerkFrontendOrigin(settings.CLERK_PUBLISHABLE_KEY)}/.well-known/jwks.json`), authorizedParties: settings.CLERK_AUTHORIZED_PARTIES }),
     authenticateAgent: clerkAgentAuthenticator({ secretKey: settings.CLERK_SECRET_KEY, publishableKey: settings.CLERK_PUBLISHABLE_KEY }),
     readWebhook: signingSecret ? clerkWebhookReader(signingSecret) : async () => "forged",
     publishableKey: settings.CLERK_PUBLISHABLE_KEY,

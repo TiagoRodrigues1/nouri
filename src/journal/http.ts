@@ -17,7 +17,7 @@ export function revisionHeader(value: string | undefined): number | null {
 type MutationResult<Entry> =
   | { outcome: "created" | "updated"; entry: Entry }
   | { outcome: "deleted" | "missing" | "stale" | "key-reuse" | "catalog-missing" | "invalid-item" | "invalid-amount" }
-  | { outcome: "unknown-reference" | "duplicate"; message: string };
+  | { outcome: "unknown-reference" | "duplicate" | "quota-exceeded"; message: string };
 
 // Every write answers the same way; routes differ only in what a missing record is called. A write that never
 // finds a record missing names none.
@@ -34,6 +34,8 @@ export function mutationResponse<Entry>(result: MutationResult<Entry>, missing =
       return error(404, "Catalog food not found");
     case "unknown-reference":
       return error(404, result.message);
+    case "quota-exceeded":
+      return error(413, result.message);
     case "invalid-item":
       return error(400, "Invalid saved meal item");
     case "invalid-amount":

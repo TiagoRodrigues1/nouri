@@ -7,7 +7,7 @@ import { nouriMcpServer } from "./tools.js";
 
 // Claude and ChatGPT find Clerk through the protected resource metadata (RFC 9728), register with it, and send
 // the OAuth access token it issues. publicUrl is the origin they reach, when a proxy hides it from the request.
-export function mcpRoutes(db: AppDatabase, identity: Identity, publicUrl?: string) {
+export function mcpRoutes(db: AppDatabase, identity: Identity, limitUser: (userId: string, method: string, path: string) => Response | null, publicUrl?: string) {
   const app = new Hono();
   const authorizationServer = clerkFrontendOrigin(identity.publishableKey);
   const originOf = (request: Request) => publicUrl ?? new URL(request.url).origin;
@@ -28,6 +28,13 @@ export function mcpRoutes(db: AppDatabase, identity: Identity, publicUrl?: strin
 
   app.post("/mcp", async (context) => {
     const clerkUserId = await identity.authenticateAgent(context.req.raw);
+
+    if (clerkUserId) {
+      const refused = limitUser(clerkUserId, "POST", "/mcp");
+
+      if (refused) return refused;
+    }
+
     const userId = clerkUserId && await userFor(db, clerkUserId);
 
     if (!userId) {
@@ -38,13 +45,18 @@ export function mcpRoutes(db: AppDatabase, identity: Identity, publicUrl?: strin
       return response;
     }
 
+    const parsedBody: unknown = await context.req.json().catch(() => null);
+
+    // One request allowance must mean one message, not a batch of concurrent tool calls.
+    if (Array.isArray(parsedBody)) return error(400, "Send one MCP message per request");
+
     const server = nouriMcpServer(db, userId);
     const transport = new WebStandardStreamableHTTPServerTransport({ enableJsonResponse: true });
 
     await server.connect(transport);
 
     try {
-      return await transport.handleRequest(context.req.raw);
+      return await transport.handleRequest(context.req.raw, { parsedBody });
     } finally {
       await server.close();
     }

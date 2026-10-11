@@ -73,6 +73,8 @@ async function* exportPieces(db: AppDatabase, userId: string, now: Date): AsyncG
 
   try {
     await sql`BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY`;
+    await sql`SET LOCAL statement_timeout = '30s'`;
+    await sql`SET LOCAL idle_in_transaction_session_timeout = '120s'`;
     const [account] = await sql`SELECT id, created_at FROM users WHERE id = ${userId}`;
 
     const tables = await sql<{ name: string; binary: boolean }[]>`
