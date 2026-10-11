@@ -1,5 +1,5 @@
 import * as stylex from "@stylexjs/stylex";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { RingsBodySkeleton } from "./skeletons";
 import { Activity, Clock3, Droplet, PieChart, Timer, Trash2, Trophy, Utensils } from "lucide-react";
@@ -10,6 +10,7 @@ import { clock, entryHour } from "../lib/time";
 import { workoutSummaryQueryOptions } from "../lib/day-query";
 import { format, type FoodEntry, type Targets, type WaterEntry } from "../lib/api";
 import { ActivityRings, Bottle, Donut, Ring, type ActivityRing } from "./charts";
+import { WaterQuickAdd } from "./water-quick-add";
 
 type GaugeProps = {
   icon: ReactNode;
@@ -251,15 +252,27 @@ function waterProgress(totalMl: number, goalMl: number): string {
   return `${Math.round((totalMl / goalMl) * 100)}% of your goal · ${format(goalMl - totalMl)} ml to go`;
 }
 
+function previewHint(afterMl: number, goalMl: number): string {
+  if (afterMl >= goalMl) return "→ reaches your goal";
+
+  return `→ ${Math.round((afterMl / goalMl) * 100)}% of your goal`;
+}
+
 type WaterCardProps = {
   goalMl: number;
   entries: WaterEntry[];
   totalMl: number | null | undefined;
   pending: boolean;
+  onAdd: (volumeMl: number) => void;
   onDelete: (entry: WaterEntry) => void;
 };
 
-export function WaterCard({ goalMl, entries, totalMl, pending, onDelete }: WaterCardProps) {
+export function WaterCard({ goalMl, entries, totalMl, pending, onAdd, onDelete }: WaterCardProps) {
+  const [aimed, setAimed] = useState<number | null>(null);
+  // While a write is in flight the total is about to change, so nothing is previewed against it.
+  const preview = pending ? null : aimed;
+  const total = totalMl ?? 0;
+
   return (
     <section {...stylex.props(styles.card, styles.wide)} aria-label="Water">
       <div {...stylex.props(styles.cardHead)}>
@@ -269,12 +282,17 @@ export function WaterCard({ goalMl, entries, totalMl, pending, onDelete }: Water
         <span {...stylex.props(styles.cardAside)}>{format(goalMl)} ml goal</span>
       </div>
       <div {...stylex.props(styles.waterBody)}>
-        <Bottle share={(totalMl ?? 0) / goalMl} />
+        <Bottle share={total / goalMl} preview={preview == null ? undefined : (total + preview) / goalMl} />
         <div {...stylex.props(styles.waterControls)}>
           <div>
-            <span {...stylex.props(styles.bigValue)}>{format(totalMl ?? 0)}</span>
+            <span {...stylex.props(styles.bigValue)}>{format(total)}</span>
             <span {...stylex.props(styles.bigUnit)}>ml</span>
-            <p {...stylex.props(styles.caption, styles.waterCaption)}>{waterProgress(totalMl ?? 0, goalMl)}</p>
+            <p {...stylex.props(styles.caption, styles.waterCaption)}>{waterProgress(total, goalMl)}</p>
+          </div>
+          <div>
+            <WaterQuickAdd preview={preview} pending={pending} onAim={setAimed} onAdd={onAdd} />
+            {/* The hint keeps its line while empty, so pointing at a drink never resizes the card. */}
+            <p {...stylex.props(styles.waterHint)}>{preview != null && previewHint(total + preview, goalMl)}</p>
           </div>
           {/* The list keeps a fixed height and scrolls, so logging drinks never resizes the card. */}
           <ul {...stylex.props(styles.waterList)} aria-label="Logged water">

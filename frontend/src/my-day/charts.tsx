@@ -107,9 +107,13 @@ const bottleDepth = 106;
 
 const wave = `M-40 4${" q10 -5 20 0 t20 0".repeat(5)} V${bottleBase + 10} H-40 Z`;
 
-export function Bottle({ share }: { share: number }) {
+const bottleLevel = (share: number) => bottleBase - bottleDepth * Math.min(Math.max(share, 0), 1);
+
+// `preview` is the share a drink would bring the bottle to, drawn as a dashed line above the water.
+export function Bottle({ share, preview }: { share: number; preview?: number }) {
   const clip = useId();
-  const level = bottleBase - bottleDepth * Math.min(Math.max(share, 0), 1);
+  const level = bottleLevel(share);
+  const after = preview == null ? level : bottleLevel(preview);
   const outline = "M30 16 H50 V26 C50 32 68 36 68 50 V136 Q68 146 58 146 H22 Q12 146 12 136 V50 C12 36 30 32 30 26 Z";
 
   return (
@@ -125,6 +129,10 @@ export function Bottle({ share }: { share: number }) {
         <g {...stylex.props(styles.waterLevel(level))}>
           <path d={wave} {...stylex.props(styles.waveBack)} />
           <path d={wave} {...stylex.props(styles.waveFront)} />
+        </g>
+        <g {...stylex.props(styles.bottlePreview, preview != null && styles.bottlePreviewShown)}>
+          <rect x={0} y={after} width={80} height={level - after} {...stylex.props(styles.bottlePreviewFill)} />
+          <line x1={10} x2={70} y1={after} y2={after} {...stylex.props(styles.bottlePreviewLine)} />
         </g>
       </g>
       {[0.25, 0.5, 0.75].map((mark) => (

@@ -7,7 +7,7 @@ import { colors } from "./theme.stylex";
 import { styles } from "./my-day-styles";
 import { styles as dashboardStyles } from "./dashboard-styles";
 import { DashboardCardsDialog, useDashboardCards } from "./dashboard-cards";
-import { clock, entryHour, entryTime } from "./lib/time";
+import { clock, currentTime, entryHour, entryTime, occurredAt, timeZone } from "./lib/time";
 import { useTargetsQuery } from "./lib/use-targets";
 import { dayQueryOptions, workoutSummaryQueryOptions } from "./lib/day-query";
 import { useLogAgain } from "./lib/use-log-again";
@@ -83,6 +83,11 @@ export function MyDay() {
         entries={day?.water.entries ?? []}
         totalMl={day?.water.totalMl}
         pending={journal.create.isPending || journal.remove.isPending}
+        onAdd={(volumeMl) => {
+          const input = { occurredAt: occurredAt(date, currentTime()), timeZone, volumeMl };
+
+          journal.create.mutate({ path: recordPaths.water, input, label: "Water", signature: `${recordPaths.water} ${JSON.stringify(input)}` });
+        }}
         onDelete={(entry) => journal.remove.mutate({ path: recordPaths.water, label: "Water", ...entry })}
       />,
     ),
