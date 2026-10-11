@@ -68,7 +68,8 @@ const placeholders: Record<CardId, () => ReactNode> = {
         <div {...stylex.props(styles.column)}>
           <Bone width={90} height={34} />
           <Bone width="55%" height={12} />
-          <Bone width="100%" height={96} />
+          <Bone width="100%" height={84} />
+          <Bone width="100%" height={64} />
         </div>
       </div>
     </Card>

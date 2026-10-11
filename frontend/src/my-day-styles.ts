@@ -6,6 +6,16 @@ const waveDrift = stylex.keyframes({
   to: { transform: "translateX(40px)" },
 });
 
+// A tapped drink empties out of its icon and pours into the bottle.
+const vesselDrink = stylex.keyframes({
+  "35%": { transform: "scaleY(0)" },
+});
+
+const waterFloat = stylex.keyframes({
+  from: { opacity: 1, transform: "translate(-50%, 0)" },
+  to: { opacity: 0, transform: "translate(-50%, -26px)" },
+});
+
 const rowHeight = 34;
 
 const gutter = 58;
@@ -258,8 +268,57 @@ export const styles = stylex.create({
     animationTimingFunction: "linear",
     animationIterationCount: "infinite",
   },
+  bottlePreview: { opacity: 0, transition: "opacity 200ms ease" },
+  bottlePreviewShown: { opacity: 1 },
+  bottlePreviewFill: { fill: colors.water, opacity: 0.18, transition: { default: "y 300ms cubic-bezier(0.22, 1, 0.36, 1), height 300ms cubic-bezier(0.22, 1, 0.36, 1)", "@media (prefers-reduced-motion: reduce)": "none" } },
+  bottlePreviewLine: { stroke: colors.water, strokeWidth: 1.5, strokeDasharray: "3 3" },
+  waterSizes: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 },
+  waterSize: {
+    position: "relative",
+    flexDirection: "column",
+    justifyContent: "flex-end",
+    gap: 5,
+    height: 84,
+    padding: "8px 6px",
+    borderRadius: 14,
+    backgroundColor: { default: colors.card, ":hover": colors.waterSoft },
+    borderColor: { default: colors.border, ":hover": "#bfe6f8" },
+    boxShadow: "none",
+  },
+  vesselIcon: { overflow: "visible" },
+  vesselOutline: { fill: "none", stroke: colors.waterStrong, strokeWidth: 1.6, strokeLinejoin: "round", strokeLinecap: "round" },
+  vesselFill: {
+    fill: colors.water,
+    opacity: 0.25,
+    transformBox: "fill-box",
+    transformOrigin: "bottom",
+    transform: "scaleY(0.35)",
+    transition: { default: "transform 400ms cubic-bezier(0.22, 1, 0.36, 1), opacity 200ms ease", "@media (prefers-reduced-motion: reduce)": "none" },
+  },
+  vesselFull: { transform: "scaleY(1)", opacity: 0.45 },
+  vesselDrink: {
+    animationName: { default: vesselDrink, "@media (prefers-reduced-motion: reduce)": "none" },
+    animationDuration: "700ms",
+    animationTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1)",
+  },
+  waterSizeMl: { fontSize: 13, fontWeight: 600, lineHeight: 1, fontVariantNumeric: "tabular-nums" },
+  waterSizeName: { color: colors.mutedForeground, fontSize: 11, fontWeight: 400, lineHeight: 1 },
+  waterFloat: {
+    position: "absolute",
+    top: -4,
+    left: "50%",
+    color: colors.waterStrong,
+    fontSize: 12,
+    fontWeight: 700,
+    pointerEvents: "none",
+    opacity: 0,
+    animationName: { default: waterFloat, "@media (prefers-reduced-motion: reduce)": "none" },
+    animationDuration: "700ms",
+    animationTimingFunction: "ease-out",
+  },
+  waterHint: { height: 16, margin: "4px 0 0", color: colors.mutedForeground, fontSize: 11, lineHeight: "16px", textAlign: "center", whiteSpace: "nowrap", overflow: "hidden" },
   waterControls: { flex: 1, display: "flex", flexDirection: "column", gap: 10, minWidth: 0, width: "100%" },
-  waterList: { listStyle: "none", margin: 0, padding: 0, height: 96, overflowY: "auto" },
+  waterList: { listStyle: "none", margin: 0, padding: 0, height: 64, overflowY: "auto" },
   waterEmpty: {
     display: "grid",
     placeItems: "center",
