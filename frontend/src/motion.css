@@ -1,5 +1,8 @@
 :root {
   --ease-ui-out: cubic-bezier(0.22, 1, 0.36, 1);
+  /* Gentler than --ease-ui-out for growing circles: their area grows with the radius squared, so a strong
+     ease-out covers nearly the whole screen in its first few frames. */
+  --ease-reveal: cubic-bezier(0.33, 1, 0.68, 1);
 }
 
 [data-nav-icon] {
@@ -85,7 +88,14 @@
 }
 
 /* A new theme grows as a circle from the control that chose it; lib/theme.ts sets the --theme-* sizes.
-   The old page holds still underneath, so only the edge of the circle moves. */
+   The old page holds still underneath, so only the edge of the circle moves. Elements' own color transitions
+   would otherwise replay inside the circle, showing old-theme colors in the new theme. */
+[data-theme-changing] *,
+[data-theme-changing] *::before,
+[data-theme-changing] *::after {
+  transition: none !important;
+}
+
 [data-theme-changing]::view-transition-old(root),
 [data-theme-changing]::view-transition-new(root) {
   animation: none;
@@ -93,7 +103,7 @@
 }
 
 [data-theme-changing]::view-transition-new(root) {
-  animation: theme-reveal 400ms var(--ease-ui-out);
+  animation: theme-reveal 400ms var(--ease-reveal);
 }
 
 @keyframes theme-reveal {
