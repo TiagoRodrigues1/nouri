@@ -137,6 +137,14 @@ export const styles = stylex.create({
   manualSubmit: {
     marginTop: "8px",
   },
+  shareRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+  },
+  userAdded: {
+    fontWeight: "700",
+  },
   widthFull: { width: "100%" },
   flexOne: { flex: 1 },
   // Four tabs share a phone-width dialog, so they tighten up below 520px.

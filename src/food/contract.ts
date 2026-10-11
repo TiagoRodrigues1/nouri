@@ -35,8 +35,13 @@ export const catalogRefSchema = z.object({
   version: z.string().min(1),
 }).strict();
 
+// Where a recorded food's nutrients came from. "nouri" is a food someone added to Nouri (see community.ts).
+export const foodProviders = ["ciqual", "usda-fdc", "portfir", "open-food-facts", "nouri"] as const;
+
+export type FoodProvider = (typeof foodProviders)[number];
+
 const recordedRefSchema = z.object({
-  provider: z.enum(["ciqual", "usda-fdc", "portfir", "open-food-facts"]),
+  provider: z.enum(foodProviders),
   id: z.string().min(1),
   version: z.string().optional(),
 }).strict();
@@ -97,16 +102,13 @@ export const daySchema = z.object({
 
 const attributionSchema = z.object({ provider: z.string(), label: z.string(), url: z.url() });
 
-export const searchResultSchema = z.object({
-  items: z.array(z.object({
-    ref: catalogRefSchema,
-    name: z.string(),
-    language: z.enum(["fr", "en"]),
-    kind: z.literal("generic"),
-    basis: z.literal("per-100-g"),
-    nutrients: catalogNutrientsSchema,
-  })),
-  attribution: z.array(attributionSchema),
+const catalogCandidateSchema = z.object({
+  ref: catalogRefSchema,
+  name: z.string(),
+  language: z.enum(["fr", "en"]),
+  kind: z.literal("generic"),
+  basis: z.literal("per-100-g"),
+  nutrients: catalogNutrientsSchema,
 });
 
 // EAN-8, UPC-A, EAN-13 and GTIN-14 end in a GS1 check digit, so a misread or mistyped code is caught before any lookup.
@@ -118,14 +120,50 @@ export function isBarcode(code: string): boolean {
   return (10 - (sum % 10)) % 10 === digits[0];
 }
 
-// A packaged product's label as the journal can record it: `food` is 100 g or 100 ml of it, which scaleFood
-// turns into any amount in the same unit. The serving, when the label gives one, is in that unit too.
-export const packagedProductSchema = z.object({
-  barcode: z.string().refine(isBarcode),
+// A food as its label reads, as the journal can record it: `food` is 100 g or 100 ml of it, which scaleFood turns
+// into any amount in the same unit. The serving, when the label gives one, is in that unit too. Community foods
+// have this shape; a packaged product found by its barcode always has one.
+export const labelFoodSchema = z.object({
+  barcode: z.string().refine(isBarcode).nullable(),
   brand: z.string().nullable(),
   food: recordedFoodSchema,
   serving: z.object({ amount: positiveAmount, unit: z.enum(["g", "ml"]) }).nullable(),
 });
+
+export const packagedProductSchema = labelFoodSchema.extend({ barcode: z.string().refine(isBarcode) });
+
+// A food someone added to Nouri, rather than one from a provider's catalog.
+export function isUserAdded(food: RecordedFood): boolean {
+  return food.catalogRef?.provider === "nouri";
+}
+
+const communityCandidateSchema = labelFoodSchema.extend({ kind: z.literal("community") });
+
+// Ciqual foods and community foods in one list; a community food carries a "nouri" reference.
+export const searchResultSchema = z.object({
+  items: z.array(z.discriminatedUnion("kind", [catalogCandidateSchema, communityCandidateSchema])),
+  attribution: z.array(attributionSchema),
+});
+
+// Per 100 g or ml, no label carries energy beyond pure fat or more than 100 of a macro.
+export const per100Max = { kcal: 900, proteinG: 100, carbsG: 100, fatG: 100 } as const;
+
+const per100Schema = z.object({
+  kcal: amount.max(per100Max.kcal).nullable(),
+  proteinG: amount.max(per100Max.proteinG).nullable(),
+  carbsG: amount.max(per100Max.carbsG).nullable(),
+  fatG: amount.max(per100Max.fatG).nullable(),
+}).strict();
+
+// A label someone typed, to add to Nouri's foods. Its serving is in the label's unit.
+export const communityFoodInputSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  brand: z.string().trim().min(1).max(100).nullable(),
+  barcode: z.string().refine(isBarcode).nullable(),
+  unit: z.enum(["g", "ml"]),
+  nutrientsPer100: per100Schema,
+  serving: z.object({ amount: positiveAmount.max(10_000) }).strict().nullable(),
+}).strict();
 
 export const barcodeLookupSchema = z.object({ product: packagedProductSchema, attribution: z.array(attributionSchema) });
 
@@ -154,6 +192,12 @@ export type SearchResult = z.infer<typeof searchResultSchema>;
 export type PackagedProduct = z.infer<typeof packagedProductSchema>;
 
 export type BarcodeLookup = z.infer<typeof barcodeLookupSchema>;
+
+export type LabelFood = z.infer<typeof labelFoodSchema>;
+
+export type CommunityCandidate = z.infer<typeof communityCandidateSchema>;
+
+export type CommunityFoodInput = z.infer<typeof communityFoodInputSchema>;
 
 export type CatalogSelection = z.infer<typeof catalogRefSchema>;
 

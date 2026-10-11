@@ -1,10 +1,9 @@
-import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import type { PgTable } from "drizzle-orm/pg-core";
 import type { z } from "zod";
 import type { AppDatabase, Transaction } from "../db/database.js";
-import { withReceipt } from "./receipt.js";
+import { requestHash, withReceipt } from "./receipt.js";
 
 export type RecordCommand<Input> =
   | { kind: "create"; input: Input }
@@ -34,7 +33,7 @@ function hash<Input, Entry>(kind: RecordKind<Input, Entry>, command: RecordComma
     ? { kind: `${kind.name}-create`, input: kind.fingerprint ? kind.fingerprint(command.input) : command.input }
     : { ...command, kind: `${kind.name}-delete` };
 
-  return createHash("sha256").update(JSON.stringify(request)).digest("hex");
+  return requestHash(request);
 }
 
 export type SoftDeleteOptions = { erase?: SQL | undefined; deletable?: SQL | undefined };
@@ -55,9 +54,7 @@ export async function softDelete(tx: Transaction, table: PgTable, userId: string
 }
 
 export async function mutateRecord<Input, Entry>(db: AppDatabase, userId: string, key: string, kind: RecordKind<Input, Entry>, command: RecordCommand<Input>): Promise<RecordMutationResult<Entry>> {
-  const requestHash = hash(kind, command);
-
-  return withReceipt(db, userId, key, requestHash, (receipt): RecordMutationResult<Entry> => {
+  return withReceipt(db, userId, key, hash(kind, command), (receipt): RecordMutationResult<Entry> => {
     const { outcome, body } = receipt;
 
     if (outcome === null) throw new Error("Incomplete receipt cannot be replayed");

@@ -1,6 +1,7 @@
-import { manualFood, recordedFood, scaleFood, totalNutrients, type FoodEntry, type RecordedFood, type SubmittedFood } from "../../../src/food/contract.js";
+import { scaleFood, totalNutrients, type FoodEntry, type RecordedFood, type SubmittedFood } from "../../../src/food/contract.js";
 import { maxMealItems, type MealItemInput, type SavedMeal } from "../../../src/meals/contract.js";
 import { typedAmount } from "./typed-amount.js";
+import { portionFood, sourceOf } from "./food-portion.js";
 
 export { maxMealItems };
 
@@ -64,11 +65,6 @@ export function entryRows(entries: FoodEntry[]): DraftRow[] {
   return entries.map((entry) => draftRow({ kind: "entry", entryId: entry.id }, entry.food));
 }
 
-// The same submitted food at another amount: a Ciqual food is re-measured by the server, a label is scaled here.
-function submittedAt(food: SubmittedFood, amount: number): SubmittedFood {
-  return "kind" in food ? { ...food, quantity: { amount, unit: "g" } } : manualFood(scaleFood(recordedFood(food), amount));
-}
-
 // The items to send; null while a row has no usable amount.
 export function draftItems(rows: DraftRow[]): MealItemInput[] | null {
   const items: MealItemInput[] = [];
@@ -81,7 +77,9 @@ export function draftItems(rows: DraftRow[]): MealItemInput[] | null {
 
     if (source.kind === "saved") items.push({ id: source.id, amount });
     else if (source.kind === "entry") items.push({ entryId: source.entryId, amount });
-    else items.push({ food: submittedAt(source.food, amount) });
+    else {
+      items.push({ food: portionFood(sourceOf(source.food, row.food), amount).submitted });
+    }
   }
 
   return items;

@@ -12,6 +12,7 @@
     "dev": "pnpm build:web && concurrently --kill-others --names api,web \"pnpm dev:api\" \"pnpm dev:web\"",
     "start": "node --env-file-if-exists=.env --import=tsx src/server.ts",
     "db:migrate": "node --env-file-if-exists=.env --import=tsx src/db/migrate.ts",
+    "foods:review": "node --env-file-if-exists=.env --import=tsx src/food/review-foods.ts",
     "test:unit": "node --import=tsx --test tests/unit/*.test.ts",
     "test:integration": "node --env-file-if-exists=.env --import=tsx --test tests/integration/*.test.ts"
   },

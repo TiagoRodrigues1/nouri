@@ -1,6 +1,6 @@
 import { bigint, customType, date, integer, jsonb, pgTable, primaryKey, text, timestamp, uuid, index, uniqueIndex } from "drizzle-orm/pg-core";
 import type { Equipment, Muscle } from "../exercises/contract.js";
-import type { FoodQuantity } from "../food/contract.js";
+import type { FoodProvider, FoodQuantity } from "../food/contract.js";
 import type { StoredMealItem } from "../meals/contract.js";
 import type { MeasurementKind } from "../measurements/contract.js";
 import type { PhotoType } from "../photos/contract.js";
@@ -39,8 +39,31 @@ export const foodEntries = pgTable("food_entries", {
   proteinMilli: bigint("protein_milli", { mode: "number" }),
   carbsMilli: bigint("carbs_milli", { mode: "number" }),
   fatMilli: bigint("fat_milli", { mode: "number" }),
-  catalogRef: jsonb("catalog_ref").$type<{ provider: "ciqual" | "usda-fdc" | "portfir" | "open-food-facts"; id: string; version?: string | undefined } | null>(),
+  catalogRef: jsonb("catalog_ref").$type<{ provider: FoodProvider; id: string; version?: string | undefined } | null>(),
 }, (table) => [activeDayIndex("food_entries", table)]);
+
+// Foods added from a label, seen by everyone once reviewed and by the person who added them before. Nutrients and
+// the serving are thousandths of the label's values per 100 of `unit`. An erased account leaves its foods unowned.
+export const communityFoods = pgTable("community_foods", {
+  id: uuid("id").primaryKey(),
+  userId: uuid("user_id").references((): AnyPgColumn => users.id, { onDelete: "set null" }),
+  name: text("name").notNull(),
+  brand: text("brand"),
+  barcode: text("barcode"),
+  unit: text("unit").$type<"g" | "ml">().notNull(),
+  kcalMilli: bigint("kcal_milli", { mode: "number" }),
+  proteinMilli: bigint("protein_milli", { mode: "number" }),
+  carbsMilli: bigint("carbs_milli", { mode: "number" }),
+  fatMilli: bigint("fat_milli", { mode: "number" }),
+  servingMilli: bigint("serving_milli", { mode: "number" }),
+  searchText: text("search_text").notNull(),
+  reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("community_foods_reviewed_barcode_idx").on(table.barcode).where(sql`reviewed_at IS NOT NULL`),
+  uniqueIndex("community_foods_user_barcode_idx").on(table.userId, table.barcode),
+  index("community_foods_pending_idx").on(table.createdAt).where(sql`reviewed_at IS NULL`),
+]);
 
 export const savedMeals = pgTable("saved_meals", {
   id: uuid("id").primaryKey(),

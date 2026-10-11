@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import { and, eq } from "drizzle-orm";
 import { mutationReceipts } from "../db/schema.js";
@@ -6,6 +7,11 @@ import type { AppDatabase, Transaction } from "../db/database.js";
 type Receipt = typeof mutationReceipts.$inferSelect;
 
 const storedOutcomeSchema = z.enum(["created", "updated", "deleted", "missing", "stale", "key-reuse"]);
+
+// A write's fingerprint, named by its kind: a key sent again with another request is refused.
+export function requestHash<Request extends { kind: string }>(request: Request): string {
+  return createHash("sha256").update(JSON.stringify(request)).digest("hex");
+}
 
 // The callback parses a completed receipt into the feature's narrower result type. A feature's own
 // outcomes (a missing catalog food, an invalid item) keep no receipt, so the key can be sent again once fixed.

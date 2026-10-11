@@ -1,11 +1,12 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { and, between, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { AppDatabase, Transaction } from "../db/database.js";
 import { softDelete } from "../journal/records.js";
-import { withReceipt } from "../journal/receipt.js";
+import { requestHash, withReceipt } from "../journal/receipt.js";
 import { foodEntries } from "../db/schema.js";
 import { instantAt, localDate, localTime } from "../time.js";
 import { catalogFood } from "./catalog.js";
+import { nutrientsOf, storedNutrients } from "./stored-nutrients.js";
 import { entrySchema, manualFood, recordedFood, scaledFood, totalNutrients } from "./contract.js";
 import type { CatalogFoodInput, CatalogSelection, FoodEntry, FoodInput, FoodSubmission, RecentFoods, RecordedFood, RepeatInput, SubmittedFood } from "./contract.js";
 
@@ -22,14 +23,6 @@ export type FoodMutationResult =
 
 type FoodRow = typeof foodEntries.$inferSelect;
 
-function milli(value: number | null): number | null {
-  return value === null ? null : Math.round(value * 1000);
-}
-
-function decimal(value: number | null): number | null {
-  return value === null ? null : value / 1000;
-}
-
 function entry(row: FoodRow) {
   return {
     id: row.id,
@@ -40,12 +33,7 @@ function entry(row: FoodRow) {
     food: {
       name: row.name,
       quantity: row.quantity,
-      nutrients: {
-        kcal: decimal(row.kcalMilli),
-        proteinG: decimal(row.proteinMilli),
-        carbsG: decimal(row.carbsMilli),
-        fatG: decimal(row.fatMilli),
-      },
+      nutrients: nutrientsOf(row),
       catalogRef: row.catalogRef,
     },
   };
@@ -58,10 +46,7 @@ function values(input: FoodInput) {
     localDate: localDate(input.occurredAt, input.timeZone),
     name: input.food.name,
     quantity: input.food.quantity,
-    kcalMilli: milli(input.food.nutrients.kcal),
-    proteinMilli: milli(input.food.nutrients.proteinG),
-    carbsMilli: milli(input.food.nutrients.carbsG),
-    fatMilli: milli(input.food.nutrients.fatG),
+    ...storedNutrients(input.food.nutrients),
     catalogRef: input.food.catalogRef ?? null,
   };
 }
@@ -80,7 +65,7 @@ function hash(command: FoodCommand): string {
       : { kind: "catalog-edit", id: command.id, revision: command.revision, input: command.input };
   }
 
-  return createHash("sha256").update(JSON.stringify(request)).digest("hex");
+  return requestHash(request);
 }
 
 // A submitted food as the journal records it: a Ciqual food measured here, a typed one as sent. Null when the
@@ -213,9 +198,7 @@ export async function editFood(db: AppDatabase, userId: string, id: string, edit
 }
 
 export async function mutateFood(db: AppDatabase, userId: string, key: string, command: FoodCommand): Promise<FoodMutationResult> {
-  const requestHash = hash(command);
-
-  return withReceipt(db, userId, key, requestHash, (receipt): FoodMutationResult => {
+  return withReceipt(db, userId, key, hash(command), (receipt): FoodMutationResult => {
     const { outcome, body } = receipt;
 
     if (outcome === null) throw new Error("Incomplete receipt cannot be replayed");
@@ -295,7 +278,7 @@ type NutrientRow = Pick<FoodRow, "kcalMilli" | "proteinMilli" | "carbsMilli" | "
 
 // A total is known only when every logged food has that nutrient.
 function foodTotals(rows: NutrientRow[]) {
-  return totalNutrients(rows.map((row) => ({ kcal: decimal(row.kcalMilli), proteinG: decimal(row.proteinMilli), carbsG: decimal(row.carbsMilli), fatG: decimal(row.fatMilli) })));
+  return totalNutrients(rows.map(nutrientsOf));
 }
 
 // Days from `from` to `to` that have foods, by local date. A total is null unless every food on the day has the value.

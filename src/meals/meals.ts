@@ -1,10 +1,10 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { and, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import type { AppDatabase, Transaction } from "../db/database.js";
 import { savedMeals } from "../db/schema.js";
 import { insertFoods, recordedFoods, resolveFood } from "../food/food.js";
 import { softDelete } from "../journal/records.js";
-import { withReceipt } from "../journal/receipt.js";
+import { requestHash, withReceipt } from "../journal/receipt.js";
 import { scaledFood } from "../food/contract.js";
 import type { RecordedFood } from "../food/contract.js";
 import { instantAt, localDate, shiftDate } from "../time.js";
@@ -41,7 +41,7 @@ function today(zone: string): string {
 
 // Receipts share one key space, so the fingerprint names saved meals.
 function hash(request: MealCommand | { kind: "log"; id: string; input: MealLogInput }): string {
-  return createHash("sha256").update(JSON.stringify({ ...request, kind: `saved-meal-${request.kind}` })).digest("hex");
+  return requestHash({ ...request, kind: `saved-meal-${request.kind}` });
 }
 
 // The item at another amount, scaled from its basis so a chain of edits matches a single one.

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { recordedFoodSchema, type BarcodeLookup } from "./contract.js";
+import { per100Max, recordedFoodSchema, type BarcodeLookup } from "./contract.js";
 
 export type PackagedLookup = { outcome: "found"; result: BarcodeLookup } | { outcome: "not-found" | "unavailable" };
 
@@ -41,7 +41,7 @@ type Product = z.infer<typeof productSchema>;
 
 const thousandth = (amount: number) => Math.round(amount * 1000) / 1000;
 
-// A value no label can carry is unknown rather than wrong: energy beyond pure fat, or more than 100 of a macro per 100.
+// A value no label can carry (see per100Max) is unknown rather than wrong.
 function per100(amount: number | undefined, max: number): number | null {
   return amount === undefined || amount < 0 || amount > max ? null : thousandth(amount);
 }
@@ -53,10 +53,10 @@ function nutrients({ nutriments }: Product) {
   const kj = nutriments["energy-kj_100g"];
 
   return {
-    kcal: per100(nutriments["energy-kcal_100g"] ?? (kj === undefined ? undefined : kj / kilojoulesPerKcal), 900),
-    proteinG: per100(nutriments.proteins_100g, 100),
-    carbsG: per100(nutriments.carbohydrates_100g, 100),
-    fatG: per100(nutriments.fat_100g, 100),
+    kcal: per100(nutriments["energy-kcal_100g"] ?? (kj === undefined ? undefined : kj / kilojoulesPerKcal), per100Max.kcal),
+    proteinG: per100(nutriments.proteins_100g, per100Max.proteinG),
+    carbsG: per100(nutriments.carbohydrates_100g, per100Max.carbsG),
+    fatG: per100(nutriments.fat_100g, per100Max.fatG),
   };
 }
 

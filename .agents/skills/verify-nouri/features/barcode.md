@@ -9,7 +9,7 @@ A drink: `5449000000996` shows `Coca-Cola Original`, with the brand before `per 
 Error states, all in the tab's message area:
 
 - `3017620422004` (wrong check digit) shows `That barcode's numbers don't add up. Check it and try again.` and sends no request.
-- `96385074` (unknown) and `4000000000006` (a product with no name) show `No product with this barcode yet. Add it manually from the label.`
+- `96385074` (unknown) and `4000000000006` (a product with no name) show `No product with this barcode yet. Add it from the label, and others who scan it will find it.` and an `Add this product` button (see [Community foods](community-foods.md))
 
 Editing a scanned entry with `Edit <name>` uses the manual edit form, with the amount in the product's unit (`Amount in millilitres` for the drink). Saving 165 ml of the Coca-Cola entry stores `kcal: 69.96`, keeps the Open Food Facts reference, and moves the entry to revision 2.
 

@@ -3,9 +3,10 @@ import { z } from "zod";
 import type { AppDatabase } from "../db/database.js";
 import { error, errorSchema } from "../http-error.js";
 import { idempotencyKeySchema, mutationResponse, revisionHeader, revisionHeaderSchema } from "../journal/http.js";
-import { barcodeLookupSchema, entrySchema, isBarcode, recentFoodsSchema, repeatInputSchema, searchResultSchema, submissionSchema } from "./contract.js";
-import { searchFoods } from "./catalog.js";
+import { barcodeLookupSchema, communityFoodInputSchema, entrySchema, isBarcode, labelFoodSchema, recentFoodsSchema, repeatInputSchema, searchResultSchema, submissionSchema } from "./contract.js";
+import { addCommunityFood } from "./community.js";
 import { getRecentFoods, mutateFood } from "./food.js";
+import { findByBarcode, findFoods } from "./lookup.js";
 import type { PackagedFoods } from "./packaged.js";
 
 const searchQuerySchema = z.object({
@@ -62,20 +63,29 @@ export function foodRoutes(db: AppDatabase, packagedFoods: PackagedFoods) {
   app.get("/v1/foods/recent", async (context) => context.json(await getRecentFoods(db, context.get("userId"))));
   app.openAPIRegistry.registerPath({ method: "get", path: "/v1/foods/recent", responses: { 200: { description: "Up to 20 distinct foods from the latest entries, most recently eaten first, each with the entry to log again", ...json(recentFoodsSchema) } } });
 
-  app.get("/v1/foods/search", (context) => {
+  app.get("/v1/foods/search", async (context) => {
     const query = searchQuerySchema.safeParse({ q: context.req.query("q"), locale: context.req.query("locale") });
 
     if (!query.success) return error(400, "Invalid food search");
 
-    return context.json(searchFoods(query.data.q, query.data.locale));
+    return context.json(await findFoods(db, context.get("userId"), query.data.q, query.data.locale));
   });
-  app.openAPIRegistry.registerPath({ method: "get", path: "/v1/foods/search", request: { query: searchQuerySchema }, responses: { 200: { description: "Ciqual food matches and attribution", ...json(searchResultSchema) }, 400: failure("Invalid query") } });
+  app.openAPIRegistry.registerPath({ method: "get", path: "/v1/foods/search", request: { query: searchQuerySchema }, responses: { 200: { description: "Up to 5 community foods the person can see, then Ciqual food matches, and attribution", ...json(searchResultSchema) }, 400: failure("Invalid query") } });
+
+  app.post("/v1/foods", async (context) => {
+    const input = communityFoodInputSchema.safeParse(await context.req.json().catch(() => null));
+
+    if (!input.success) return error(400, "Invalid food");
+
+    return mutationResponse(await addCommunityFood(db, context.get("userId"), context.get("idempotencyKey"), input.data));
+  });
+  app.openAPIRegistry.registerPath({ method: "post", path: "/v1/foods", request: { headers: mutationHeaders, body: body(communityFoodInputSchema) }, responses: { 201: { description: "The food as its label reads, per 100 g or ml. Only its author finds it until it is reviewed", ...json(labelFoodSchema) }, 400: failure("Invalid label"), 409: failure("The barcode is already in Nouri, or an idempotency conflict") } });
 
   app.get("/v1/foods/barcodes/:code", async (context) => {
     const code = context.req.param("code");
 
     if (!isBarcode(code)) return error(400, "Invalid barcode");
-    const found = await packagedFoods.lookup(code);
+    const found = await findByBarcode(db, packagedFoods, context.get("userId"), code);
 
     switch (found.outcome) {
       case "found":
@@ -86,7 +96,7 @@ export function foodRoutes(db: AppDatabase, packagedFoods: PackagedFoods) {
         return error(502, "Open Food Facts is not answering. Try again, or add the food manually.");
     }
   });
-  app.openAPIRegistry.registerPath({ method: "get", path: "/v1/foods/barcodes/{code}", request: { params: z.object({ code: z.string().regex(/^(?:\d{8}|\d{12,14})$/) }) }, responses: { 200: { description: "The Open Food Facts product with this barcode: its nutrition per 100 g or 100 ml as a food to scale and log, its serving size, and attribution", ...json(barcodeLookupSchema) }, 400: failure("Not an EAN-8, UPC-A, EAN-13, or GTIN-14 with a valid check digit"), 404: failure("No product with this barcode"), 502: failure("Open Food Facts did not answer") } });
+  app.openAPIRegistry.registerPath({ method: "get", path: "/v1/foods/barcodes/{code}", request: { params: z.object({ code: z.string().regex(/^(?:\d{8}|\d{12,14})$/) }) }, responses: { 200: { description: "The community food or else the Open Food Facts product with this barcode: its nutrition per 100 g or 100 ml as a food to scale and log, its serving size, and attribution", ...json(barcodeLookupSchema) }, 400: failure("Not an EAN-8, UPC-A, EAN-13, or GTIN-14 with a valid check digit"), 404: failure("No product with this barcode"), 502: failure("Open Food Facts did not answer") } });
 
   app.patch("/v1/food-entries/:id", async (context) => {
     const key = context.get("idempotencyKey");
