@@ -17,7 +17,7 @@ type DatePickerProps = {
 };
 
 const styles = stylex.create({
-  trigger: { gap: 8, minWidth: 148, height: 36, fontSize: 13, fontWeight: 500, fontVariantNumeric: "tabular-nums" },
+  trigger: { gap: 8, minWidth: 140, height: 32, fontSize: 12, fontWeight: 500, fontVariantNumeric: "tabular-nums" },
   icon: { color: colors.mutedForeground },
   content: { width: "auto", padding: 0, gap: 0 },
   footer: {

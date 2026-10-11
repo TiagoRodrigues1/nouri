@@ -136,7 +136,13 @@ export const styles = stylex.create({
   },
   profileName: {
     minWidth: 0,
+    flex: 1,
     display: { default: "block", "@media (max-width: 680px)": "none" },
+  },
+  // The theme toggle ends the account row; on phones the name is hidden, so it sits by the avatar.
+  themeToggle: {
+    flexShrink: 0,
+    color: colors.navForeground,
   },
   mainArea: {
     minWidth: "0",
@@ -145,7 +151,7 @@ export const styles = stylex.create({
     maxWidth: "1270px",
     margin: "0 auto",
     padding: {
-      default: "42px 40px 80px",
+      default: "18px 40px 24px",
       "@media (max-width: 680px)": "22px 16px calc(96px + env(safe-area-inset-bottom))",
     },
   },
@@ -204,18 +210,17 @@ export const styles = stylex.create({
   dayHeader: {
     display: "flex",
     flexWrap: "wrap",
-    alignItems: "end",
+    alignItems: "center",
     justifyContent: "space-between",
-    gap: "16px 24px",
-    marginBottom: "24px",
+    gap: "10px 24px",
+    marginBottom: "14px",
   },
+  // A small label rather than a headline, so the day's cards fit without scrolling.
   dayHeadline: {
     margin: "0",
-    fontFamily: "Georgia, \"Times New Roman\", serif",
-    fontSize: "clamp(28px, 2.4vw, 38px)",
-    fontWeight: "400",
-    letterSpacing: "-.03em",
-    lineHeight: "1.1",
+    fontSize: "15px",
+    fontWeight: "700",
+    lineHeight: "1.2",
   },
   navItemActive: { backgroundColor: colors.sidebarActive, color: colors.foreground },
   iconAccent: { color: colors.primary },

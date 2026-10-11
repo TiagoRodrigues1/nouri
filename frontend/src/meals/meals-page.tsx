@@ -22,7 +22,7 @@ export function MealsPage() {
 
   return (
     <>
-      <header {...stylex.props(styles.header)}>
+      <header {...stylex.props(styles.header, styles.pageTop)}>
         <h1 {...stylex.props(styles.headline)}>Meals</h1>
         {meals && meals.length > 0 && (
           <Button asChild>
