@@ -49,7 +49,7 @@ export const styles = stylex.create({
     height: "25px",
     borderRadius: "7px",
     backgroundColor: colors.primary,
-    color: "white",
+    color: colors.primaryForeground,
     display: "grid",
     placeItems: "center",
   },

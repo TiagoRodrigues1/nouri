@@ -10,7 +10,7 @@ This index is the maintained list of Nouri's user paths. Read the relevant file 
 - The header date is a shadcn date picker, not a text input. Choose the `Choose log date` button (`Choose the last day of the week` on Review), use `Go to the Previous Month` or `Go to the Next Month` if needed, then choose the day button, named like `Friday, September 25th, 2026`. To return to the current date, use the popover's `Today` button (match it exactly; the calendar's current day is named `Today, Friday, …`).
 - The chosen date sticks for the browser tab. The sidebar `Today` link opens My Day on that remembered date, not on today, so check the `h1` reads `Today` before a recipe that says to stay on today's date.
 - `+ Log` opens a popover whose choices (`Food`, `Water`, `Sleep`, `Exercise`, `Measurement`) are buttons, not menu items: use `getByRole("dialog").getByRole("button", { name: "Food", exact: true })`.
-- Below 680px wide the sidebar becomes a top bar holding `+ Log`, the `Targets`, `Supplements`, and `Wearables` icon buttons, and `Open user menu` (the account's name or address is hidden), and the page links move to a bottom tab bar. Names stay the same, so recipes that say "sidebar" work at phone width too.
+- Below 680px wide the sidebar becomes a top bar holding `+ Log`, the `Targets`, `Supplements`, `Wearables`, and theme (`Dark theme` or `Light theme`) icon buttons, and `Open user menu` (the account's name or address is hidden), and the page links move to a bottom tab bar. Names stay the same, so recipes that say "sidebar" work at phone width too.
 - Keep screenshots and redacted snapshots in `/tmp/nouri-verification-evidence/$RUN_ID`.
 
 ## Proof rules

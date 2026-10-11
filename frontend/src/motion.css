@@ -84,6 +84,23 @@
   }
 }
 
+/* A new theme grows as a circle from the control that chose it; lib/theme.ts sets the --theme-* sizes.
+   The old page holds still underneath, so only the edge of the circle moves. */
+[data-theme-changing]::view-transition-old(root),
+[data-theme-changing]::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+[data-theme-changing]::view-transition-new(root) {
+  animation: theme-reveal 400ms var(--ease-ui-out);
+}
+
+@keyframes theme-reveal {
+  from { clip-path: circle(var(--theme-from) at var(--theme-x) var(--theme-y)); }
+  to { clip-path: circle(var(--theme-to) at var(--theme-x) var(--theme-y)); }
+}
+
 @keyframes dialog-enter {
   from { opacity: 0; scale: 0.97; }
   to { opacity: 1; scale: 1; }
@@ -158,5 +175,9 @@
   [data-slot="dialog-overlay"][data-state="open"],
   [data-slot="dialog-overlay"][data-state="closed"] {
     animation-duration: 100ms;
+  }
+
+  [data-theme-changing]::view-transition-new(root) {
+    animation: fade-in 150ms var(--ease-ui-out);
   }
 }

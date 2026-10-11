@@ -15,6 +15,7 @@ import {
   Pill,
   Ruler,
   SlidersHorizontal,
+  Sun,
   Target,
   TrendingUp,
   UtensilsCrossed,
@@ -29,6 +30,7 @@ import { dateLabel, localDate, occurredAt, shiftDate, weekLabel, timeZone as zon
 import { useIdempotentWrite, useIdempotentDelete } from "./lib/use-idempotent";
 import { queryRefresh } from "./lib/query-refresh";
 import { useConnection } from "./lib/use-connection";
+import { setTheme, useTheme } from "./lib/theme";
 import { submissionSchema, type FoodSubmission } from "../../src/food/contract";
 import { LogFoodDialog } from "./log-food-dialog";
 import { EditFoodDialog } from "./edit-food-dialog";
@@ -97,6 +99,7 @@ export function Dashboard() {
   const today = now();
 
   const { user } = useUser();
+  const theme = useTheme();
 
   const [storedDate, setStoredDate] = useState(
     () => sessionStorage.getItem(dateKey) || today,
@@ -241,6 +244,14 @@ export function Dashboard() {
             >
               <Watch data-nav-icon size={17} {...stylex.props(wearablesOpen && styles.iconAccent)} />
               Wearables
+            </button>
+            <button
+              type="button"
+              {...stylex.props(styles.navItem)}
+              onClick={(event) => setTheme(theme === "dark" ? "light" : "dark", event.currentTarget)}
+            >
+              {theme === "dark" ? <Sun data-nav-icon size={17} /> : <Moon data-nav-icon size={17} />}
+              {theme === "dark" ? "Light theme" : "Dark theme"}
             </button>
           </div>
         </nav>
