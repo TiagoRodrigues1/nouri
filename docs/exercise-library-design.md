@@ -12,16 +12,16 @@ In the workout dialog, each exercise card has a **Choose exercise** button inste
 
 ```
 Exercise 1                                         Remove
-[ Barbell Squat · Quadriceps · Barbell          ▾ ]
+[ (photo) Barbell Squat       Quadriceps · Barbell ]
 Last time, Thu 24 Sep: 3 × 8 · 60 kg            [Repeat]
 Sets [  ]   Reps per set [  ]   Weight (kg) [  ]
 ```
 
-The button opens a picker. A new workout starts with no cards, and **Add exercise** opens the picker first, so no card is ever left without an exercise. It has a search field, muscle and equipment filters, a **Recent** group with the exercises done on or before the dialog's date, most recent first, and then **All exercises**. Each row shows the muscle and equipment. Custom exercises are marked *Custom* and have a **Delete** button. When nothing matches, **Create "…"** opens a short form (name, muscle, equipment) with the search text already filled in. Saving the form creates the exercise and picks it. **Add exercise** opens the picker and adds a card for the exercise you choose.
+The button opens a picker. A new workout starts with no cards, and **Add exercise** opens the picker first, so no card is ever left without an exercise. It has a search field, muscle and equipment filters, a **Recent** group with the exercises done on or before the dialog's date, most recent first, and then **All exercises**. Each row shows a photo, the muscle, and the equipment. The highlighted row's photo and the card's photo alternate between the start and end positions. Custom exercises are marked *Custom* and have a **Delete** button. When nothing matches, **Create "…"** opens a short form (name, muscle, equipment) with the search text already filled in. Saving the form creates the exercise and picks it. **Add exercise** opens the picker and adds a card for the exercise you choose.
 
 ```ts
 const { exercises } = await getExerciseLibrary();
-// [{ origin: "catalog", key: "barbell squat", name: "Barbell Squat", muscle: "quadriceps", equipment: "barbell" },
+// [{ origin: "catalog", key: "barbell squat", name: "Barbell Squat", muscle: "quadriceps", equipment: "barbell", images: [".../Barbell_Squat/0.jpg", ".../Barbell_Squat/1.jpg"] },
 //  { origin: "custom", id, revision: 1, key: "landmine row", name: "Landmine row", muscle: "middle back", equipment: "barbell" },
 //  { origin: "logged", key: "squat", name: "Squat" }, ...]   // sorted by name
 
@@ -44,12 +44,13 @@ src/mcp/tools.ts                  search_exercises
 frontend/src/lib/exercise-library.ts   query options, labels, pickerGroups(library, history, date, filter), useCreateExercise, useDeleteExercise
 frontend/src/components/ui/command.tsx shadcn Command (cmdk); replaces the Autocomplete and Combobox the name field used
 frontend/src/exercise-picker.tsx       the picker dialog with its create form
+frontend/src/exercise-image.tsx        an exercise's photos, alternating while animated
 frontend/src/overview-dialogs.tsx      cards use the picker
 ```
 
 ```ts
 type LibraryExercise =
-  | { origin: "catalog"; key: string; name: string; muscle: Muscle; equipment: Equipment | null }
+  | { origin: "catalog"; key: string; name: string; muscle: Muscle; equipment: Equipment | null; images: string[] }
   | { origin: "custom"; id: string; revision: number; key: string; name: string; muscle: Muscle; equipment: Equipment | null }
   | { origin: "logged"; key: string; name: string };   // a name from your workouts that is in neither list
 
@@ -66,7 +67,7 @@ mutateCustomExercise(db, userId, key, command): Promise<
 
 **The server merges the library.** It folds the catalog, your custom exercises, and the names in your workouts, in that order of precedence, into one list keyed by `exerciseKey`. The page and MCP both get the merged list, so the precedence rule lives in one place. Recency is not part of the library. The picker reads it from the `exercise-history` query it already loads for *Last time*, filtered to the dialog's date.
 
-**The catalog is a checked-in snapshot**, like Ciqual. The snapshot is [free-exercise-db](https://github.com/yuhonas/free-exercise-db), which is public domain (Unlicense). It keeps the strength, powerlifting, olympic weightlifting, strongman, and plyometrics exercises, about 740 of them. Stretching and cardio are left out because they do not fit sets × reps × weight. Each exercise's muscle is its first primary muscle. The snapshot keeps the dataset's image paths, but the API does not send them yet (see open questions).
+**The catalog is a checked-in snapshot**, like Ciqual. The snapshot is [free-exercise-db](https://github.com/yuhonas/free-exercise-db), which is public domain (Unlicense). It keeps the strength, powerlifting, olympic weightlifting, strongman, and plyometrics exercises, about 740 of them. Stretching and cardio are left out because they do not fit sets × reps × weight. Each exercise's muscle is its first primary muscle. The API turns the snapshot's image paths into jsDelivr URLs at the same pinned commit, since the photos run to about 100 MB, and the CSP allows `img-src https://cdn.jsdelivr.net`. Animated GIFs like Hevy's come from Gym Visual and are licensed commercially, so the page alternates the two photos instead. Being public domain, the catalog needs no credit in the picker.
 
 The public surface is three routes and one MCP tool. Behind it sit the snapshot parsing, the three-way merge and its precedence, key collision rules, idempotent creation, and revisioned deletion. The receipt and soft-delete code is reused (`withReceipt`, `softDelete`), as saved meals reuse it.
 
@@ -96,7 +97,6 @@ A is the base. It keeps every existing reader working and adds one table and one
 
 ## Open questions and risks
 
-- **Images.** The snapshot keeps two photos per exercise, a start and an end position. Should the picker show them? Showing them means serving them from a pinned jsDelivr URL, which needs a CSP `img-src` entry, or vendoring about 1,500 JPEGs. Alternating the two photos gives a GIF-like effect. Animated GIFs like Hevy's come from Gym Visual and are licensed commercially (ExerciseDB redistributes them).
 - Should Progress group exercises by muscle once most of them have one?
 
 ## Next implementation step

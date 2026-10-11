@@ -133,7 +133,7 @@ export function SearchFoodPicker({ actionLabel, pending = false, onPick }: { act
       </form>
       {scanning && <BarcodeScanner onDetected={detected} onCancel={() => setScanning(false)} />}
       <p {...stylex.props(styles.fieldHint)}>
-        Search in Portuguese, English, or French, or by barcode. Ciqual results show their English names.
+        Search in Portuguese, English, or French, or by barcode.
       </p>
       {message ? (
         <p {...stylex.props(styles.searchMessage)}>{message}</p>
@@ -161,7 +161,8 @@ export function SearchFoodPicker({ actionLabel, pending = false, onPick }: { act
       )}
       {/* Keyed by choice, so choosing another food restarts from its default amount. */}
       {selected && <ChoiceForm key={selected.key} choice={selected} pending={pending} actionLabel={actionLabel} onPick={onPick} />}
-      {query.data?.attribution.map((source) => (
+      {/* Open Food Facts' licence asks for its credit next to the results. */}
+      {query.data?.attribution.filter((source) => source.provider !== "ciqual").map((source) => (
         <a
           {...stylex.props(styles.sourceLink)}
           key={source.url}

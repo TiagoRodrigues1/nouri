@@ -2,6 +2,30 @@
   --ease-ui-out: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+[data-nav-icon] {
+  flex-shrink: 0;
+  transition: transform 150ms ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  nav[aria-label="Main navigation"] :is(a, button):hover [data-nav-icon] {
+    transform: translateY(-2px);
+  }
+}
+
+[data-pot-lid] {
+  transition: opacity 120ms var(--ease-ui-out);
+}
+
+[data-pot-lid="closed"],
+[data-pot-active="true"] [data-pot-lid="open"] {
+  opacity: 0;
+}
+
+[data-pot-active="true"] [data-pot-lid="closed"] {
+  opacity: 1;
+}
+
 [data-slot="dialog-content"][data-state="open"] {
   animation: dialog-enter 220ms var(--ease-ui-out) both;
 }
@@ -91,6 +115,14 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  [data-nav-icon] {
+    transition: none;
+  }
+
+  nav[aria-label="Main navigation"] :is(a, button):hover [data-nav-icon] {
+    transform: none;
+  }
+
   [data-form-enter],
   [data-exercise-list],
   [data-exiting] {

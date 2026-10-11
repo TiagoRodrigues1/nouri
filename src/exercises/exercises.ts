@@ -17,7 +17,12 @@ const snapshot = z.object({
 
 const data = snapshot.parse(JSON.parse(readFileSync(new URL("../../data/free-exercise-db.json", import.meta.url), "utf8")));
 
-const catalog: LibraryExercise[] = data.exercises.map(({ name, muscle, equipment }) => ({ origin: "catalog", key: exerciseKey(name), name, muscle, equipment }));
+// Served by jsDelivr from the same pinned commit as the snapshot, since the photos run to about 100 MB.
+const imageBase = `https://cdn.jsdelivr.net/gh/yuhonas/free-exercise-db@${data.commit}/exercises/`;
+
+const catalog: LibraryExercise[] = data.exercises.map(({ name, muscle, equipment, images }) => ({
+  origin: "catalog", key: exerciseKey(name), name, muscle, equipment, images: images.map((image) => imageBase + image),
+}));
 
 const catalogKeys = new Set(catalog.map((exercise) => exercise.key));
 

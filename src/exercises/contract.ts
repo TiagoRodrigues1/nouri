@@ -27,7 +27,8 @@ export const customExerciseSchema = z.object({
 });
 
 export const libraryExerciseSchema = z.discriminatedUnion("origin", [
-  z.object({ origin: z.literal("catalog"), key: z.string(), name: z.string(), muscle: muscleSchema, equipment: equipmentSchema }),
+  // images are photos of the start and end positions, or empty for the few exercises without any.
+  z.object({ origin: z.literal("catalog"), key: z.string(), name: z.string(), muscle: muscleSchema, equipment: equipmentSchema, images: z.array(z.url()) }),
   customExerciseSchema,
   // A name from the person's workouts that neither the catalog nor their custom exercises have.
   z.object({ origin: z.literal("logged"), key: z.string(), name: z.string() }),
