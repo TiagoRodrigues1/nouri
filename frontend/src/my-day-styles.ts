@@ -278,8 +278,9 @@ export const styles = stylex.create({
     flexDirection: "column",
     justifyContent: "flex-end",
     gap: 5,
-    height: 84,
-    padding: "8px 6px",
+    // Tall enough for the carafe (46px) over both labels, so no icon pokes past the border.
+    height: 98,
+    padding: "10px 6px 8px",
     borderRadius: 14,
     backgroundColor: { default: colors.card, ":hover": colors.waterSoft },
     borderColor: { default: colors.border, ":hover": "#bfe6f8" },

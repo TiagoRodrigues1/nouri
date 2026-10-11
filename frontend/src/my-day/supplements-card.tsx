@@ -19,7 +19,7 @@ export function SupplementsCard({ day, pending, onTake, onRemove, onManage }: Su
 
   return (
     <section {...stylex.props(cardStyles.card)} aria-label="Supplements">
-      <div {...stylex.props(cardStyles.cardHead)}>
+      <div {...stylex.props(cardStyles.cardHead, styles.headRow)}>
         <h2 {...stylex.props(cardStyles.cardTitle, styles.title)}>
           <Pill size={17} /> Supplements
         </h2>
@@ -75,7 +75,9 @@ export function SupplementsCard({ day, pending, onTake, onRemove, onManage }: Su
 
 const styles = stylex.create({
   title: { color: colors.supplements },
-  head: { display: "flex", alignItems: "center", gap: 6 },
+  // In a narrow card the count and settings button drop under the title instead of spilling past the edge.
+  headRow: { flexWrap: "wrap", rowGap: 4 },
+  head: { display: "flex", alignItems: "center", gap: 6, marginLeft: "auto", whiteSpace: "nowrap" },
   empty: {
     flex: 1,
     display: "flex",
