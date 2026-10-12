@@ -43,6 +43,8 @@ import { useJournal } from "./overview/use-journal";
 import { Popover, PopoverContent, PopoverTrigger } from "./components/ui/popover";
 import type { FoodEntry, RecordCommand } from "./lib/api";
 import { recordPaths } from "../../src/journal/paths";
+import { useResumeFinish, useWorkoutSession } from "./lib/use-workout-session";
+import { ResumeBar } from "./workouts/resume-bar";
 
 const dateKey = "nouri.selectedDate";
 
@@ -50,7 +52,7 @@ const now = () => localDate(new Date());
 
 type FoodInput = FoodSubmission["food"];
 
-type View = "today" | "meals" | "overview" | "progress" | "review";
+type View = "today" | "meals" | "workouts" | "overview" | "progress" | "review";
 
 type PendingFood = { input: FoodSubmission; signature: string };
 
@@ -89,7 +91,7 @@ function MealsIcon({ active }: { active: boolean }) {
 function useView(): View {
   const path = useLocation({ select: (location) => location.pathname });
 
-  return path.startsWith("/meals") ? "meals" : path === "/overview" ? "overview" : path === "/progress" ? "progress" : path === "/review" ? "review" : "today";
+  return path.startsWith("/meals") ? "meals" : path.startsWith("/workouts") ? "workouts" : path === "/overview" ? "overview" : path === "/progress" ? "progress" : path === "/review" ? "review" : "today";
 }
 
 export function Dashboard() {
@@ -127,6 +129,9 @@ export function Dashboard() {
   const [wearablesOpen, setWearablesOpen] = useState(false);
 
   const journal = useJournal();
+  const workout = useWorkoutSession();
+
+  useResumeFinish();
 
   const googleHealth = useConnection("google-health", wearablesOpen);
 
@@ -196,6 +201,13 @@ export function Dashboard() {
             >
               <MealsIcon active={view === "meals"} />
               Meals
+            </Link>
+            <Link
+              to="/workouts"
+              {...stylex.props(styles.navItem, styles.tabItem, view === "workouts" && styles.navItemActive)}
+            >
+              <Dumbbell data-nav-icon size={17} {...stylex.props(view === "workouts" && styles.iconAccent)} />
+              Workouts
             </Link>
             <Link
               to="/overview"
@@ -277,6 +289,7 @@ export function Dashboard() {
       </aside>
       <main {...stylex.props(styles.mainArea)}>
         <div {...stylex.props(styles.pageContent)}>
+          {workout.session && view !== "workouts" && <ResumeBar session={workout.session} shell />}
           <Outlet />
         </div>
       </main>

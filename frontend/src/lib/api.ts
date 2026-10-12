@@ -11,6 +11,8 @@ import { exerciseHistoryListSchema, workoutSummarySchema } from "../../../src/wo
 import type { ExerciseHistoryList, WorkoutSummary } from "../../../src/workouts/contract";
 import { customExerciseSchema, exerciseLibrarySchema } from "../../../src/exercises/contract";
 import type { CustomExercise, CustomExerciseInput, ExerciseLibrary } from "../../../src/exercises/contract";
+import { routineListSchema, routineSchema } from "../../../src/routines/contract";
+import type { Routine, RoutineInput } from "../../../src/routines/contract";
 import { dashboardSchema } from "../../../src/dashboard/contract";
 import type { Dashboard } from "../../../src/dashboard/contract";
 import { daySchema } from "../../../src/days/contract";
@@ -56,7 +58,9 @@ export type { CallbackResult, ConnectionStatus, ImportKind, WearableProvider } f
 
 export type { Activity, ExerciseHistory, ExerciseSession, Workout } from "../../../src/workouts/contract";
 
-export type { CustomExercise, Equipment, LibraryExercise, Muscle } from "../../../src/exercises/contract";
+export type { CustomExercise, Equipment, ExerciseLibrary, LibraryExercise, Muscle, MuscleMap } from "../../../src/exercises/contract";
+
+export type { RepTarget, Routine } from "../../../src/routines/contract";
 
 export type RecordPath = (typeof recordPaths)[keyof typeof recordPaths];
 
@@ -230,6 +234,22 @@ export async function createCustomExercise(key: string, input: CustomExerciseInp
 
 export async function deleteCustomExercise(exercise: CustomExercise, key: string): Promise<void> {
   await write(`/v1/exercises/${encodeURIComponent(exercise.id)}`, z.null(), { method: "DELETE", key, revision: exercise.revision });
+}
+
+export async function getRoutines(): Promise<Routine[]> {
+  return (await request("/v1/routines", routineListSchema)).routines;
+}
+
+export async function createRoutine(key: string, input: RoutineInput): Promise<Routine> {
+  return write("/v1/routines", routineSchema, { method: "POST", key, json: input });
+}
+
+export async function updateRoutine(key: string, routine: Routine, input: RoutineInput): Promise<Routine> {
+  return write(`/v1/routines/${encodeURIComponent(routine.id)}`, routineSchema, { method: "PATCH", key, revision: routine.revision, json: input });
+}
+
+export async function deleteRoutine(routine: Routine, key: string): Promise<void> {
+  await write(`/v1/routines/${encodeURIComponent(routine.id)}`, z.null(), { method: "DELETE", key, revision: routine.revision });
 }
 
 export async function createRecord(key: string, command: RecordCommand): Promise<void> {

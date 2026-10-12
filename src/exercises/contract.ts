@@ -10,6 +10,9 @@ const muscleSchema = z.enum(muscles);
 
 const equipmentSchema = z.enum(equipment).nullable();
 
+// Primary first; secondary never repeats a primary. `muscle` stays beside it as primary[0], for the picker filter.
+export const muscleMapSchema = z.object({ primary: z.array(muscleSchema).min(1), secondary: z.array(muscleSchema) });
+
 export const customExerciseInputSchema = z.object({
   name: strengthExerciseSchema.shape.name,
   muscle: muscleSchema,
@@ -23,12 +26,12 @@ export const customExerciseSchema = z.object({
   key: z.string(),
   name: z.string(),
   muscle: muscleSchema,
+  muscles: muscleMapSchema,
   equipment: equipmentSchema,
 });
 
 export const libraryExerciseSchema = z.discriminatedUnion("origin", [
-  // images are photos of the start and end positions, or empty for the few exercises without any.
-  z.object({ origin: z.literal("catalog"), key: z.string(), name: z.string(), muscle: muscleSchema, equipment: equipmentSchema, images: z.array(z.url()) }),
+  z.object({ origin: z.literal("catalog"), key: z.string(), name: z.string(), muscle: muscleSchema, muscles: muscleMapSchema, equipment: equipmentSchema }),
   customExerciseSchema,
   // A name from the person's workouts that neither the catalog nor their custom exercises have.
   z.object({ origin: z.literal("logged"), key: z.string(), name: z.string() }),
@@ -41,6 +44,8 @@ export const exerciseLibrarySchema = z.object({
 });
 
 export type Muscle = z.infer<typeof muscleSchema>;
+
+export type MuscleMap = z.infer<typeof muscleMapSchema>;
 
 export type Equipment = (typeof equipment)[number];
 

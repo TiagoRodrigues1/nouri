@@ -12,6 +12,10 @@ export const strengthExerciseSchema = z.object({
   weightKg: z.number().min(0).max(1000).nullable(),
 }).strict();
 
+// A live session logs one row per run of equal done sets, so a long one can pass the 30 rows a form makes.
+// 20 exercises of 20 sets bounds a session. Readers never had a cap, and MCP keeps its own 30.
+export const maxStrengthRows = 400;
+
 export const workoutInputSchema = z.object({
   occurredAt: occurredAtSchema,
   timeZone: timeZoneSchema,
@@ -19,7 +23,7 @@ export const workoutInputSchema = z.object({
   durationMinutes: z.number().int().min(1).max(1440),
   distanceM: z.number().int().min(1).max(1_000_000).nullable(),
   energyKcal: z.number().int().min(0).max(10_000).nullable(),
-  strengthExercises: z.array(strengthExerciseSchema).max(30).nullable().default(null),
+  strengthExercises: z.array(strengthExerciseSchema).max(maxStrengthRows).nullable().default(null),
 }).strict().superRefine((input, context) => {
   if (input.activity === "strength" && input.distanceM !== null) {
     context.addIssue({ code: "custom", path: ["distanceM"], message: "Strength workouts cannot have a distance." });

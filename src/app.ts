@@ -32,6 +32,8 @@ import { measurementRecords } from "./measurements/measurements.js";
 import { overviewSchema } from "./overview/contract.js";
 import { getOverview } from "./overview/overview.js";
 import { reviewSchema } from "./review/contract.js";
+import { routineInputSchema, routineListSchema, routineSchema } from "./routines/contract.js";
+import { listRoutines, mutateRoutine } from "./routines/routines.js";
 import { getReview } from "./review/review.js";
 import { maxPhotoBytes, maxThumbnailBytes, photoSchema, photoUploadSchema } from "./photos/contract.js";
 import { detectPhotoType, getPhotoByteSize, getPhotoImage, photoRecords } from "./photos/photos.js";
@@ -66,7 +68,7 @@ export function createApp(db: AppDatabase, identity: Identity, packagedFoods: Pa
   const pageHeaders = {
     "Cache-Control": "no-store",
     "X-Content-Type-Options": "nosniff",
-    "Content-Security-Policy": `default-src 'self'; script-src 'self' 'wasm-unsafe-eval' ${clerk} ${challenges}; style-src 'self' 'unsafe-inline'; connect-src 'self' ${clerk}; img-src 'self' blob: https://img.clerk.com https://cdn.jsdelivr.net; worker-src 'self' blob:; frame-src ${challenges}; base-uri 'none'; form-action 'self'`,
+    "Content-Security-Policy": `default-src 'self'; script-src 'self' 'wasm-unsafe-eval' ${clerk} ${challenges}; style-src 'self' 'unsafe-inline'; connect-src 'self' ${clerk}; img-src 'self' blob: https://img.clerk.com; worker-src 'self' blob:; frame-src ${challenges}; base-uri 'none'; form-action 'self'`,
   };
 
   const keyMeta = `<meta name="nouri-clerk-publishable-key" content="${escapeHtml(identity.publishableKey)}" />`;
@@ -89,7 +91,7 @@ export function createApp(db: AppDatabase, identity: Identity, packagedFoods: Pa
     }
   }
 
-  for (const path of ["/", "/food", "/meals", "/meals/*", "/overview", "/progress", "/review"]) {
+  for (const path of ["/", "/food", "/meals", "/meals/*", "/workouts", "/workouts/*", "/overview", "/progress", "/review"]) {
     app.get(path, async () => new Response(await indexPage(), {
       headers: { ...pageHeaders, "Content-Type": "text/html; charset=utf-8" },
     }));
@@ -334,6 +336,39 @@ export function createApp(db: AppDatabase, identity: Identity, packagedFoods: Pa
     return mutationResponse(await mutateCustomExercise(db, context.get("userId"), context.get("idempotencyKey"), { kind: "delete", id: id.data, revision }), "Custom exercise not found");
   });
   app.openAPIRegistry.registerPath({ method: "delete", path: "/v1/exercises/{id}", request: { params: z.object({ id: z.uuid() }), headers: editHeaders }, responses: { 204: { description: "Deleted custom exercise; workouts that used it keep its name" }, 404: failure("Custom exercise not found"), 409: failure("Revision or idempotency conflict") } });
+
+  app.get("/v1/routines", async (context) => context.json(await listRoutines(db, context.get("userId"))));
+  app.openAPIRegistry.registerPath({ method: "get", path: "/v1/routines", responses: { 200: { description: "Workout routines, newest first", ...json(routineListSchema) } } });
+
+  app.post("/v1/routines", async (context) => {
+    const input = routineInputSchema.safeParse(await context.req.json().catch(() => null));
+
+    if (!input.success) return error(400, "Invalid routine");
+
+    return mutationResponse(await mutateRoutine(db, context.get("userId"), context.get("idempotencyKey"), { kind: "create", input: input.data }));
+  });
+  app.openAPIRegistry.registerPath({ method: "post", path: "/v1/routines", request: { headers: mutationHeaders, body: json(routineInputSchema) }, responses: { 201: { description: "A routine of named exercises, each with a rep target per set", ...json(routineSchema) }, 400: failure("Invalid request"), 409: failure("Idempotency conflict") } });
+
+  app.patch("/v1/routines/:id", async (context) => {
+    const id = z.uuid().safeParse(context.req.param("id"));
+    const revision = revisionHeader(context.req.header("If-Match"));
+    const input = routineInputSchema.safeParse(await context.req.json().catch(() => null));
+
+    if (!id.success || revision === null || !input.success) return error(400, "Invalid routine edit");
+
+    return mutationResponse(await mutateRoutine(db, context.get("userId"), context.get("idempotencyKey"), { kind: "edit", id: id.data, revision, input: input.data }), "Routine not found");
+  });
+  app.openAPIRegistry.registerPath({ method: "patch", path: "/v1/routines/{id}", request: { params: z.object({ id: z.uuid() }), headers: editHeaders, body: json(routineInputSchema) }, responses: { 200: { description: "The routine replaced whole; workouts already logged from it are unchanged", ...json(routineSchema) }, 400: failure("Invalid request"), 404: failure("Routine not found"), 409: failure("Revision or idempotency conflict") } });
+
+  app.delete("/v1/routines/:id", async (context) => {
+    const id = z.uuid().safeParse(context.req.param("id"));
+    const revision = revisionHeader(context.req.header("If-Match"));
+
+    if (!id.success || revision === null) return error(400, "Invalid routine deletion");
+
+    return mutationResponse(await mutateRoutine(db, context.get("userId"), context.get("idempotencyKey"), { kind: "delete", id: id.data, revision }), "Routine not found");
+  });
+  app.openAPIRegistry.registerPath({ method: "delete", path: "/v1/routines/{id}", request: { params: z.object({ id: z.uuid() }), headers: editHeaders }, responses: { 204: { description: "Deleted routine; workouts already logged from it stay" }, 404: failure("Routine not found"), 409: failure("Revision or idempotency conflict") } });
 
   const uploadSchema = z.object({ file: z.instanceof(File), thumbnail: z.instanceof(File).optional(), occurredAt: occurredAtSchema, timeZone: timeZoneSchema });
 

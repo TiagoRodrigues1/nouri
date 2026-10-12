@@ -38,6 +38,11 @@ export const colors = stylex.defineVars({
   move: "#fa114f",
   exercise: "#78d916",
   workouts: "#12c8d8",
+  // A done set's row in a live workout.
+  setDone: "var(--set-done)",
+  muscleBody: "var(--muscle-body)",
+  musclePrimary: "var(--muscle-primary)",
+  muscleSecondary: "var(--muscle-secondary)",
   measurements: "#db2777",
   supplements: "#e0457b",
   supplementsSoft: "var(--supplements-soft)",

@@ -284,7 +284,7 @@ function WorkoutForm({ date, pending, onSave }: FormProps<WorkoutInput>) {
                   </div>
                   <div>
                     <Button type="button" variant="outline" aria-label={`${exercise.name}, change exercise`} onClick={() => setPicking(exercise.id)} {...stylex.props(styles.exerciseChoice)}>
-                      <ExerciseImage exercise={known} size="card" animate />
+                      <ExerciseImage exercise={known} size="card" />
                       <span {...stylex.props(styles.exerciseChoiceName)}>{exercise.name}</span>
                       {detail && <span {...stylex.props(styles.exerciseChoiceDetail)}>{detail}</span>}
                     </Button>

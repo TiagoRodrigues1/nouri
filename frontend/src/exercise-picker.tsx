@@ -59,8 +59,6 @@ function ExerciseList({ date, filter, onFilterChange, onPick, onCreate }: { date
   const library = useQuery(exerciseLibraryQueryOptions());
   const history = useQuery(exerciseHistoryQueryOptions());
   const remove = useDeleteExercise();
-  // The highlighted row, whose photos animate.
-  const [active, setActive] = useState("");
   const { recent, all } = library.data ? pickerGroups(library.data.exercises, history.data?.exercises ?? [], date, filter) : { recent: [], all: [] };
   const typed = filter.query.trim();
 
@@ -70,7 +68,7 @@ function ExerciseList({ date, filter, onFilterChange, onPick, onCreate }: { date
     return (
       <div key={`${group}-${exercise.key}`} {...stylex.props(styles.row)}>
         <CommandItem value={`${group}-${exercise.key}`} onSelect={() => onPick(exercise.name)} {...stylex.props(styles.item)}>
-          <ExerciseImage exercise={exercise} size="row" animate={active === `${group}-${exercise.key}`} />
+          <ExerciseImage exercise={exercise} size="row" />
           <span {...stylex.props(styles.itemText)}>
             <span {...stylex.props(styles.itemName)}>{exercise.name}</span>
             {detail && <span {...stylex.props(styles.itemDetail)}>{detail}</span>}
@@ -88,7 +86,7 @@ function ExerciseList({ date, filter, onFilterChange, onPick, onCreate }: { date
     <>
       <DialogTitle {...stylex.props(formStyles.dialogTitle)}>Choose an exercise</DialogTitle>
       <DialogDescription {...stylex.props(formStyles.dialogDescription)}>Search the library, or create an exercise of your own.</DialogDescription>
-      <Command shouldFilter={false} loop value={active} onValueChange={setActive}>
+      <Command shouldFilter={false} loop>
         <CommandInput placeholder="Search exercises" value={filter.query} onValueChange={(query) => onFilterChange({ ...filter, query })} aria-label="Search exercises" />
         <div {...stylex.props(styles.filters)}>
           <Select value={filter.muscle ?? "all"} onValueChange={(next) => { const muscle = selectValue(muscleOptions, next, "all"); onFilterChange({ ...filter, muscle: muscle === "all" ? null : muscle }); }}>

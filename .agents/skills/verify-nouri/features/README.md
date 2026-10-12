@@ -35,6 +35,7 @@ This index is the maintained list of Nouri's user paths. Read the relevant file 
 - [Log water](water.md): preset and custom amounts, daily total, remove a drink.
 - [Overview](overview.md): sidebar link, category tabs, measurements, workouts, sleep, progress photos, deletion.
 - [Exercise library](exercise-library.md): picker in the workout dialog, search and muscle and equipment filters, Recent group, create and delete a custom exercise.
+- [Workout routines](workouts.md): Workouts sidebar page, routine editor with rep targets, live workout with PREVIOUS and done sets, resume bar, Finish into an ordinary strength workout, body map.
 - [Workout progress](progress.md): last-time line and Repeat in the workout dialog, Progress sidebar page with exercise picker, chart, and sessions, links from Overview exercise names.
 - [Review](review.md): sidebar link, seven-day table with blank unrecorded days and recorded-day counts, day links into Today and Overview, Back, week arrows.
 - [Wearable import](wearables.md): Wearables dialog in the sidebar, not-set-up state, fixture-backed Connect, imported sleep, workouts, and daily activity, repeat sync, disconnect, forged callback.
