@@ -35,6 +35,8 @@ const styles = stylex.create({
     outline: { default: "none", ":focus-visible": `2px solid ${colors.ring}` },
   },
   icon: { color: colors.mutedForeground },
+  // shadcn's PopoverContent is a fixed w-72 with p-4; size it to the two columns instead.
+  content: { width: "auto", padding: 6, gap: 0 },
   columns: { display: "flex", gap: 4 },
   column: {
     position: "relative",
@@ -125,7 +127,7 @@ export function TimePicker({ id, value, onChange, onNow, onClose }: TimePickerPr
         {value}
         <ChevronDown size={14} {...stylex.props(styles.icon)} />
       </PopoverTrigger>
-      <PopoverContent onKeyDown={type}>
+      <PopoverContent onKeyDown={type} {...stylex.props(styles.content)}>
         <div {...stylex.props(styles.columns)}>
           <Column label="Hour" options={hours} selected={hour} onSelect={(next) => onChange(`${next}:${minute}`)} />
           <Column label="Minute" options={minutes} selected={minute} onSelect={(next) => onChange(`${hour}:${next}`)} />
