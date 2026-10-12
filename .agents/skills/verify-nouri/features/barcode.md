@@ -2,9 +2,9 @@
 
 Entry points: typing a barcode into `#search-query`, and the `Scan` button beside `Search`, both in the `Search foods` tab of `+ Log` > `Food`. The meal editor's `Add food` panel has the same picker in its `Search` tab, where `Add to meal` replaces `Add to log` (see [Meals](saved-meals.md)); `5449000000996` there fills `#search-amount` with `330` and adds the product with its Open Food Facts `catalogRef`. The run's server asks the live Open Food Facts API, so the machine needs internet access. Results can change when Open Food Facts edits a product.
 
-Typed lookup: fill `#search-query` with `3017620422003` and press Enter. `Food search results` shows `Nutella` with `Nutella · per 100 g · 539 kcal`, and the dialog links `Source: Open Food Facts, available under the Open Database License`. Choose it, fill `#search-amount` with `15`, and check that the preview starts with `81 kcal`. Press Enter. The timeline shows Nutella at 15 g. `GET /v1/days/<date>` has `catalogRef` `{"provider":"open-food-facts","id":"3017620422003"}` with a `version` and `kcal: 80.85`.
+Typed lookup: fill `#search-query` with `3017620422003` and press Enter. `Food search results` shows `Nutella` with `Nutella · per 100 g · 539 kcal`, and the dialog links `Source: Open Food Facts, available under the Open Database License`. Tick it, fill its amount in `Selected foods` with `15`, and check that its line starts with `81 kcal`. Choose `Log 1 food`. The timeline shows Nutella at 15 g. `GET /v1/days/<date>` has `catalogRef` `{"provider":"open-food-facts","id":"3017620422003"}` with a `version` and `kcal: 80.85`.
 
-A drink: `5449000000996` shows `Coca-Cola Original`, with the brand before `per 100 ml` (`COCA-COLA SERVICES SA/NV · per 100 ml · 42 kcal …`). Choosing it fills `#search-amount` with `330` and shows `One serving is 330 ml.` Logging stores `{"unit":"ml","amount":330}` and `kcal: 139.92`.
+A drink: `5449000000996` shows `Coca-Cola Original`, with the brand before `per 100 ml` (`COCA-COLA SERVICES SA/NV · per 100 ml · 42 kcal …`). Ticking it adds it to `Selected foods` at one serving, `330` ml. Logging stores `{"unit":"ml","amount":330}` and `kcal: 139.92`.
 
 Error states, all in the tab's message area:
 

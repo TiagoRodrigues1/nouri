@@ -3,9 +3,9 @@ import { z } from "zod";
 import type { AppDatabase } from "../db/database.js";
 import { error, errorSchema } from "../http-error.js";
 import { idempotencyKeySchema, mutationResponse, revisionHeader, revisionHeaderSchema } from "../journal/http.js";
-import { barcodeLookupSchema, communityFoodInputSchema, entrySchema, isBarcode, labelFoodSchema, recentFoodsSchema, repeatInputSchema, searchResultSchema, submissionSchema } from "./contract.js";
+import { barcodeLookupSchema, communityFoodInputSchema, entrySchema, foodBatchInputSchema, foodBatchSchema, isBarcode, labelFoodSchema, recentFoodsSchema, repeatInputSchema, searchResultSchema, submissionSchema } from "./contract.js";
 import { addCommunityFood } from "./community.js";
-import { getRecentFoods, mutateFood } from "./food.js";
+import { getRecentFoods, logFoodBatch, mutateFood } from "./food.js";
 import { findByBarcode, findFoods } from "./lookup.js";
 import type { PackagedFoods } from "./packaged.js";
 
@@ -48,6 +48,15 @@ export function foodRoutes(db: AppDatabase, packagedFoods: PackagedFoods) {
     return mutationResponse(await mutateFood(db, context.get("userId"), key, { kind: "create", input: input.data }), "Food entry not found");
   });
   app.openAPIRegistry.registerPath({ method: "post", path: "/v1/food-entries", request: { headers: mutationHeaders, body: body(submissionSchema) }, responses: { 201: { description: "Created food entry", ...json(entrySchema) }, 400: failure("Invalid request"), 404: failure("Catalog food not found"), 409: failure("Idempotency conflict") } });
+
+  app.post("/v1/food-entries/batches", async (context) => {
+    const input = foodBatchInputSchema.safeParse(await context.req.json().catch(() => null));
+
+    if (!input.success) return error(400, "Invalid food batch");
+
+    return mutationResponse(await logFoodBatch(db, context.get("userId"), context.get("idempotencyKey"), input.data), "Food entry not found");
+  });
+  app.openAPIRegistry.registerPath({ method: "post", path: "/v1/food-entries/batches", request: { headers: mutationHeaders, body: body(foodBatchInputSchema) }, responses: { 201: { description: "One food entry per item, in order, all logged at one time", ...json(foodBatchSchema) }, 400: failure("Invalid request or an amount outside the journal's limits"), 404: failure("Food entry or catalog food not found"), 409: failure("Idempotency conflict") } });
 
   app.post("/v1/food-entries/:id/repeats", async (context) => {
     const key = context.get("idempotencyKey");

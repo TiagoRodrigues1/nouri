@@ -1,7 +1,7 @@
 import { getToken } from "@clerk/react";
 import { z } from "zod";
 import { recordPaths } from "../../../src/journal/paths";
-import type { FoodSubmission, RepeatInput } from "../../../src/food/contract";
+import type { FoodBatchInput, FoodSubmission, RepeatInput } from "../../../src/food/contract";
 import type { WaterInput } from "../../../src/water/contract";
 import type { MeasurementInput } from "../../../src/measurements/contract";
 import type { SleepInput } from "../../../src/sleep/contract";
@@ -17,7 +17,7 @@ import { dashboardSchema } from "../../../src/dashboard/contract";
 import type { Dashboard } from "../../../src/dashboard/contract";
 import { daySchema } from "../../../src/days/contract";
 import type { Day } from "../../../src/days/contract";
-import { barcodeLookupSchema, entrySchema, labelFoodSchema, recentFoodsSchema, searchResultSchema } from "../../../src/food/contract";
+import { barcodeLookupSchema, entrySchema, foodBatchSchema, labelFoodSchema, recentFoodsSchema, searchResultSchema } from "../../../src/food/contract";
 import type { BarcodeLookup, CommunityFoodInput, FoodEntry, LabelFood, RecentFood, SearchResult } from "../../../src/food/contract";
 import { overviewSchema } from "../../../src/overview/contract";
 import { reviewSchema } from "../../../src/review/contract";
@@ -172,6 +172,13 @@ export async function getRecentFoods(): Promise<RecentFood[]> {
 
 export async function createFood(key: string, input: FoodSubmission): Promise<FoodEntry> {
   return write("/v1/food-entries", entrySchema, { method: "POST", key, json: input });
+}
+
+// Logs several foods at one time in one request, all or none.
+export async function logFoodBatch(key: string, input: FoodBatchInput): Promise<FoodEntry[]> {
+  const { entries } = await write("/v1/food-entries/batches", foodBatchSchema, { method: "POST", key, json: input });
+
+  return entries;
 }
 
 export async function repeatFood(key: string, entryId: string, input: RepeatInput): Promise<FoodEntry> {
