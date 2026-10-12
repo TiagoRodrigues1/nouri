@@ -6,6 +6,7 @@ export const queryRefresh = {
   water: ["day", "overview"],
   workout: ["overview", "review", "workout-summary", "exercise-history", "exercise-library"],
   exercises: ["exercise-library"],
+  routines: ["routines"],
   sleep: ["overview", "review"],
   measurement: ["overview", "review"],
   photo: ["overview"],

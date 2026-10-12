@@ -77,6 +77,10 @@
     --water-strong: #0369a1;
     --activity-strong: #0d9488;
     --supplements-soft: #fdeef3;
+    --set-done: #e3f9d0;
+    --muscle-body: #d4d9de;
+    --muscle-primary: #e5484d;
+    --muscle-secondary: #f5a3a5;
     --chart-1: oklch(0.87 0 0);
     --chart-2: oklch(0.556 0 0);
     --chart-3: oklch(0.439 0 0);
@@ -121,6 +125,10 @@
     --water-strong: #7dd3fc;
     --activity-strong: #2dd4bf;
     --supplements-soft: #3b1a27;
+    --set-done: #1f3a12;
+    --muscle-body: #3a4048;
+    --muscle-primary: #f2555a;
+    --muscle-secondary: #8c3a3d;
     --chart-1: oklch(0.87 0 0);
     --chart-2: oklch(0.556 0 0);
     --chart-3: oklch(0.439 0 0);

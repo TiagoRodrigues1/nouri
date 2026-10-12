@@ -78,8 +78,32 @@ const mealRoute = createRoute({
   component: lazyRouteComponent(() => import("./meals/meal-editor"), "EditMealPage"),
 });
 
+const workoutsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/workouts",
+  component: lazyRouteComponent(() => import("./workouts/routines-page"), "RoutinesPage"),
+});
+
+const newRoutineRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/workouts/routines/new",
+  component: lazyRouteComponent(() => import("./workouts/routine-editor"), "NewRoutinePage"),
+});
+
+const routineRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/workouts/routines/$routineId",
+  component: lazyRouteComponent(() => import("./workouts/routine-editor"), "EditRoutinePage"),
+});
+
+const sessionRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/workouts/session",
+  component: lazyRouteComponent(() => import("./workouts/session-page"), "SessionPage"),
+});
+
 export const router = createRouter({
-  routeTree: rootRoute.addChildren([dayLayoutRoute.addChildren([todayRoute, overviewRoute, progressRoute, reviewRoute]), mealsRoute, newMealRoute, mealRoute, foodRoute]),
+  routeTree: rootRoute.addChildren([dayLayoutRoute.addChildren([todayRoute, overviewRoute, progressRoute, reviewRoute]), mealsRoute, newMealRoute, mealRoute, workoutsRoute, newRoutineRoute, routineRoute, sessionRoute, foodRoute]),
 });
 
 declare module "@tanstack/react-router" {
