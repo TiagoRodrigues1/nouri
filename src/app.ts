@@ -68,7 +68,7 @@ export function createApp(db: AppDatabase, identity: Identity, packagedFoods: Pa
   const pageHeaders = {
     "Cache-Control": "no-store",
     "X-Content-Type-Options": "nosniff",
-    "Content-Security-Policy": `default-src 'self'; script-src 'self' 'wasm-unsafe-eval' ${clerk} ${challenges}; style-src 'self' 'unsafe-inline'; connect-src 'self' ${clerk}; img-src 'self' blob: https://img.clerk.com https://cdn.jsdelivr.net; worker-src 'self' blob:; frame-src ${challenges}; base-uri 'none'; form-action 'self'`,
+    "Content-Security-Policy": `default-src 'self'; script-src 'self' 'wasm-unsafe-eval' ${clerk} ${challenges}; style-src 'self' 'unsafe-inline'; connect-src 'self' ${clerk}; img-src 'self' blob: https://img.clerk.com; worker-src 'self' blob:; frame-src ${challenges}; base-uri 'none'; form-action 'self'`,
   };
 
   const keyMeta = `<meta name="nouri-clerk-publishable-key" content="${escapeHtml(identity.publishableKey)}" />`;

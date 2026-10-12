@@ -14,16 +14,13 @@ const muscle = z.enum(muscles);
 
 const snapshot = z.object({
   commit: z.string(),
-  exercises: z.array(z.object({ id: z.string(), name: z.string(), primaryMuscles: z.tuple([muscle], muscle), secondaryMuscles: z.array(muscle), equipment: z.enum(equipment).nullable(), images: z.array(z.string()) })),
+  exercises: z.array(z.object({ id: z.string(), name: z.string(), primaryMuscles: z.tuple([muscle], muscle), secondaryMuscles: z.array(muscle), equipment: z.enum(equipment).nullable() })),
 });
 
 const data = snapshot.parse(JSON.parse(readFileSync(new URL("../../data/free-exercise-db.json", import.meta.url), "utf8")));
 
-// Served by jsDelivr from the same pinned commit as the snapshot, since the photos run to about 100 MB.
-const imageBase = `https://cdn.jsdelivr.net/gh/yuhonas/free-exercise-db@${data.commit}/exercises/`;
-
-const catalog: LibraryExercise[] = data.exercises.map(({ name, primaryMuscles, secondaryMuscles, equipment, images }) => ({
-  origin: "catalog", key: exerciseKey(name), name, muscle: primaryMuscles[0], muscles: { primary: primaryMuscles, secondary: secondaryMuscles }, equipment, images: images.map((image) => imageBase + image),
+const catalog: LibraryExercise[] = data.exercises.map(({ name, primaryMuscles, secondaryMuscles, equipment }) => ({
+  origin: "catalog", key: exerciseKey(name), name, muscle: primaryMuscles[0], muscles: { primary: primaryMuscles, secondary: secondaryMuscles }, equipment,
 }));
 
 const catalogKeys = new Set(catalog.map((exercise) => exercise.key));

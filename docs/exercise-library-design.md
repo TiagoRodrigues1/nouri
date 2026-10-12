@@ -21,7 +21,7 @@ The button opens a picker. A new workout starts with no cards, and **Add exercis
 
 ```ts
 const { exercises } = await getExerciseLibrary();
-// [{ origin: "catalog", key: "barbell squat", name: "Barbell Squat", muscle: "quadriceps", muscles: { primary: ["quadriceps"], secondary: ["calves", "glutes", "hamstrings", "lower back"] }, equipment: "barbell", images: [".../Barbell_Squat/0.jpg", ".../Barbell_Squat/1.jpg"] },
+// [{ origin: "catalog", key: "barbell squat", name: "Barbell Squat", muscle: "quadriceps", muscles: { primary: ["quadriceps"], secondary: ["calves", "glutes", "hamstrings", "lower back"] }, equipment: "barbell" },
 //  { origin: "custom", id, revision: 1, key: "landmine row", name: "Landmine row", muscle: "middle back", muscles: { primary: ["middle back"], secondary: [] }, equipment: "barbell" },
 //  { origin: "logged", key: "squat", name: "Squat" }, ...]   // sorted by name
 
@@ -34,7 +34,7 @@ await deleteCustomExercise(exercise, key);                                      
 ## Shape
 
 ```
-data/free-exercise-db.json        the catalog snapshot: id, name, primaryMuscles, secondaryMuscles, equipment, images (pinned commit)
+data/free-exercise-db.json        the catalog snapshot: id, name, primaryMuscles, secondaryMuscles, equipment (pinned commit)
 scripts/import-exercises.py       regenerates it from yuhonas/free-exercise-db
 src/exercises/contract.ts         muscles, equipment, customExerciseInputSchema, libraryExerciseSchema, exerciseLibrarySchema
 src/exercises/exercises.ts        catalog load, getExerciseLibrary(db, userId), mutateCustomExercise(db, userId, key, command)
@@ -50,7 +50,7 @@ frontend/src/overview-dialogs.tsx      cards use the picker
 
 ```ts
 type LibraryExercise =
-  | { origin: "catalog"; key: string; name: string; muscle: Muscle; muscles: MuscleMap; equipment: Equipment | null; images: string[] }
+  | { origin: "catalog"; key: string; name: string; muscle: Muscle; muscles: MuscleMap; equipment: Equipment | null }
   | { origin: "custom"; id: string; revision: number; key: string; name: string; muscle: Muscle; muscles: MuscleMap; equipment: Equipment | null }
   | { origin: "logged"; key: string; name: string };   // a name from your workouts that is in neither list
 
@@ -67,7 +67,7 @@ mutateCustomExercise(db, userId, key, command): Promise<
 
 **The server merges the library.** It folds the catalog, your custom exercises, and the names in your workouts, in that order of precedence, into one list keyed by `exerciseKey`. The page and MCP both get the merged list, so the precedence rule lives in one place. Recency is not part of the library. The picker reads it from the `exercise-history` query it already loads for *Last time*, filtered to the dialog's date.
 
-**The catalog is a checked-in snapshot**, like Ciqual. The snapshot is [free-exercise-db](https://github.com/yuhonas/free-exercise-db), which is public domain (Unlicense). It keeps the strength, powerlifting, olympic weightlifting, strongman, and plyometrics exercises, about 740 of them. Stretching and cardio are left out because they do not fit sets × reps × weight. Each exercise keeps upstream's primary and secondary muscles as `muscles`, with secondaries that repeat a primary dropped, and its `muscle` is its first primary muscle. A custom exercise's `muscles` is its one muscle as primary. The API turns the snapshot's image paths into jsDelivr URLs at the same pinned commit, since the photos run to about 100 MB, and the CSP allows `img-src https://cdn.jsdelivr.net`. Animated GIFs like Hevy's come from Gym Visual and are licensed commercially. The page no longer shows the photos; each exercise is pictured by the muscles it works. Being public domain, the catalog needs no credit in the picker.
+**The catalog is a checked-in snapshot**, like Ciqual. The snapshot is [free-exercise-db](https://github.com/yuhonas/free-exercise-db), which is public domain (Unlicense). It keeps the strength, powerlifting, olympic weightlifting, strongman, and plyometrics exercises, about 740 of them. Stretching and cardio are left out because they do not fit sets × reps × weight. Each exercise keeps upstream's primary and secondary muscles as `muscles`, with secondaries that repeat a primary dropped, and its `muscle` is its first primary muscle. A custom exercise's `muscles` is its one muscle as primary. The snapshot leaves out upstream's photos: each exercise is pictured by the muscles it works (see [workout-routines-design.md](workout-routines-design.md)), since free pictures like Hevy's, which come from Gym Visual, do not exist. Being public domain, the catalog needs no credit in the picker.
 
 The public surface is three routes and one MCP tool. Behind it sit the snapshot parsing, the three-way merge and its precedence, key collision rules, idempotent creation, and revisioned deletion. The receipt and soft-delete code is reused (`withReceipt`, `softDelete`), as saved meals reuse it.
 
