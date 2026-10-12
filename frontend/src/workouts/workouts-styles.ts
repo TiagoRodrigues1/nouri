@@ -21,6 +21,7 @@ export const styles = stylex.create({
   },
   routineTop: { display: "flex", alignItems: "start", justifyContent: "space-between", gap: 12 },
   routineText: { display: "grid", gap: 6, minWidth: 0 },
+  routineMuscles: { display: "flex", flexShrink: 0, height: 64 },
   routineExercises: { margin: 0, color: colors.mutedForeground, fontSize: 12, lineHeight: 1.5 },
 
   // Resume
@@ -67,6 +68,6 @@ export const styles = stylex.create({
   statLabel: { color: colors.mutedForeground, fontSize: 11 },
   statValue: { fontSize: { default: 18, [phone]: 16 }, fontWeight: 600, fontVariantNumeric: "tabular-nums" },
   statClock: { color: colors.primary },
-  finishSummary: { display: "grid", justifyItems: "center", gap: 12 },
+  finishForm: { marginTop: 12 },
   durationField: { display: "grid", gap: 6 },
 });

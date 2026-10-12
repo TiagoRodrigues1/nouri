@@ -111,7 +111,7 @@ function RoutineCard({ routine, onStart }: { routine: Routine; onStart: () => vo
             <p {...stylex.props(styles.hint)}>{routine.exercises.length} {routine.exercises.length === 1 ? "exercise" : "exercises"} · {sets} {sets === 1 ? "set" : "sets"}</p>
             <p {...stylex.props(styles.routineExercises)}>{routine.exercises.map((exercise) => exercise.name).join(" · ")}</p>
           </div>
-          {muscles && <MuscleMap muscles={muscles} size="thumb" />}
+          {muscles && <span {...stylex.props(styles.routineMuscles)}><MuscleMap muscles={muscles} /></span>}
         </div>
       </div>
       <div {...stylex.props(pageStyles.cardFooter)}>

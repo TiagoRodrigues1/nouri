@@ -14,7 +14,7 @@ The sidebar gains **Workouts**, between Meals and Overview.
 /workouts                               /workouts/session
 [ Start empty workout ]  [ New routine ]   Push day                         [ Finish ]
 ┌ Push day                (body map) ┐    Time 32:10   Volume 4 210 kg   Sets 11
-│ Bench press · Overhead press · …   │    (photo) Barbell Bench Press             (body map)
+│ Bench press · Overhead press · …   │    (figure) Barbell Bench Press
 │ 5 exercises · 17 sets              │    SET  PREVIOUS    KG     REPS     ✓
 │ [Start]  [Edit]                    │    1    62kg × 7    62     7        ✓   green row
 └────────────────────────────────────┘    2    62kg × 7    ·62·   ·8–12·   ☐
@@ -24,7 +24,7 @@ The sidebar gains **Workouts**, between Meals and Overview.
   name; exercises from the picker; per exercise a SET | REPS table where REPS is "8" or "8-12"; + Add set
 ```
 
-While a workout is in progress, every page shows a bar, `Push day · 32:10 · Resume`. Empty fields show placeholders: the weight lifted in that set last time, and the routine's rep target, or else last time's reps. Ticking a row with empty fields fills them from the placeholders, as Hevy does. A done row turns green. Finish opens a dialog with the muscles trained, the duration (the elapsed time, editable), and the number of undone sets it will leave out. **Save workout** writes one ordinary strength workout dated when the session started, then opens Overview on that day. Reloading, switching apps, or a killed tab change nothing, because the clock is derived from the start time. If Save fails offline, the dialog offers **Retry**, and a retry never logs the workout twice.
+While a workout is in progress, every page shows a bar, `Push day · 32:10 · Resume`. Empty fields show placeholders: the weight lifted in that set last time, and the routine's rep target, or else last time's reps. Ticking a row with empty fields fills them from the placeholders, as Hevy does. A done row turns green. Finish opens a dialog with only the duration, the elapsed time, which can be edited. Unticked sets are left out. **Save workout** writes one ordinary strength workout dated when the session started, then opens Overview on that day. Reloading, switching apps, or a killed tab change nothing, because the clock is derived from the start time. If Save fails offline, the dialog offers **Retry**, and a retry never logs the workout twice.
 
 The old **+ Log → Exercise** dialog stays, for runs and for strength workouts logged after the fact.
 
@@ -99,7 +99,7 @@ type Session = {
 
 **PREVIOUS is derived.** For set *i* it is `expandSets(lastSession(history, name, sessionDate).sets)[i]`, read from the cached `exercise-history` query. Old manual logs such as "3 × 8 · 60 kg" expand to three sets, so PREVIOUS works for history from before routines.
 
-**The body map is the muscle picture.** Free photos or illustrations of exercises with the target muscles highlighted, like Hevy's, are licensed commercially (Gym Visual). The catalog keeps its photos. Beside them, an anatomical figure shows the primary muscles in a strong colour and the secondary muscles in a light one. The snapshot now keeps upstream's `primaryMuscles` and `secondaryMuscles`, and the library returns `muscles: { primary, secondary }` in Nouri's own muscle names. `muscle` stays as `primary[0]` for the picker filter. Custom exercises have `{ primary: [muscle], secondary: [] }`, and logged names have none. The mapping to body regions lives only in `frontend/src/lib/body-map.ts`. The polygon shapes are vendored from react-body-highlighter (MIT) instead of installing it, because the package hard-codes a pointer cursor and inline fills on every muscle. The page uses theme colours, so the figure works in dark mode.
+**The muscle figure is each exercise's picture.** Free illustrations of exercises with the target muscles highlighted, like Hevy's, are licensed commercially (Gym Visual). So every exercise thumbnail, in the picker, the workout dialog, and the routine and session pages, is an anatomical figure instead of the catalog photo. It shows the side or sides holding the primary muscles, the primary muscles in a strong colour and the secondary muscles in a light one. A name only your workouts have keeps the dumbbell. The snapshot now keeps upstream's `primaryMuscles` and `secondaryMuscles`, and the library returns `muscles: { primary, secondary }` in Nouri's own muscle names. `muscle` stays as `primary[0]` for the picker filter. Custom exercises have `{ primary: [muscle], secondary: [] }`, and logged names have none. The mapping to body regions lives only in `frontend/src/lib/body-map.ts`. The polygon shapes are vendored from react-body-highlighter (MIT) instead of installing it, because the package hard-codes a pointer cursor and inline fills on every muscle. The page uses theme colours, so the figure works in dark mode.
 
 The public surface is four routine routes, one `useWorkoutSession()` hook, and `<MuscleMap>`. Behind them sit storage scoping and versioning, the cross-tab merge, the freeze-and-retry protocol, run-length encoding, and the PREVIOUS derivation.
 
@@ -110,7 +110,7 @@ Two candidates were sketched.
 - **A: a server-owned session.** The tables were `workout_sessions`, `session_exercises`, and `session_sets`. Each set was a last-writer-wins register with a per-device clock, sent through one batch `PATCH` route. There was a device outbox for offline edits, and Finish ran in one transaction. A session resumes on another device. The costs were five more routes, three tables, an exemption from `Idempotency-Key`, a second rate allowance (a live session would exhaust 120 writes an hour), polling, and a clock protocol for readers to learn.
 - **B: a client-owned draft (chosen).** This is the design above.
 
-B is the base. It hides the same gym concerns (reloads, a killed tab, a lost Finish response, two tabs) behind a smaller surface, and it adds no session state that the server must expire or clean up. A's only gain is cross-device resume, which nobody asked for. From A it takes the body map in the Finish dialog. It also takes the warning that per-set writes would trip the hourly write limit, which confirms that Finish should be the only write.
+B is the base. It hides the same gym concerns (reloads, a killed tab, a lost Finish response, two tabs) behind a smaller surface, and it adds no session state that the server must expire or clean up. A's only gain is cross-device resume, which nobody asked for. From A it takes the warning that per-set writes would trip the hourly write limit, which confirms that Finish should be the only write.
 
 ## Tradeoffs accepted
 

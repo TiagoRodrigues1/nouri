@@ -12,9 +12,7 @@ import { Label } from "../components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
 import { ExercisePicker } from "../exercise-picker";
 import { format } from "../lib/api";
-import { combinedMuscles } from "../lib/body-map";
 import { exerciseHistoryQueryOptions } from "../lib/exercise-history";
-import { exerciseLibraryQueryOptions } from "../lib/exercise-library";
 import { useNow, useWorkoutSession, type WorkoutSessionHandle } from "../lib/use-workout-session";
 import {
   defaultDuration, finishPlan, maxRoutineExercises, maxRoutineSets, parseSet, previousLabel, previousSets, repsPlaceholder, sessionDate, sessionStats,
@@ -22,7 +20,6 @@ import {
 } from "../lib/workout-session";
 import { styles as pageStyles } from "../meals/meals-styles";
 import { styles as formStyles } from "../form-styles";
-import { MuscleMap } from "../muscle-map";
 import { ExerciseHeading } from "./exercise-heading";
 import { clockLabel } from "./resume-bar";
 import { styles } from "./workouts-styles";
@@ -242,11 +239,8 @@ function FinishDialog({ open, onOpenChange, session, workout }: FinishDialogProp
 // Mounts with the dialog, so the duration starts from the clock each time it opens.
 function FinishBody({ onClose, session, workout }: { onClose: () => void; session: Session; workout: WorkoutSessionHandle }) {
   const navigate = useNavigate();
-  const library = useQuery(exerciseLibraryQueryOptions());
   const [minutes, setMinutes] = useState(() => String(defaultDuration(session, Date.now())));
   const plan = finishPlan(session);
-  const done = session.exercises.filter((exercise) => exercise.sets.some((set) => set.done));
-  const muscles = combinedMuscles(done.map((exercise) => exercise.name), library.data);
   const { finish } = workout;
 
   async function saved(date: Promise<string | null>) {
@@ -283,16 +277,12 @@ function FinishBody({ onClose, session, workout }: { onClose: () => void; sessio
 
   return (
     <form
-      {...stylex.props(formStyles.formStack)}
+      {...stylex.props(formStyles.formStack, styles.finishForm)}
       onSubmit={(event) => {
         event.preventDefault();
         void saved(finish.save(Number(minutes)));
       }}
     >
-      <DialogDescription {...stylex.props(formStyles.dialogDescription)}>
-        {plan.doneSets} {plan.doneSets === 1 ? "set" : "sets"} will be logged as a strength workout{plan.droppedSets > 0 ? `. The ${plan.droppedSets} unticked ${plan.droppedSets === 1 ? "set is" : "sets are"} left out` : ""}.
-      </DialogDescription>
-      {muscles && <div {...stylex.props(styles.finishSummary)}><MuscleMap muscles={muscles} size="full" /></div>}
       <div {...stylex.props(styles.durationField)}>
         <Label htmlFor="finish-duration" {...stylex.props(formStyles.formLabel)}>Duration (min)</Label>
         <Input id="finish-duration" type="number" inputMode="numeric" min={1} max={1440} step={1} value={minutes} onChange={(event) => setMinutes(event.target.value)} required />

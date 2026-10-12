@@ -40,14 +40,14 @@ function intensities(muscles: MuscleMap): Map<BodySlug, Intensity> {
   return worked;
 }
 
-// Both sides of the figure, or, for a thumbnail, only the sides that show a primary muscle.
-export function bodySides(muscles: MuscleMap, only: "all" | "primary"): BodySide[] {
+// The sides of the figure that show a primary muscle.
+export function bodySides(muscles: MuscleMap): BodySide[] {
   const worked = intensities(muscles);
 
   return sides.flatMap(({ side, regions }) => {
     const shaded = regions.map((region) => ({ ...region, intensity: worked.get(region.slug) ?? null }));
 
-    return only === "all" || shaded.some((region) => region.intensity === "primary") ? [{ side, regions: shaded }] : [];
+    return shaded.some((region) => region.intensity === "primary") ? [{ side, regions: shaded }] : [];
   });
 }
 
