@@ -4,6 +4,7 @@ import type { FoodProvider, FoodQuantity } from "../food/contract.js";
 import type { StoredMealItem } from "../meals/contract.js";
 import type { MeasurementKind } from "../measurements/contract.js";
 import type { PhotoType } from "../photos/contract.js";
+import type { RoutineExercise } from "../routines/contract.js";
 import type { Dose, Supplement, SupplementKind } from "../supplements/contract.js";
 import type { SourceColumn, WearableProvider } from "../wearables/contract.js";
 import type { Activity, StrengthExercise } from "../workouts/contract.js";
@@ -122,6 +123,17 @@ export const customExercises = pgTable("custom_exercises", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [uniqueIndex("custom_exercises_user_key_active_idx").on(table.userId, table.key).where(sql`deleted_at IS NULL`)]);
+
+export const workoutRoutines = pgTable("workout_routines", {
+  id: uuid("id").primaryKey(),
+  userId: ownerColumn(),
+  name: text("name").notNull(),
+  exercises: jsonb("exercises").$type<RoutineExercise[]>().notNull(),
+  revision: integer("revision").notNull().default(1),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [index("workout_routines_user_active_idx").on(table.userId, table.createdAt).where(sql`deleted_at IS NULL`)]);
 
 export const sleepSessions = pgTable("sleep_sessions", {
   ...journalColumns,
