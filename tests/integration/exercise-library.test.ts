@@ -45,7 +45,7 @@ void test("the exercise library merges the catalog, custom exercises, and logged
     assert.ok(empty.exercises.length > 700);
     assert.ok(empty.exercises.every((exercise) => exercise.origin === "catalog"));
     const images = "https://cdn.jsdelivr.net/gh/yuhonas/free-exercise-db@f00c92c7dcf1216a928a52c3706c7ce8e2f71ed5/exercises/Barbell_Squat";
-    assert.deepEqual(find(empty.exercises, "barbell squat"), { origin: "catalog", key: "barbell squat", name: "Barbell Squat", muscle: "quadriceps", equipment: "barbell", images: [`${images}/0.jpg`, `${images}/1.jpg`] });
+    assert.deepEqual(find(empty.exercises, "barbell squat"), { origin: "catalog", key: "barbell squat", name: "Barbell Squat", muscle: "quadriceps", muscles: { primary: ["quadriceps"], secondary: ["calves", "glutes", "hamstrings", "lower back"] }, equipment: "barbell", images: [`${images}/0.jpg`, `${images}/1.jpg`] });
     assert.match(empty.attribution.url, /free-exercise-db/);
 
     // Logged names the catalog lacks join as logged exercises, under their latest spelling; catalog names stay catalog.
@@ -64,7 +64,7 @@ void test("the exercise library merges the catalog, custom exercises, and logged
     assert.equal(created.status, 201);
     const squat = await created.json();
 
-    assert.deepEqual(squat, { origin: "custom", id: squat.id, revision: 1, key: "squat", name: "Squat", muscle: "quadriceps", equipment: "barbell" });
+    assert.deepEqual(squat, { origin: "custom", id: squat.id, revision: 1, key: "squat", name: "Squat", muscle: "quadriceps", muscles: { primary: ["quadriceps"], secondary: [] }, equipment: "barbell" });
     // A retry returns the same exercise.
     assert.deepEqual(await (await create({ name: " Squat ", muscle: "quadriceps", equipment: "barbell" }, key)).json(), squat);
     assert.deepEqual(find((await library()).exercises, "squat"), squat);

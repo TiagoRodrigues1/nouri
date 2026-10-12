@@ -10,9 +10,11 @@ import { exerciseKey } from "../workouts/contract.js";
 import { customExerciseSchema, equipment, muscles } from "./contract.js";
 import type { CustomExercise, CustomExerciseInput, ExerciseLibrary, LibraryExercise } from "./contract.js";
 
+const muscle = z.enum(muscles);
+
 const snapshot = z.object({
   commit: z.string(),
-  exercises: z.array(z.object({ id: z.string(), name: z.string(), muscle: z.enum(muscles), equipment: z.enum(equipment).nullable(), images: z.array(z.string()) })),
+  exercises: z.array(z.object({ id: z.string(), name: z.string(), primaryMuscles: z.tuple([muscle], muscle), secondaryMuscles: z.array(muscle), equipment: z.enum(equipment).nullable(), images: z.array(z.string()) })),
 });
 
 const data = snapshot.parse(JSON.parse(readFileSync(new URL("../../data/free-exercise-db.json", import.meta.url), "utf8")));
@@ -20,8 +22,8 @@ const data = snapshot.parse(JSON.parse(readFileSync(new URL("../../data/free-exe
 // Served by jsDelivr from the same pinned commit as the snapshot, since the photos run to about 100 MB.
 const imageBase = `https://cdn.jsdelivr.net/gh/yuhonas/free-exercise-db@${data.commit}/exercises/`;
 
-const catalog: LibraryExercise[] = data.exercises.map(({ name, muscle, equipment, images }) => ({
-  origin: "catalog", key: exerciseKey(name), name, muscle, equipment, images: images.map((image) => imageBase + image),
+const catalog: LibraryExercise[] = data.exercises.map(({ name, primaryMuscles, secondaryMuscles, equipment, images }) => ({
+  origin: "catalog", key: exerciseKey(name), name, muscle: primaryMuscles[0], muscles: { primary: primaryMuscles, secondary: secondaryMuscles }, equipment, images: images.map((image) => imageBase + image),
 }));
 
 const catalogKeys = new Set(catalog.map((exercise) => exercise.key));
@@ -30,8 +32,8 @@ const attribution = { label: "Free Exercise DB, released into the public domain"
 
 const byName = new Intl.Collator("en", { sensitivity: "base", numeric: true });
 
-function custom(row: typeof customExercises.$inferSelect): CustomExercise {
-  return { origin: "custom", id: row.id, revision: row.revision, key: row.key, name: row.name, muscle: row.muscle, equipment: row.equipment };
+function custom(row: Omit<CustomExercise, "origin" | "muscles">): CustomExercise {
+  return { origin: "custom", id: row.id, revision: row.revision, key: row.key, name: row.name, muscle: row.muscle, muscles: { primary: [row.muscle], secondary: [] }, equipment: row.equipment };
 }
 
 // Every exercise the person can pick: the catalog, their own exercises, and names from their workouts that are in neither.
@@ -78,7 +80,8 @@ export async function mutateCustomExercise(db: AppDatabase, userId: string, key:
   return withReceipt(db, userId, key, hash(command), (receipt): CustomExerciseResult => {
     const { outcome, body } = receipt;
 
-    if (outcome === "created") return { outcome, entry: customExerciseSchema.parse(body) };
+    // Receipts kept from before muscles existed replay too, since a custom exercise's muscles follow from its muscle.
+    if (outcome === "created") return { outcome, entry: custom(customExerciseSchema.omit({ muscles: true }).parse(body)) };
 
     if (outcome === null || outcome === "updated") throw new Error("Custom exercise receipt cannot be replayed");
 

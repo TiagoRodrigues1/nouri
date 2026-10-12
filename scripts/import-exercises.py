@@ -31,7 +31,8 @@ exercises = [
     {
         "id": exercise["id"],
         "name": exercise["name"].strip(),
-        "muscle": exercise["primaryMuscles"][0],
+        "primaryMuscles": exercise["primaryMuscles"],
+        "secondaryMuscles": [muscle for muscle in exercise["secondaryMuscles"] if muscle not in exercise["primaryMuscles"]],
         "equipment": EQUIPMENT[exercise["equipment"]] if exercise["equipment"] else None,
         "images": exercise["images"],
     }
