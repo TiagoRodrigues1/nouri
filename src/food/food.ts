@@ -7,8 +7,8 @@ import { foodEntries } from "../db/schema.js";
 import { instantAt, localDate, localTime } from "../time.js";
 import { catalogFood } from "./catalog.js";
 import { nutrientsOf, storedNutrients } from "./stored-nutrients.js";
-import { entrySchema, manualFood, recordedFood, scaledFood, totalNutrients } from "./contract.js";
-import type { CatalogFoodInput, CatalogSelection, FoodEntry, FoodInput, FoodSubmission, RecentFoods, RecordedFood, RepeatInput, SubmittedFood } from "./contract.js";
+import { entrySchema, foodBatchSchema, manualFood, recordedFood, scaledFood, totalNutrients } from "./contract.js";
+import type { CatalogFoodInput, CatalogSelection, FoodBatch, FoodBatchInput, FoodEntry, FoodInput, FoodSubmission, RecentFoods, RecordedFood, RepeatInput, SubmittedFood } from "./contract.js";
 
 export type FoodCommand =
   | { kind: "create"; input: FoodSubmission }
@@ -215,6 +215,48 @@ export async function mutateFood(db: AppDatabase, userId: string, key: string, c
     if (!input) return { outcome: "catalog-missing" };
 
     return command.kind === "create" ? insert(tx, userId, input) : update(tx, userId, command.id, command.revision, input);
+  });
+}
+
+export type FoodBatchResult =
+  | { outcome: "created"; entry: FoodBatch }
+  | { outcome: "missing" | "key-reuse" | "catalog-missing" | "invalid-amount" };
+
+// Logs several foods at one time, all or none, in the order given. A recent food is copied from its entry and
+// scaled; a deleted entry is missing, and an amount past the journal's limits logs nothing.
+export async function logFoodBatch(db: AppDatabase, userId: string, key: string, input: FoodBatchInput): Promise<FoodBatchResult> {
+  return withReceipt(db, userId, key, requestHash({ kind: "food-batch", input }), (receipt): FoodBatchResult => {
+    const { outcome, body } = receipt;
+
+    if (outcome === "created") return { outcome, entry: foodBatchSchema.parse(body) };
+
+    if (outcome === "missing" || outcome === "key-reuse") return { outcome };
+
+    throw new Error("Food batch receipt cannot be replayed");
+  }, async (tx): Promise<FoodBatchResult> => {
+    const entryIds = input.items.flatMap((item) => ("entryId" in item ? [item.entryId] : []));
+    const recorded = entryIds.length > 0 ? await recordedFoods(tx, userId, entryIds) : new Map<string, RecordedFood>();
+    const foods: RecordedFood[] = [];
+
+    for (const item of input.items) {
+      if ("food" in item) {
+        const food = resolveFood(item.food);
+
+        if (!food) return { outcome: "catalog-missing" };
+        foods.push(food);
+        continue;
+      }
+
+      const source = recorded.get(item.entryId);
+
+      if (!source) return { outcome: "missing" };
+      const food = scaledFood(source, item.amount);
+
+      if (!food) return { outcome: "invalid-amount" };
+      foods.push(food);
+    }
+
+    return { outcome: "created", entry: { entries: await insertFoods(tx, userId, { occurredAt: input.occurredAt, timeZone: input.timeZone }, foods) } };
   });
 }
 

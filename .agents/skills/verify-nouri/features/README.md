@@ -27,7 +27,7 @@ This index is the maintained list of Nouri's user paths. Read the relevant file 
 - [Search foods](search.md): Ciqual search results, no-match state, attribution.
 - [Barcode lookup](barcode.md): typed or camera-scanned barcode in the Search foods tab, live Open Food Facts product, serving default, check-digit and not-found states, logging and editing a scanned product.
 - [Log a catalog food](catalog-log.md): search, select, set grams, save and read back.
-- [Recent foods](recent-foods.md): Recent tab in the food dialog, one row per food, amount and preview, logging on the chosen day.
+- [Recent foods](recent-foods.md): Recent tab in the food dialog, one row per food, ticking foods from Recent and Search into one selection with amounts, logging them together on the chosen day.
 - [Log a manual food](manual-log.md): manual tab, label per 100 g or ml, amount eaten, save and read back.
 - [Community foods](community-foods.md): `Add this product` after a barcode miss, `Share with other Nouri users` in the manual tab, `User-added` results, review with `pnpm foods:review`.
 - [Browse dates and delete](dates-delete.md): date picker and arrows, daily totals, remove a row.

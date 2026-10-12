@@ -1,19 +1,17 @@
 import { useQuery } from "@tanstack/react-query";
-import { getRecentFoods, repeatFood } from "./api";
+import { getRecentFoods, logFoodBatch } from "./api";
 import { useIdempotentWrite } from "./use-idempotent";
 import { queryRefresh } from "./query-refresh";
-import type { RecentFood, RepeatInput } from "../../../src/food/contract";
-
-type PendingLog = { recent: RecentFood; input: RepeatInput };
+import type { FoodBatchInput } from "../../../src/food/contract";
 
 export function useRecentFoods() {
   return useQuery({ queryKey: ["recent-foods"], queryFn: getRecentFoods });
 }
 
-// Logs a recent food from its latest entry, so the server copies the recorded food and scales it to the amount.
-export function useLogRecent(onLogged: () => void) {
-  return useIdempotentWrite<PendingLog>((pending, key) => repeatFood(key, pending.recent.entryId, pending.input), {
-    refresh: queryRefresh.food, success: (pending) => `${pending.recent.food.name} added to your log.`, onSuccess: onLogged,
-    signature: (pending) => JSON.stringify([pending.recent.entryId, pending.input]),
+// The foods ticked in the log dialog log as one request, so a retry after a dropped response never adds them twice.
+export function useLogFoods(onLogged: () => void) {
+  return useIdempotentWrite<FoodBatchInput>((input, key) => logFoodBatch(key, input), {
+    refresh: queryRefresh.food, onSuccess: onLogged,
+    success: (input) => `${input.items.length} ${input.items.length === 1 ? "food" : "foods"} added to your log.`,
   });
 }

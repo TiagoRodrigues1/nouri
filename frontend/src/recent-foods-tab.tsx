@@ -7,9 +7,12 @@ import { Input } from "./components/ui/input";
 import { Label } from "./components/ui/label";
 import { format, type RecentFood } from "./lib/api";
 import { nutrientLine, unitLabels } from "./lib/food-text";
-import { calendarDate, localDate, occurredAt, shiftDate, timeZone } from "./lib/time";
+import { calendarDate, localDate, shiftDate } from "./lib/time";
 import { typedAmount } from "./lib/typed-amount";
-import { useLogRecent, useRecentFoods } from "./lib/use-recent-foods";
+import { useRecentFoods } from "./lib/use-recent-foods";
+import { draftRow } from "./lib/saved-meals";
+import type { FoodSelection } from "./lib/food-selection";
+import { SelectableResult } from "./selected-foods";
 import { ListSkeleton } from "./loading";
 import { queryFallback } from "./query-status";
 import { scaleFood } from "../../src/food/contract";
@@ -26,21 +29,13 @@ function lastEatenLabel(date: string): string {
   return shortDate.format(calendarDate(date));
 }
 
-// Foods logged before, most recent first. Choosing one logs it at the dialog's date and time, at the amount typed.
-export function RecentFoodsTab({ date, time, onLogged }: { date: string; time: string; onLogged: () => void }) {
-  const log = useLogRecent(onLogged);
+type RecentPick =
+  | { actionLabel: string; pending?: boolean; onPick: (recent: RecentFood, amount: number) => void }
+  // The log dialog ticks foods into a selection it logs together.
+  | { selection: FoodSelection };
 
-  return (
-    <RecentFoodPicker
-      actionLabel="Add to log"
-      pending={log.isPending}
-      onPick={(recent, amount) => log.mutate({ recent, input: { occurredAt: occurredAt(date, time), timeZone, amount } })}
-    />
-  );
-}
-
-// Foods logged before, most recent first, each offered at its last amount. The meal editor shares it.
-export function RecentFoodPicker({ actionLabel, pending = false, onPick }: { actionLabel: string; pending?: boolean; onPick: (recent: RecentFood, amount: number) => void }) {
+// Foods logged before, most recent first, each offered at its last amount. The meal editor picks one at a time.
+export function RecentFoodPicker(props: RecentPick) {
   const query = useRecentFoods();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const foods = query.data;
@@ -58,6 +53,23 @@ export function RecentFoodPicker({ actionLabel, pending = false, onPick }: { act
       <ul {...stylex.props(styles.resultsList)} aria-label="Recent foods">
         {foods.map((recent, index) => {
           const { name, quantity } = recent.food;
+          const meta = `${format(quantity.amount)} ${unitLabels[quantity.unit]} · ${nutrientLine(recent.food.nutrients)} · ${lastEatenLabel(recent.lastEaten)}`;
+
+          if ("selection" in props) {
+            const key = `entry:${recent.entryId}`;
+
+            return (
+              <li key={recent.entryId} {...stylex.props(index > 0 && styles.resultsItemBorder)}>
+                <SelectableResult
+                  id={`recent-${recent.entryId}`}
+                  name={name}
+                  meta={meta}
+                  checked={props.selection.has(key)}
+                  onToggle={() => props.selection.toggle(key, { ...draftRow({ kind: "entry", entryId: recent.entryId }, recent.food), key })}
+                />
+              </li>
+            );
+          }
 
           return (
             <li key={recent.entryId} {...stylex.props(index > 0 && styles.resultsItemBorder)}>
@@ -69,9 +81,7 @@ export function RecentFoodPicker({ actionLabel, pending = false, onPick }: { act
               >
                 <span>
                   <strong {...stylex.props(styles.resultsText, styles.resultsName)}>{name}</strong>
-                  <small {...stylex.props(styles.resultsText, styles.resultsMeta)}>
-                    {format(quantity.amount)} {unitLabels[quantity.unit]} · {nutrientLine(recent.food.nutrients)} · {lastEatenLabel(recent.lastEaten)}
-                  </small>
+                  <small {...stylex.props(styles.resultsText, styles.resultsMeta)}>{meta}</small>
                 </span>
                 <ChevronRight size={16} />
               </button>
@@ -80,8 +90,8 @@ export function RecentFoodPicker({ actionLabel, pending = false, onPick }: { act
         })}
       </ul>
       {/* Keyed by entry, so choosing another food restarts from its last amount. */}
-      {selected && (
-        <RecentFoodForm key={selected.entryId} recent={selected} pending={pending} actionLabel={actionLabel} onPick={(amount) => onPick(selected, amount)} />
+      {selected && "onPick" in props && (
+        <RecentFoodForm key={selected.entryId} recent={selected} pending={props.pending ?? false} actionLabel={props.actionLabel} onPick={(amount) => props.onPick(selected, amount)} />
       )}
     </>
   );

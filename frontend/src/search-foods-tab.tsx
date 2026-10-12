@@ -12,6 +12,9 @@ import { ApiError, lookupBarcode, searchFoods, type Candidate, type LabelFood, t
 import { nutrientLine, unitLabels } from "./lib/food-text";
 import { portionFood, type FoodPortion, type FoodSource } from "./lib/food-portion";
 import { typedAmount } from "./lib/typed-amount";
+import { draftRow } from "./lib/saved-meals";
+import type { FoodSelection } from "./lib/food-selection";
+import { SelectableResult } from "./selected-foods";
 import { isBarcode, isUserAdded, recordedFood } from "../../src/food/contract";
 
 // A food the tab offers. Its basis is 100 g or ml, which previews any amount. Ciqual foods log by reference,
@@ -63,8 +66,22 @@ const retryOutage = (failures: number, error: Error) => failures < 1 && error in
 // `onPick` gets the submission and its matching preview at the chosen amount.
 type PickChoice = (portion: FoodPortion) => void;
 
-// Food search and barcode lookup. A barcode nobody knows can be added from its label. The log dialog logs the food picked; the meal editor adds it to the meal.
-export function SearchFoodPicker({ actionLabel, pending = false, onPick }: { actionLabel: string; pending?: boolean; onPick: PickChoice }) {
+type SearchPick =
+  | { actionLabel: string; pending?: boolean; onPick: PickChoice }
+  // The log dialog ticks foods into a selection it logs together.
+  | { selection: FoodSelection };
+
+// A food ticked into the selection starts at one serving, or 100 g or ml.
+function ticked(selection: FoodSelection, key: string, { submitted, preview }: FoodPortion) {
+  selection.toggle(key, { ...draftRow({ kind: "submitted", food: submitted }, preview), key });
+}
+
+// Food search and barcode lookup. A barcode nobody knows can be added from its label. The log dialog ticks foods
+// into its selection; the meal editor adds the food picked to the meal.
+export function SearchFoodPicker(props: SearchPick) {
+  const single = "onPick" in props ? props : null;
+  const actionLabel = single ? single.actionLabel : "Add to selection";
+  const pending = single?.pending ?? false;
   const [draft, setDraft] = useState("");
   const [term, setTerm] = useState("");
   const [scanning, setScanning] = useState(false);
@@ -145,6 +162,15 @@ export function SearchFoodPicker({ actionLabel, pending = false, onPick }: { act
         <ul {...stylex.props(styles.resultsList)} aria-label="Food search results">
           {choices.map((choice, index) => (
             <li key={choice.key} {...stylex.props(index > 0 && styles.resultsItemBorder)}>
+              {"selection" in props ? (
+                <SelectableResult
+                  id={`search-${choice.key}`}
+                  name={choice.source.basis.name}
+                  meta={<ChoiceMeta choice={choice} />}
+                  checked={props.selection.has(choice.key)}
+                  onToggle={() => ticked(props.selection, choice.key, portionFood(choice.source, choice.serving?.amount ?? 100))}
+                />
+              ) : (
               <button
                 {...stylex.props(styles.resultsButton, selectedKey === choice.key && styles.resultsButtonSelected)}
                 type="button"
@@ -154,25 +180,36 @@ export function SearchFoodPicker({ actionLabel, pending = false, onPick }: { act
                 <span>
                   <strong {...stylex.props(styles.resultsText, styles.resultsName)}>{choice.source.basis.name}</strong>
                   <small {...stylex.props(styles.resultsText, styles.resultsMeta)}>
-                    {isUserAdded(choice.source.basis) && <span {...stylex.props(styles.userAdded)}>User-added · </span>}
-                    {choice.brand && `${choice.brand} · `}per 100 {unitLabels[choice.source.basis.quantity.unit]} · {nutrientLine(choice.source.basis.nutrients)}
+                    <ChoiceMeta choice={choice} />
                   </small>
                 </span>
                 <ChevronRight size={16} />
               </button>
+              )}
             </li>
           ))}
         </ul>
       )}
       {notFound && (adding ? (
-        <ManualFoodForm key={term} actionLabel={actionLabel} pending={pending} barcode={term} onPick={(food) => onPick({ submitted: food, preview: recordedFood(food) })} />
+        <ManualFoodForm key={term} actionLabel={actionLabel} pending={pending} barcode={term} onPick={(food) => {
+          const portion = { submitted: food, preview: recordedFood(food) };
+
+          if ("onPick" in props) {
+            props.onPick(portion);
+
+            return;
+          }
+
+          ticked(props.selection, `barcode:${term}`, portion);
+          setAdding(false);
+        }} />
       ) : (
         <Button type="button" variant="outline" {...stylex.props(styles.widthFull)} onClick={() => setAdding(true)}>
           Add this product
         </Button>
       ))}
       {/* Keyed by choice, so choosing another food restarts from its default amount. */}
-      {selected && <ChoiceForm key={selected.key} choice={selected} pending={pending} actionLabel={actionLabel} onPick={onPick} />}
+      {selected && single && <ChoiceForm key={selected.key} choice={selected} pending={pending} actionLabel={actionLabel} onPick={single.onPick} />}
       {/* Open Food Facts' licence asks for its credit next to the results. */}
       {query.data?.attribution.filter((source) => source.provider !== "ciqual").map((source) => (
         <a
@@ -185,6 +222,15 @@ export function SearchFoodPicker({ actionLabel, pending = false, onPick }: { act
           Source: {source.label}
         </a>
       ))}
+    </>
+  );
+}
+
+function ChoiceMeta({ choice }: { choice: Choice }) {
+  return (
+    <>
+      {isUserAdded(choice.source.basis) && <span {...stylex.props(styles.userAdded)}>User-added · </span>}
+      {choice.brand && `${choice.brand} · `}per 100 {unitLabels[choice.source.basis.quantity.unit]} · {nutrientLine(choice.source.basis.nutrients)}
     </>
   );
 }

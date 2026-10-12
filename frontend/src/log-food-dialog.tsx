@@ -1,12 +1,17 @@
 import * as stylex from "@stylexjs/stylex";
 import { styles } from "./form-styles";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "./components/ui/dialog";
 import { Label } from "./components/ui/label";
 import { TimePicker } from "./components/ui/time-picker";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs";
-import { currentTime, dateLabel } from "./lib/time";
-import { RecentFoodsTab } from "./recent-foods-tab";
+import { currentTime, dateLabel, occurredAt, timeZone } from "./lib/time";
+import { maxBatchFoods, type FoodSelection } from "./lib/food-selection";
+import type { DraftRow } from "./lib/saved-meals";
+import { useLogFoods } from "./lib/use-recent-foods";
+import { RecentFoodPicker } from "./recent-foods-tab";
+import { SelectedFoods } from "./selected-foods";
 import { SavedMealsTab } from "./saved-meals-tab";
 import { SearchFoodPicker } from "./search-foods-tab";
 import { ManualFoodForm } from "./manual-food-form";
@@ -25,19 +30,43 @@ type LogFoodDialogProps = {
 
 export function LogFoodDialog({ open, onOpenChange, date, isToday, pending, onSave }: LogFoodDialogProps) {
   const [time, setTime] = useState(currentTime);
+  const [selected, setSelected] = useState<DraftRow[]>([]);
+  const logSelected = useLogFoods(() => onOpenChange(false));
 
-  // Each time the dialog opens, default the entry time to now.
+  // Each time the dialog opens, default the entry time to now and start with nothing ticked.
   useEffect(() => {
-    if (open) setTime(currentTime());
+    if (open) {
+      setTime(currentTime());
+      setSelected([]);
+    }
   }, [open]);
+
+  const selection: FoodSelection = {
+    has: (key) => selected.some((row) => row.key === key),
+    toggle: (key, row) => {
+      if (selected.some((other) => other.key === key)) {
+        setSelected(selected.filter((other) => other.key !== key));
+
+        return;
+      }
+
+      if (selected.length >= maxBatchFoods) {
+        toast.error(`You can log up to ${maxBatchFoods} foods at once.`);
+
+        return;
+      }
+
+      setSelected([...selected, row]);
+    },
+  };
 
   return (
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent>
           <DialogTitle {...stylex.props(styles.dialogTitle)}>Log a food</DialogTitle>
           <DialogDescription {...stylex.props(styles.dialogDescription)}>
-            Choose a food you logged before, one from the catalog or by barcode, a saved meal, or
-            enter one manually. It will be added to {isToday ? "today" : dateLabel(date)}.
+            Tick foods you logged before or found in the catalog or by barcode, log a saved meal, or
+            enter one manually. They will be added to {isToday ? "today" : dateLabel(date)}.
           </DialogDescription>
           <div {...stylex.props(styles.timeField)}>
             <Label {...stylex.props(styles.formLabel, styles.timeLabel)} htmlFor="food-time">Time eaten</Label>
@@ -59,10 +88,10 @@ export function LogFoodDialog({ open, onOpenChange, date, isToday, pending, onSa
               </TabsTrigger>
             </TabsList>
             <TabsContent value="recent">
-              <RecentFoodsTab date={date} time={time} onLogged={() => onOpenChange(false)} />
+              <RecentFoodPicker selection={selection} />
             </TabsContent>
             <TabsContent value="search">
-              <SearchFoodPicker actionLabel="Add to log" pending={pending} onPick={({ submitted }) => onSave(submitted, time)} />
+              <SearchFoodPicker selection={selection} />
             </TabsContent>
             <TabsContent value="meals">
               <SavedMealsTab date={date} time={time} onLogged={() => onOpenChange(false)} onManage={() => onOpenChange(false)} />
@@ -71,6 +100,14 @@ export function LogFoodDialog({ open, onOpenChange, date, isToday, pending, onSa
               <ManualFoodForm actionLabel="Add to log" pending={pending} onPick={(food) => onSave(food, time)} />
             </TabsContent>
           </Tabs>
+          {selected.length > 0 && (
+            <SelectedFoods
+              rows={selected}
+              pending={logSelected.isPending}
+              onChange={setSelected}
+              onLog={(items) => logSelected.mutate({ occurredAt: occurredAt(date, time), timeZone, items })}
+            />
+          )}
         </DialogContent>
       </Dialog>
   );

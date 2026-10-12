@@ -196,4 +196,22 @@ export const styles = stylex.create({
     fontWeight: "600",
     textDecoration: { default: "none", ":hover": "underline" },
   },
+  selectableRow: {
+    display: "grid",
+    gridTemplateColumns: "auto minmax(0, 1fr)",
+    alignItems: "center",
+    gap: "11px",
+    padding: "11px 13px",
+    backgroundColor: { default: "transparent", ":hover": colors.accent },
+  },
+  selectableRowChecked: { backgroundColor: colors.accent },
+  selectedFoods: { marginTop: "14px" },
+  selectedFoodRow: {
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1fr) auto auto",
+    alignItems: "center",
+    gap: "8px",
+    padding: "6px 6px 6px 12px",
+  },
+  selectedFoodText: { minWidth: 0 },
 });
