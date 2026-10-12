@@ -41,14 +41,6 @@ export const styles = stylex.create({
     borderWidth: 1, borderStyle: "solid", borderColor: colors.border,
     borderRadius: "8px",
   },
-  selectedForm: {
-    display: "grid",
-    gap: "8px",
-    margin: "14px 0",
-    padding: "14px",
-    borderRadius: "8px",
-    backgroundColor: colors.muted,
-  },
   sourceLink: {
     color: colors.primary,
     fontSize: "11px",
@@ -127,9 +119,6 @@ export const styles = stylex.create({
   },
   selectedName: {
     fontSize: "13px",
-  },
-  selectedLabel: {
-    margin: "0",
   },
   selectedButton: {
     justifySelf: "end",

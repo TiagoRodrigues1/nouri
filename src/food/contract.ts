@@ -88,14 +88,18 @@ export const entrySchema = recordBaseSchema.extend({ food: recordedFoodSchema })
 
 export const maxBatchFoods = 20;
 
-// Several foods logged at one time: a recent food copied from its entry at an amount, or a food as logging submits it.
+// A food taken from elsewhere: a logged entry copied at an amount, or a food as logging submits it, so a Ciqual
+// food is a reference the server measures. Logging several foods and saving a meal both take it.
+export const foodItemInputSchema = z.union([
+  z.object({ entryId: z.uuid(), amount: positiveAmount.max(10_000) }).strict(),
+  z.object({ food: submittedFoodSchema }).strict(),
+]);
+
+// Several foods logged at one time.
 export const foodBatchInputSchema = z.object({
   occurredAt: occurredAtSchema,
   timeZone: timeZoneSchema,
-  items: z.array(z.union([
-    z.object({ entryId: z.uuid(), amount: positiveAmount.max(10_000) }).strict(),
-    z.object({ food: submittedFoodSchema }).strict(),
-  ])).min(1).max(maxBatchFoods),
+  items: z.array(foodItemInputSchema).min(1).max(maxBatchFoods),
 }).strict();
 
 export const foodBatchSchema = z.object({ entries: z.array(entrySchema) });
@@ -190,6 +194,8 @@ export type FoodSubmission = z.infer<typeof submissionSchema>;
 export type SubmittedFood = z.infer<typeof submittedFoodSchema>;
 
 export type RepeatInput = z.infer<typeof repeatInputSchema>;
+
+export type FoodItemInput = z.infer<typeof foodItemInputSchema>;
 
 export type FoodBatchInput = z.infer<typeof foodBatchInputSchema>;
 

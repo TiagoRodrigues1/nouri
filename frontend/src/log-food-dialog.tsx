@@ -7,15 +7,15 @@ import { Label } from "./components/ui/label";
 import { TimePicker } from "./components/ui/time-picker";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs";
 import { currentTime, dateLabel, occurredAt, timeZone } from "./lib/time";
-import { maxBatchFoods, type FoodSelection } from "./lib/food-selection";
-import type { DraftRow } from "./lib/saved-meals";
+import { rowSelection } from "./lib/food-selection";
+import type { FoodRow } from "./lib/saved-meals";
 import { useLogFoods } from "./lib/use-recent-foods";
 import { RecentFoodPicker } from "./recent-foods-tab";
 import { SelectedFoods } from "./selected-foods";
 import { SavedMealsTab } from "./saved-meals-tab";
 import { SearchFoodPicker } from "./search-foods-tab";
 import { ManualFoodForm } from "./manual-food-form";
-import type { FoodSubmission } from "../../src/food/contract";
+import { maxBatchFoods, type FoodSubmission } from "../../src/food/contract";
 
 type FoodInput = FoodSubmission["food"];
 
@@ -30,7 +30,7 @@ type LogFoodDialogProps = {
 
 export function LogFoodDialog({ open, onOpenChange, date, isToday, pending, onSave }: LogFoodDialogProps) {
   const [time, setTime] = useState(currentTime);
-  const [selected, setSelected] = useState<DraftRow[]>([]);
+  const [selected, setSelected] = useState<FoodRow[]>([]);
   const logSelected = useLogFoods(() => onOpenChange(false));
 
   // Each time the dialog opens, default the entry time to now and start with nothing ticked.
@@ -41,24 +41,11 @@ export function LogFoodDialog({ open, onOpenChange, date, isToday, pending, onSa
     }
   }, [open]);
 
-  const selection: FoodSelection = {
-    has: (key) => selected.some((row) => row.key === key),
-    toggle: (key, row) => {
-      if (selected.some((other) => other.key === key)) {
-        setSelected(selected.filter((other) => other.key !== key));
-
-        return;
-      }
-
-      if (selected.length >= maxBatchFoods) {
-        toast.error(`You can log up to ${maxBatchFoods} foods at once.`);
-
-        return;
-      }
-
-      setSelected([...selected, row]);
-    },
-  };
+  const selection = rowSelection(
+    selected,
+    (row) => (selected.length >= maxBatchFoods ? toast.error(`You can log up to ${maxBatchFoods} foods at once.`) : setSelected([...selected, row])),
+    (key) => setSelected(selected.filter((row) => row.key !== key)),
+  );
 
   return (
       <Dialog open={open} onOpenChange={onOpenChange}>

@@ -10,17 +10,18 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } f
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
-import { ExercisePicker } from "../exercise-picker";
 import { format } from "../lib/api";
 import { exerciseHistoryQueryOptions } from "../lib/exercise-history";
 import { useNow, useWorkoutSession, type WorkoutSessionHandle } from "../lib/use-workout-session";
 import {
-  defaultDuration, finishPlan, maxRoutineExercises, maxRoutineSets, parseSet, previousLabel, previousSets, repsPlaceholder, sessionDate, sessionStats,
-  setPlaceholder, weightText, type Session, type SessionExercise, type SetValues,
+  defaultDuration, parseReps, parseWeight, previousLabel, previousSets, repsPlaceholder, sessionDate, sessionStats, setPlaceholder, weightText,
+  type Session, type SessionExercise, type SetValues,
 } from "../lib/workout-session";
+import { maxRoutineExercises, maxRoutineSets } from "../../../src/routines/contract";
 import { styles as pageStyles } from "../meals/meals-styles";
 import { styles as formStyles } from "../form-styles";
 import { ExerciseHeading } from "./exercise-heading";
+import { PickExercise, type PickTarget } from "./pick-exercise";
 import { clockLabel } from "./resume-bar";
 import { styles } from "./workouts-styles";
 
@@ -60,16 +61,10 @@ function LiveLog({ session, workout }: { session: Session; workout: WorkoutSessi
   const now = useNow(1000);
   const stats = sessionStats(session, now);
   const date = sessionDate(session);
-  // The exercise the picker is choosing for, or "new" for one it adds.
-  const [picking, setPicking] = useState<string | null>(null);
+  const [picking, setPicking] = useState<PickTarget | null>(null);
   const [finishing, setFinishing] = useState(false);
   const [discarding, setDiscarding] = useState(false);
   const frozen = session.finish !== null;
-
-  function pick(name: string) {
-    if (picking === "new") workout.dispatch({ type: "add-exercise", name });
-    else if (picking) workout.dispatch({ type: "replace-exercise", exerciseId: picking, name });
-  }
 
   return (
     <div {...stylex.props(styles.page)}>
@@ -89,11 +84,11 @@ function LiveLog({ session, workout }: { session: Session; workout: WorkoutSessi
           previous={history.data ? previousSets(history.data.exercises, exercise.name, date) : []}
           frozen={frozen}
           workout={workout}
-          onReplace={() => setPicking(exercise.id)}
+          onReplace={() => setPicking({ kind: "replace", exerciseId: exercise.id })}
         />
       ))}
       {session.exercises.length === 0 && <p {...stylex.props(pageStyles.noFoods)}>Add the exercises you are doing.</p>}
-      <Button variant="outline" disabled={frozen || session.exercises.length >= maxRoutineExercises} onClick={() => setPicking("new")}>
+      <Button variant="outline" disabled={frozen || session.exercises.length >= maxRoutineExercises} onClick={() => setPicking({ kind: "add" })}>
         <Plus size={16} /> Add exercise
       </Button>
       <div {...stylex.props(styles.actions)}>
@@ -101,8 +96,14 @@ function LiveLog({ session, workout }: { session: Session; workout: WorkoutSessi
           Discard workout
         </Button>
       </div>
-      <ExercisePicker open={picking !== null} onOpenChange={(open) => { if (!open) setPicking(null); }} date={date} onPick={pick} />
-      <FinishDialog open={finishing} onOpenChange={setFinishing} session={session} workout={workout} />
+      <PickExercise
+        target={picking}
+        onClose={() => setPicking(null)}
+        date={date}
+        onAdd={(name) => workout.dispatch({ type: "add-exercise", name })}
+        onReplace={(exerciseId, name) => workout.dispatch({ type: "replace-exercise", exerciseId, name })}
+      />
+      <FinishDialog open={finishing} onOpenChange={setFinishing} session={session} doneSets={stats.doneSets} workout={workout} />
       <Dialog open={discarding} onOpenChange={setDiscarding}>
         <DialogContent>
           <DialogTitle {...stylex.props(formStyles.dialogTitle)}>Discard this workout?</DialogTitle>
@@ -172,7 +173,7 @@ function ExerciseLog({ exercise, previous, frozen, workout, onReplace }: Exercis
                     placeholder={last?.weightKg != null ? weightText(last.weightKg) : ""}
                     value={set.weight}
                     disabled={frozen}
-                    aria-invalid={set.weight !== "" && parseSet({ weight: set.weight, reps: "1" }) === null}
+                    aria-invalid={parseWeight(set.weight) === undefined}
                     onChange={(event) => dispatch({ type: "edit-set", exerciseId, setId, field: "weight", text: event.target.value })}
                     {...stylex.props(styles.numberInput)}
                   />
@@ -185,7 +186,7 @@ function ExerciseLog({ exercise, previous, frozen, workout, onReplace }: Exercis
                     placeholder={repsPlaceholder(last, set.target)}
                     value={set.reps}
                     disabled={frozen}
-                    aria-invalid={set.reps !== "" && parseSet({ weight: "", reps: set.reps }) === null}
+                    aria-invalid={set.reps !== "" && parseReps(set.reps) === null}
                     onChange={(event) => dispatch({ type: "edit-set", exerciseId, setId, field: "reps", text: event.target.value })}
                     {...stylex.props(styles.numberInput)}
                   />
@@ -221,26 +222,25 @@ function ExerciseLog({ exercise, previous, frozen, workout, onReplace }: Exercis
   );
 }
 
-type FinishDialogProps = { open: boolean; onOpenChange: (open: boolean) => void; session: Session; workout: WorkoutSessionHandle };
+type FinishDialogProps = { open: boolean; onOpenChange: (open: boolean) => void; session: Session; doneSets: number; workout: WorkoutSessionHandle };
 
 // Saving logs the done sets as one strength workout. Once sent, the request is kept until the server answers, so
 // the only ways on are Retry, which cannot log it twice, and Discard.
-function FinishDialog({ open, onOpenChange, session, workout }: FinishDialogProps) {
+function FinishDialog({ open, onOpenChange, session, doneSets, workout }: FinishDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogTitle {...stylex.props(formStyles.dialogTitle)}>Finish {session.title}</DialogTitle>
-        {open && <FinishBody onClose={() => onOpenChange(false)} session={session} workout={workout} />}
+        {open && <FinishBody onClose={() => onOpenChange(false)} session={session} doneSets={doneSets} workout={workout} />}
       </DialogContent>
     </Dialog>
   );
 }
 
 // Mounts with the dialog, so the duration starts from the clock each time it opens.
-function FinishBody({ onClose, session, workout }: { onClose: () => void; session: Session; workout: WorkoutSessionHandle }) {
+function FinishBody({ onClose, session, doneSets, workout }: { onClose: () => void; session: Session; doneSets: number; workout: WorkoutSessionHandle }) {
   const navigate = useNavigate();
   const [minutes, setMinutes] = useState(() => String(defaultDuration(session, Date.now())));
-  const plan = finishPlan(session);
   const { finish } = workout;
 
   async function saved(date: Promise<string | null>) {
@@ -249,7 +249,7 @@ function FinishBody({ onClose, session, workout }: { onClose: () => void; sessio
     if (logged) void navigate({ to: "/overview", search: { date: logged } });
   }
 
-  if (plan.outcome === "empty") {
+  if (doneSets === 0) {
     return (
       <>
         <DialogDescription {...stylex.props(formStyles.dialogDescription)}>No sets are ticked yet, so there is nothing to log.</DialogDescription>

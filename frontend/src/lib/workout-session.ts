@@ -1,6 +1,7 @@
 import { z } from "zod";
-import { maxRoutineExercises, maxRoutineSets, repTargetSchema, type RepTarget, type Routine } from "../../../src/routines/contract.js";
+import { repTargetSchema, type RepTarget, type Routine } from "../../../src/routines/contract.js";
 import { localDate } from "../../../src/time.js";
+import { appendExercise, appendSet, changeById, changeSet } from "./exercise-list.js";
 import { exerciseKey, workoutInputSchema, type ExerciseHistory, type ExerciseSession, type WorkoutInput } from "../../../src/workouts/contract.js";
 
 // What a done set is worth. A null weight is bodyweight.
@@ -57,15 +58,9 @@ export type SessionAction =
   | { type: "freeze"; finish: FrozenFinish }
   | { type: "thaw" };
 
-export type SessionStats = { elapsedSeconds: number; volumeKg: number; doneSets: number; undoneSets: number };
-
-export type FinishPlan =
-  | { outcome: "empty" }
-  | { outcome: "ready"; doneSets: number; droppedSets: number };
+export type SessionStats = { elapsedSeconds: number; volumeKg: number; doneSets: number };
 
 export type Ids = () => string;
-
-export { maxRoutineExercises, maxRoutineSets };
 
 const emptySet = (id: string, target: RepTarget | null): SessionSet => ({ id, target, weight: "", reps: "", done: false });
 
@@ -86,15 +81,30 @@ export function startSession(routine: Routine | null, startedAt: string, timeZon
   };
 }
 
-// A set's typed values, or null when reps is not a whole number from 1 to 1000 or the weight is neither empty
-// (bodyweight) nor 0 to 1000 kg. Some phone keyboards type a decimal comma.
-export function parseSet(set: Pick<SessionSet, "weight" | "reps">): SetValues | null {
-  const weight = set.weight.trim().replace(",", ".");
-  const weightKg = weight === "" ? null : Number(weight);
-  const reps = /^\s*\d+\s*$/.test(set.reps) ? Number(set.reps) : 0;
-  const validWeight = weightKg === null || (Number.isFinite(weightKg) && weightKg >= 0 && weightKg <= 1000);
+// A weight field's kilograms from 0 to 1000: null when empty, which is bodyweight, and undefined when it is not a
+// weight. Some phone keyboards type a decimal comma.
+export function parseWeight(text: string): number | null | undefined {
+  const weight = text.trim().replace(",", ".");
 
-  return validWeight && reps >= 1 && reps <= 1000 ? { weightKg, reps } : null;
+  if (weight === "") return null;
+  const weightKg = Number(weight);
+
+  return Number.isFinite(weightKg) && weightKg >= 0 && weightKg <= 1000 ? weightKg : undefined;
+}
+
+// A reps field's whole number from 1 to 1000, or null.
+export function parseReps(text: string): number | null {
+  const reps = /^\s*\d+\s*$/.test(text) ? Number(text) : 0;
+
+  return reps >= 1 && reps <= 1000 ? reps : null;
+}
+
+// A set's typed values, or null when either field does not parse.
+export function parseSet(set: Pick<SessionSet, "weight" | "reps">): SetValues | null {
+  const weightKg = parseWeight(set.weight);
+  const reps = parseReps(set.reps);
+
+  return weightKg !== undefined && reps !== null ? { weightKg, reps } : null;
 }
 
 // "8" or "8-12"; an en dash or spaces around the dash work too.
@@ -125,32 +135,14 @@ function valuesText(values: SetValues): Pick<SessionSet, "weight" | "reps"> {
   return { weight: values.weightKg === null ? "" : weightText(values.weightKg), reps: String(values.reps) };
 }
 
-function updateSet(session: Session, exerciseId: string, setId: string, change: (set: SessionSet) => SessionSet | null): Session {
-  const exercise = session.exercises.find((candidate) => candidate.id === exerciseId);
-  const set = exercise?.sets.find((candidate) => candidate.id === setId);
-
-  if (!exercise || !set) return session;
-  const next = change(set);
-
-  if (next === null || next === set) return session;
-
-  return updateExercise(session, exerciseId, { ...exercise, sets: exercise.sets.map((candidate) => (candidate.id === setId ? next : candidate)) });
-}
-
-function updateExercise(session: Session, exerciseId: string, next: SessionExercise | null): Session {
-  return {
-    ...session,
-    exercises: session.exercises.flatMap((exercise) => {
-      if (exercise.id !== exerciseId) return [exercise];
-
-      return next ? [next] : [];
-    }),
-  };
+// The session with its exercises changed; the same session when they are unchanged.
+function withExercises(session: Session, exercises: SessionExercise[]): Session {
+  return exercises === session.exercises ? session : { ...session, exercises };
 }
 
 // Empty fields take the fallback; a set that still does not parse stays open.
-function complete(set: SessionSet, fallback: SetValues | null): SessionSet | null {
-  if (set.done) return null;
+function complete(set: SessionSet, fallback: SetValues | null): SessionSet {
+  if (set.done) return set;
 
   const filled = {
     weight: set.weight.trim() === "" && fallback?.weightKg != null ? weightText(fallback.weightKg) : set.weight,
@@ -159,7 +151,7 @@ function complete(set: SessionSet, fallback: SetValues | null): SessionSet | nul
 
   const values = parseSet(filled);
 
-  return values ? { ...set, ...valuesText(values), done: true } : null;
+  return values ? { ...set, ...valuesText(values), done: true } : set;
 }
 
 // The only way a session changes. It returns the same object when an action does not apply: an unknown id, a
@@ -170,50 +162,34 @@ export function reduce(session: Session, action: SessionAction): Session {
 
   if (session.finish) return session;
 
+  const { exercises } = session;
+
   switch (action.type) {
     case "freeze":
       return { ...session, finish: action.finish };
     case "edit-set":
-      return updateSet(session, action.exerciseId, action.setId, (set) => {
+      return withExercises(session, changeSet(exercises, action.exerciseId, action.setId, (set) => {
         const next = { ...set, [action.field]: action.text };
 
         return { ...next, done: next.done && parseSet(next) !== null };
-      });
+      }));
     case "complete-set":
-      return updateSet(session, action.exerciseId, action.setId, (set) => complete(set, action.fallback));
+      return withExercises(session, changeSet(exercises, action.exerciseId, action.setId, (set) => complete(set, action.fallback)));
     case "reopen-set":
-      return updateSet(session, action.exerciseId, action.setId, (set) => (set.done ? { ...set, done: false } : null));
+      return withExercises(session, changeSet(exercises, action.exerciseId, action.setId, (set) => (set.done ? { ...set, done: false } : set)));
     case "copy-previous":
-      return updateSet(session, action.exerciseId, action.setId, (set) => ({ ...set, ...valuesText(action.values) }));
-    case "remove-set": {
-      const exercise = session.exercises.find((candidate) => candidate.id === action.exerciseId);
-
-      if (!exercise?.sets.some((set) => set.id === action.setId)) return session;
-
-      return updateExercise(session, exercise.id, { ...exercise, sets: exercise.sets.filter((set) => set.id !== action.setId) });
-    }
-
-    case "add-set": {
-      const exercise = session.exercises.find((candidate) => candidate.id === action.exerciseId);
-
-      if (!exercise || exercise.sets.length >= maxRoutineSets) return session;
-
-      return updateExercise(session, exercise.id, { ...exercise, sets: [...exercise.sets, emptySet(action.setId, exercise.sets.at(-1)?.target ?? null)] });
-    }
-
+      return withExercises(session, changeSet(exercises, action.exerciseId, action.setId, (set) => ({ ...set, ...valuesText(action.values) })));
+    case "remove-set":
+      return withExercises(session, changeSet(exercises, action.exerciseId, action.setId, () => null));
+    case "add-set":
+      return withExercises(session, appendSet(exercises, action.exerciseId, (last) => emptySet(action.setId, last?.target ?? null)));
     case "add-exercise":
-      if (session.exercises.length >= maxRoutineExercises) return session;
-
-      return { ...session, exercises: [...session.exercises, { id: action.exerciseId, name: action.name, sets: [emptySet(action.setId, null)] }] };
-    case "replace-exercise": {
-      const exercise = session.exercises.find((candidate) => candidate.id === action.exerciseId);
-
+      return withExercises(session, appendExercise(exercises, { id: action.exerciseId, name: action.name, sets: [emptySet(action.setId, null)] }));
+    case "replace-exercise":
       // The plan's targets stay; what was typed or done belonged to the other exercise.
-      return exercise ? updateExercise(session, exercise.id, { ...exercise, name: action.name, sets: exercise.sets.map((set) => emptySet(set.id, set.target)) }) : session;
-    }
-
+      return withExercises(session, changeById(exercises, action.exerciseId, (exercise) => ({ ...exercise, name: action.name, sets: exercise.sets.map((set) => emptySet(set.id, set.target)) })));
     case "remove-exercise":
-      return session.exercises.some((exercise) => exercise.id === action.exerciseId) ? updateExercise(session, action.exerciseId, null) : session;
+      return withExercises(session, changeById(exercises, action.exerciseId, () => null));
   }
 }
 
@@ -225,20 +201,13 @@ function doneValues(exercise: SessionExercise): SetValues[] {
   });
 }
 
-function setCounts(session: Session): Pick<SessionStats, "doneSets" | "undoneSets"> {
-  const sets = session.exercises.flatMap((exercise) => exercise.sets);
-  const doneSets = sets.filter((set) => set.done).length;
-
-  return { doneSets, undoneSets: sets.length - doneSets };
-}
-
 export function sessionStats(session: Session, now: number): SessionStats {
   const done = session.exercises.flatMap(doneValues);
 
   return {
     elapsedSeconds: Math.max(0, Math.floor((now - Date.parse(session.startedAt)) / 1000)),
     volumeKg: done.reduce((volume, set) => volume + (set.weightKg ?? 0) * set.reps, 0),
-    ...setCounts(session),
+    doneSets: done.length,
   };
 }
 
@@ -249,12 +218,6 @@ export function sessionDate(session: Session): string {
 
 export function defaultDuration(session: Session, now: number): number {
   return Math.min(1440, Math.max(1, Math.round((now - Date.parse(session.startedAt)) / 60_000)));
-}
-
-export function finishPlan(session: Session): FinishPlan {
-  const { doneSets, undoneSets } = setCounts(session);
-
-  return doneSets === 0 ? { outcome: "empty" } : { outcome: "ready", doneSets, droppedSets: undoneSets };
 }
 
 // The workout the session logs, dated when it started: done sets only, in screen order, with consecutive equal

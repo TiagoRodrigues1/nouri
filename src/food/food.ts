@@ -8,7 +8,7 @@ import { instantAt, localDate, localTime } from "../time.js";
 import { catalogFood } from "./catalog.js";
 import { nutrientsOf, storedNutrients } from "./stored-nutrients.js";
 import { entrySchema, foodBatchSchema, manualFood, recordedFood, scaledFood, totalNutrients } from "./contract.js";
-import type { CatalogFoodInput, CatalogSelection, FoodBatch, FoodBatchInput, FoodEntry, FoodInput, FoodSubmission, RecentFoods, RecordedFood, RepeatInput, SubmittedFood } from "./contract.js";
+import type { CatalogFoodInput, FoodBatch, FoodBatchInput, FoodEntry, FoodInput, FoodSubmission, RecentFoods, RecordedFood, RepeatInput, SubmittedFood } from "./contract.js";
 
 export type FoodCommand =
   | { kind: "create"; input: FoodSubmission }
@@ -103,45 +103,60 @@ export async function insertFoods(tx: Transaction, userId: string, when: Pick<Re
   });
 }
 
-// A food to log: as recorded, or a catalog food at an amount in grams.
-export type FoodItem = RecordedFood | { ref: CatalogSelection; grams: number };
-
-// Logs several foods at one time in one transaction, so an unknown catalog food logs none of them.
-export async function logFoods(db: AppDatabase, userId: string, when: Pick<RepeatInput, "occurredAt" | "timeZone">, items: FoodItem[]): Promise<{ outcome: "created"; entries: FoodEntry[] } | { outcome: "catalog-missing" }> {
-  const foods: RecordedFood[] = [];
-
-  for (const item of items) {
-    if (!("ref" in item)) {
-      foods.push(item);
-      continue;
-    }
-
-    const food = catalogFood(item.ref, item.grams);
-
-    if (!food) return { outcome: "catalog-missing" };
-    foods.push(food);
-  }
-
-  return { outcome: "created", entries: await db.transaction((tx) => insertFoods(tx, userId, when, foods)) };
-}
-
 // The person's current foods among these entries, by entry id. Deleted and unknown ids are absent.
-export async function recordedFoods(tx: Transaction, userId: string, ids: string[]): Promise<Map<string, RecordedFood>> {
+async function recordedFoods(tx: Transaction, userId: string, ids: string[]): Promise<Map<string, RecordedFood>> {
   const rows = await tx.select().from(foodEntries)
     .where(and(eq(foodEntries.userId, userId), inArray(foodEntries.id, ids), isNull(foodEntries.deletedAt)));
 
   return new Map(rows.map((row) => [row.id, entry(row).food]));
 }
 
-// Copies the recorded food, scaled when an amount is given. A scaled food must still fit the journal's limits.
-async function repeat(tx: Transaction, userId: string, sourceId: string, { amount, ...when }: RepeatInput): Promise<FoodMutationResult> {
-  const recorded = (await recordedFoods(tx, userId, [sourceId])).get(sourceId);
+// A food to log: a logged entry copied, scaled when an amount is given, or a food as logging submits it.
+export type FoodItem = { entryId: string; amount?: number | undefined } | { food: SubmittedFood };
 
-  if (!recorded) return { outcome: "missing" };
-  const food = amount === undefined ? recorded : scaledFood(recorded, amount);
+export type FoodSource = { outcome: "found"; food: RecordedFood } | { outcome: "missing" | "catalog-missing" };
 
-  if (!food) return { outcome: "invalid-amount" };
-  const [created] = await insertFoods(tx, userId, when, [food]);
+// The food each item copies, before any amount is applied: a logged entry's as recorded (a deleted or unknown entry
+// is missing), or a submitted food as the journal records it. The entries are read in one query up front.
+export async function foodSources(tx: Transaction, userId: string, items: FoodItem[]): Promise<(item: FoodItem) => FoodSource> {
+  const entryIds = items.flatMap((item) => ("entryId" in item ? [item.entryId] : []));
+  const entries = entryIds.length > 0 ? await recordedFoods(tx, userId, entryIds) : new Map<string, RecordedFood>();
+
+  return (item) => {
+    const food = "entryId" in item ? entries.get(item.entryId) : resolveFood(item.food);
+
+    if (food) return { outcome: "found", food };
+
+    return { outcome: "entryId" in item ? "missing" : "catalog-missing" };
+  };
+}
+
+export type LogFoodsResult = { outcome: "created"; entries: FoodEntry[] } | { outcome: "missing" | "catalog-missing" | "invalid-amount" };
+
+// Logs the items at one time, all or none, in the order given. A scaled entry must still fit the journal's limits,
+// which a tiny recorded amount scaled up can exceed.
+export async function logFoods(tx: Transaction, userId: string, when: Pick<RepeatInput, "occurredAt" | "timeZone">, items: FoodItem[]): Promise<LogFoodsResult> {
+  const source = await foodSources(tx, userId, items);
+  const foods: RecordedFood[] = [];
+
+  for (const item of items) {
+    const found = source(item);
+
+    if (found.outcome !== "found") return found;
+    const food = "amount" in item && item.amount !== undefined ? scaledFood(found.food, item.amount) : found.food;
+
+    if (!food) return { outcome: "invalid-amount" };
+    foods.push(food);
+  }
+
+  return { outcome: "created", entries: await insertFoods(tx, userId, when, foods) };
+}
+
+async function repeat(tx: Transaction, userId: string, entryId: string, { amount, ...when }: RepeatInput): Promise<FoodMutationResult> {
+  const result = await logFoods(tx, userId, when, [{ entryId, amount }]);
+
+  if (result.outcome !== "created") return result;
+  const [created] = result.entries;
 
   if (!created) throw new Error("Food insert returned no row");
 
@@ -222,9 +237,10 @@ export type FoodBatchResult =
   | { outcome: "created"; entry: FoodBatch }
   | { outcome: "missing" | "key-reuse" | "catalog-missing" | "invalid-amount" };
 
-// Logs several foods at one time, all or none, in the order given. A recent food is copied from its entry and
-// scaled; a deleted entry is missing, and an amount past the journal's limits logs nothing.
+// Logs several foods at one time under one idempotency key.
 export async function logFoodBatch(db: AppDatabase, userId: string, key: string, input: FoodBatchInput): Promise<FoodBatchResult> {
+  const { items, ...when } = input;
+
   return withReceipt(db, userId, key, requestHash({ kind: "food-batch", input }), (receipt): FoodBatchResult => {
     const { outcome, body } = receipt;
 
@@ -234,29 +250,9 @@ export async function logFoodBatch(db: AppDatabase, userId: string, key: string,
 
     throw new Error("Food batch receipt cannot be replayed");
   }, async (tx): Promise<FoodBatchResult> => {
-    const entryIds = input.items.flatMap((item) => ("entryId" in item ? [item.entryId] : []));
-    const recorded = entryIds.length > 0 ? await recordedFoods(tx, userId, entryIds) : new Map<string, RecordedFood>();
-    const foods: RecordedFood[] = [];
+    const result = await logFoods(tx, userId, when, items);
 
-    for (const item of input.items) {
-      if ("food" in item) {
-        const food = resolveFood(item.food);
-
-        if (!food) return { outcome: "catalog-missing" };
-        foods.push(food);
-        continue;
-      }
-
-      const source = recorded.get(item.entryId);
-
-      if (!source) return { outcome: "missing" };
-      const food = scaledFood(source, item.amount);
-
-      if (!food) return { outcome: "invalid-amount" };
-      foods.push(food);
-    }
-
-    return { outcome: "created", entry: { entries: await insertFoods(tx, userId, { occurredAt: input.occurredAt, timeZone: input.timeZone }, foods) } };
+    return result.outcome === "created" ? { outcome: "created", entry: { entries: result.entries } } : result;
   });
 }
 

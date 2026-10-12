@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  defaultDuration, expandSets, finishPlan, parseRepTarget, parseSet, previousLabel, previousSets, reduce, repTargetText, repsPlaceholder,
+  defaultDuration, expandSets, parseRepTarget, parseReps, parseSet, parseWeight, previousLabel, previousSets, reduce, repTargetText, repsPlaceholder,
   sessionDate, sessionStats, setPlaceholder, startSession, toWorkoutInput, type Session, type SessionAction,
 } from "../../frontend/src/lib/workout-session.js";
 import type { Routine } from "../../src/routines/contract.js";
@@ -231,14 +231,13 @@ void test("done sets become workout rows with equal neighbours merged, and expan
   assert.equal(toWorkoutInput(started(), 30).strengthExercises, null, "a session with nothing done logs no exercises");
 });
 
-void test("finish plans count what is logged and what is left out, and the duration comes from the start", () => {
-  assert.deepEqual(finishPlan(started()), { outcome: "empty" });
-  assert.deepEqual(finishPlan(apply(started(), tick("id-3", { weightKg: 60, reps: 5 }))), { outcome: "ready", doneSets: 1, droppedSets: 3 });
+void test("stats count the done sets and their volume, and the duration comes from the start", () => {
+  assert.equal(sessionStats(started(), Date.parse(startedAt)).doneSets, 0);
 
   const session = apply(started(), tick("id-3", { weightKg: 60, reps: 5 }), tick("id-7", { weightKg: null, reps: 10 }, "id-6"));
   const now = Date.parse(startedAt) + 32 * 60_000 + 10_000;
 
-  assert.deepEqual(sessionStats(session, now), { elapsedSeconds: 32 * 60 + 10, volumeKg: 300, doneSets: 2, undoneSets: 2 }, "bodyweight sets add no volume");
+  assert.deepEqual(sessionStats(session, now), { elapsedSeconds: 32 * 60 + 10, volumeKg: 300, doneSets: 2 }, "bodyweight sets add no volume");
   assert.equal(sessionStats(session, Date.parse(startedAt) - 5000).elapsedSeconds, 0, "a clock behind the start shows zero");
   assert.equal(defaultDuration(session, now), 32);
   assert.equal(defaultDuration(session, Date.parse(startedAt)), 1, "a duration is at least a minute");
@@ -296,4 +295,9 @@ void test("set values parse from typed text", () => {
   for (const [weight, reps] of [["60", ""], ["60", "0"], ["60", "7.5"], ["60", "1001"], ["-1", "5"], ["1000.5", "5"], ["abc", "5"], ["Infinity", "5"]] as const) {
     assert.equal(parseSet({ weight, reps }), null, `${weight} kg × ${reps} does not parse`);
   }
+
+  assert.equal(parseWeight(""), null, "an empty weight is bodyweight");
+  assert.equal(parseWeight("abc"), undefined, "text that is not a weight is invalid");
+  assert.equal(parseReps("8"), 8);
+  assert.equal(parseReps("0"), null);
 });

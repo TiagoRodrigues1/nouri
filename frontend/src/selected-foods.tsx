@@ -7,9 +7,9 @@ import { Checkbox } from "./components/ui/checkbox";
 import { Input } from "./components/ui/input";
 import { format } from "./lib/api";
 import { nutrientLine, unitLabels } from "./lib/food-text";
-import { batchItems, rowsKcal } from "./lib/food-selection";
-import { rowFood, type DraftRow } from "./lib/saved-meals";
-import type { FoodBatchInput } from "../../src/food/contract";
+import { rowsKcal } from "./lib/food-selection";
+import { foodItems, rowFood, type FoodRow } from "./lib/saved-meals";
+import type { FoodItemInput } from "../../src/food/contract";
 
 // A Recent or Search result the log dialog ticks into its selection, instead of opening an amount form.
 export function SelectableResult({ id, name, meta, checked, onToggle }: { id: string; name: string; meta: ReactNode; checked: boolean; onToggle: () => void }) {
@@ -25,13 +25,13 @@ export function SelectableResult({ id, name, meta, checked, onToggle }: { id: st
 }
 
 // The ticked foods, each at an amount that starts from its last or default one, logged together.
-export function SelectedFoods({ rows, pending, onChange, onLog }: { rows: DraftRow[]; pending: boolean; onChange: (rows: DraftRow[]) => void; onLog: (items: FoodBatchInput["items"]) => void }) {
+export function SelectedFoods({ rows, pending, onChange, onLog }: { rows: FoodRow[]; pending: boolean; onChange: (rows: FoodRow[]) => void; onLog: (items: FoodItemInput[]) => void }) {
   const count = `${rows.length} ${rows.length === 1 ? "food" : "foods"}`;
 
   // The browser checks each amount before this runs.
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const items = batchItems(rows);
+    const items = foodItems(rows);
 
     if (items && items.length > 0) onLog(items);
   }
