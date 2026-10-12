@@ -90,7 +90,15 @@ EOF
     [[ $(docker inspect -f '{{.Id}}' "$container") == "$(cat "$runtime/container-id")" ]] || { echo 'Database container changed.' >&2; exit 1; }
     db_port=$(docker port "$container" 5432/tcp | sed -E 's/.*:([0-9]+)$/\1/')
     pg_isready -h 127.0.0.1 -p "$db_port" -U nouri >/dev/null
-    curl -fsS "$NOURI_BASE_URL/" | grep -F 'Nouri · Food journal' >/dev/null
+    page_html=$(curl -fsS "$NOURI_BASE_URL/")
+    grep -F 'Nouri · Food journal' <<< "$page_html" >/dev/null
+    # A concurrent build can remove assets referenced by this server's cached index.html.
+    while IFS= read -r asset; do
+      curl -fsS "$NOURI_BASE_URL$asset" >/dev/null || {
+        echo "Built page asset missing: $asset. Rebuild, then clean up and launch a new run." >&2
+        exit 1
+      }
+    done < <(grep -oE '(src|href)="/(assets/[^" ]+|theme\.js)"' <<< "$page_html" | sed -E 's/^[^=]+="([^"]+)"$/\1/')
     curl -fsS "$NOURI_BASE_URL/openapi.json" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["info"]["title"] == "Nouri API" and d["info"]["version"] == "1.0.0"'
     # Signing in happens in the browser, so the API check here only proves it refuses anonymous requests.
     [[ $(curl -s -o /dev/null -w '%{http_code}' "$NOURI_BASE_URL/v1/days/2026-09-25") == 401 ]] || { echo 'API answered an unauthenticated request.' >&2; exit 1; }

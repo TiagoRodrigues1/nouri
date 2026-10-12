@@ -22,6 +22,7 @@ This index is the maintained list of Nouri's user paths. Read the relevant file 
 
 ## Features
 
+- [Theme](theme.md): light and dark appearance, reload persistence, system preference, reduced motion, and the phone control.
 - [Account access](auth.md): signed-out page, test-user sign-in, sign-out, and protected API.
 - [Data export](account-data.md): Download my data in the account menu, export file contents, withheld tokens.
 - [Search foods](search.md): Ciqual search results, no-match state, attribution.
