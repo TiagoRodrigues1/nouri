@@ -5,7 +5,7 @@ import type { StoredMealItem } from "../meals/contract.js";
 import type { MeasurementKind } from "../measurements/contract.js";
 import type { PhotoType } from "../photos/contract.js";
 import type { Dose, Supplement, SupplementKind } from "../supplements/contract.js";
-import type { SourceColumn, WearableProvider } from "../wearables/contract.js";
+import type { ImportKind, SourceColumn, WearableProvider } from "../wearables/contract.js";
 import type { Activity, StrengthExercise } from "../workouts/contract.js";
 import { sql } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
@@ -169,6 +169,20 @@ export const wearableConnections = pgTable("wearable_connections", {
   lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
   lastError: text("last_error"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  providerUserId: text("provider_user_id"),
+  reconciledAt: timestamp("reconciled_at", { withTimezone: true }),
+  openedAt: timestamp("opened_at", { withTimezone: true }),
+  syncStartedAt: timestamp("sync_started_at", { withTimezone: true }),
+}, (table) => [primaryKey({ columns: [table.userId, table.provider] })]);
+
+export const wearableSyncJobs = pgTable("wearable_sync_jobs", {
+  userId: ownerColumn(),
+  provider: text("provider").$type<WearableProvider>().notNull(),
+  kinds: text("kinds").array().$type<ImportKind[]>().notNull(),
+  since: date("since"),
+  requests: integer("requests").notNull().default(1),
+  dueAt: timestamp("due_at", { withTimezone: true }).notNull(),
+  attempts: integer("attempts").notNull().default(0),
 }, (table) => [primaryKey({ columns: [table.userId, table.provider] })]);
 
 export const wearableOauthStates = pgTable("wearable_oauth_states", {

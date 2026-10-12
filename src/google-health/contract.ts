@@ -20,6 +20,8 @@ export type GoogleHealthConfig = {
   clientId: string;
   clientSecret: string;
   redirectUri: string;
+  // Set when Google sends change notifications to this server.
+  webhookSecret?: string | undefined;
   fetch: typeof fetch;
 };
 
@@ -31,6 +33,9 @@ export const tokenResponseSchema = z.object({
   scope: z.string().default(""),
   token_type: z.string(),
 });
+
+// From users/me/identity. healthUserId is the ID webhook notifications name the person by.
+export const identitySchema = z.object({ healthUserId: z.string().min(1) });
 
 export const tokenErrorSchema = z.object({ error: z.string() });
 

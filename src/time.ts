@@ -28,12 +28,15 @@ export function localTime(instant: string, zone: string): string {
   return new Intl.DateTimeFormat("en-GB", { timeZone: zone, hourCycle: "h23", hour: "2-digit", minute: "2-digit" }).format(new Date(instant));
 }
 
+// The UTC calendar date of an instant, as "YYYY-MM-DD".
+export const utcDate = (instant: Date): string => instant.toISOString().slice(0, 10);
+
 export function shiftDate(date: string, days: number): string {
   const shifted = new Date(`${date}T00:00:00Z`);
 
   shifted.setUTCDate(shifted.getUTCDate() + days);
 
-  return shifted.toISOString().slice(0, 10);
+  return utcDate(shifted);
 }
 
 // How far the zone's wall clock is ahead of UTC at an instant, in milliseconds.

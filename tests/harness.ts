@@ -5,12 +5,13 @@ import { createApp } from "../src/app.js";
 import { applyMigrations } from "../src/db/migrations.js";
 import { openFoodFacts } from "../src/food/packaged.js";
 import type { WearableRuntime } from "../src/wearables/provider.js";
+import { syncQueue } from "../src/wearables/sync-queue.js";
 import { FakeOpenFoodFacts } from "./fake-open-food-facts.js";
 
 // pk_test_ followed by base64 of "example.clerk.accounts.dev$", the shape Clerk issues.
 export const publishableKey = `pk_test_${Buffer.from("example.clerk.accounts.dev$").toString("base64")}`;
 
-export function createHarness(wearables?: WearableRuntime) {
+export function createHarness(runtime?: WearableRuntime) {
   const url = process.env.DATABASE_URL;
 
   if (!url) throw new Error("DATABASE_URL is required for integration tests");
@@ -23,6 +24,8 @@ export function createHarness(wearables?: WearableRuntime) {
   const agentToken = "test-oauth-token";
   const webhookSignature = "test-webhook-signature";
   const db = drizzle(client);
+  // Its worker is not started; tests run due jobs by hand.
+  const wearables = runtime && { runtime, queue: syncQueue(db, runtime) };
 
   // Stands in for Clerk: the test tokens sign in as whichever Clerk user the app was built for.
   const identity = (clerkUserId: string) => ({
@@ -45,7 +48,7 @@ export function createHarness(wearables?: WearableRuntime) {
   const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
 
   return {
-    app, otherApp, client, db, token, agentToken, webhookSignature, userId, otherUserId, headers, products,
+    app, otherApp, client, db, wearables, token, agentToken, webhookSignature, userId, otherUserId, headers, products,
     signedInAs: (clerkUserId: string) => createApp(db, identity(clerkUserId), packagedFoods, wearables),
     setup: async () => {
       await admin.unsafe(`CREATE SCHEMA "${schema}"`);

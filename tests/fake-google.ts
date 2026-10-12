@@ -121,6 +121,8 @@ export class FakeGoogle {
   endlessSteps = false;
   // Space-separated, as Google returns it; tests narrow it to model unticked boxes on the consent screen.
   grantedScope = allScopes;
+  // The person's ID in webhook notifications, from users/me/identity.
+  healthUserId = "fake-health-user-1";
   readonly requests: URL[] = [];
   // The data type and date range of each dailyRollUp, once per range however many pages it takes.
   readonly rollups: { dataType: string; from: string; until: string }[] = [];
@@ -174,6 +176,14 @@ export class FakeGoogle {
       if (token === this.refreshToken) this.revokeGrant();
 
       return new Response(null, { status: 200 });
+    }
+
+    if (url.href === googleEndpoints.identity) {
+      const authorization = headers.get("Authorization") ?? "";
+
+      return authorization.startsWith("Bearer ") && this.accessTokens.has(authorization.slice(7))
+        ? json(200, { name: "users/me/identity", legacyUserId: "FAKE01", healthUserId: this.healthUserId })
+        : json(401, { error: "UNAUTHENTICATED" });
     }
 
     const dataPoints = new RegExp(`^${googleEndpoints.dataTypes}/([a-z-]+)/dataPoints(:dailyRollUp)?$`).exec(url.origin + url.pathname);

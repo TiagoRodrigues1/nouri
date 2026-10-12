@@ -1,10 +1,11 @@
 import type { z } from "zod";
-import { activeEnergyRollupSchema, dataPageSchema, exerciseDataPointSchema, heartRateRollupSchema, restingHeartRatePointSchema, rollupPageSchema, scopes, sleepDataPointSchema, stepsRollupSchema, syncWindowDays, tokenErrorSchema, tokenResponseSchema } from "./contract.js";
+import { activeEnergyRollupSchema, dataPageSchema, exerciseDataPointSchema, heartRateRollupSchema, identitySchema, restingHeartRatePointSchema, rollupPageSchema, scopes, sleepDataPointSchema, stepsRollupSchema, syncWindowDays, tokenErrorSchema, tokenResponseSchema } from "./contract.js";
 import type { GoogleHealthConfig, RestingHeartRatePoint } from "./contract.js";
 import type { BpmRange } from "../daily-totals/contract.js";
 import { activityRecords, heartRateRecords, type DaySeries, type DayValue } from "./daily-import.js";
 import { sleepRecord } from "./sleep-import.js";
 import { workoutRecord } from "./workout-import.js";
+import { googleWebhook } from "./webhook.js";
 import { importKinds } from "../wearables/contract.js";
 import { ProviderFailure, reauthorizeMessage } from "../wearables/provider.js";
 import type { CloudProvider, DayRange, OAuthGrant, Pull } from "../wearables/provider.js";
@@ -16,6 +17,7 @@ export const googleEndpoints = {
   token: "https://oauth2.googleapis.com/token",
   revoke: "https://oauth2.googleapis.com/revoke",
   dataTypes: "https://health.googleapis.com/v4/users/me/dataTypes",
+  identity: "https://health.googleapis.com/v4/users/me/identity",
 } as const;
 
 const dataPoints = (dataType: string) => `${googleEndpoints.dataTypes}/${dataType}/dataPoints`;
@@ -275,6 +277,9 @@ export function googleHealthProvider(config: GoogleHealthConfig): CloudProvider 
 
       return response?.ok ?? false;
     },
+    // Any of Nouri's read scopes may read the identity.
+    accountId: async (accessToken) => (await readPage(config, accessToken, "your account", { url: googleEndpoints.identity }, identitySchema)).healthUserId,
+    webhook: config.webhookSecret ? googleWebhook(config.webhookSecret) : null,
     pull: {
       sleep: (accessToken, window) => pullPoints(config, accessToken, {
         dataType: "sleep", noun: "sleep", schema: sleepDataPointSchema, toRecord: sleepRecord,

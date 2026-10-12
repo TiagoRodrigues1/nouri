@@ -1,7 +1,7 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { callbackResults, disconnectConnection, getConnection, importKinds, startConnection, syncConnection, type WearableProvider } from "./api";
+import { callbackResults, disconnectConnection, getConnection, importKinds, refreshConnection, startConnection, syncConnection, type WearableProvider } from "./api";
 import { callbackMessages, countOf, listCounts, noun, providerDetails } from "./wearables";
 import { queryRefresh } from "./query-refresh";
 
@@ -13,6 +13,33 @@ function useConnectionStatus(provider: WearableProvider, enabled: boolean) {
   });
 }
 
+// Keeps imports current without a Sync button. The page shows what is stored at once; this asks the server to
+// import in the background when that is stale, on load, on focus, and every five minutes while the page is visible.
+// The server decides whether anything is stale, so the calls are cheap. While an import runs it checks every few
+// seconds, and when the last sync time moves the imported records are read again.
+function useBackgroundImports(provider: WearableProvider, reload: () => Promise<void>, enabled: boolean) {
+  const freshness = useQuery({
+    queryKey: ["sync-state", provider],
+    enabled,
+    queryFn: () => refreshConnection(provider),
+    staleTime: 0,
+    refetchOnWindowFocus: true,
+    refetchInterval: (query) => query.state.data?.pending ? 3000 : 5 * 60_000,
+  });
+
+  const lastSyncedAt = freshness.data?.lastSyncedAt;
+  const seen = useRef(lastSyncedAt);
+
+  useEffect(() => {
+    if (lastSyncedAt === undefined) return;
+
+    if (seen.current !== undefined && seen.current !== lastSyncedAt) void reload();
+    seen.current = lastSyncedAt;
+  }, [lastSyncedAt, reload]);
+
+  return freshness.data?.pending ?? false;
+}
+
 // Connect, Sync, and Disconnect for one cloud provider. Imports show up through the overview query.
 // The page shell mounts it once, so the OAuth callback is handled whichever page it lands on.
 // The status is read only while `showing`, since counting imports costs the server queries no page needs.
@@ -20,8 +47,9 @@ export function useConnection(provider: WearableProvider, showing: boolean) {
   const client = useQueryClient();
   const { name, revokeHelp } = providerDetails[provider];
 
-  const refresh = () => Promise.all(["connection", ...new Set([...queryRefresh.sleep, ...queryRefresh.workout])]
-    .map((name) => client.invalidateQueries({ queryKey: [name] })));
+  const refresh = useCallback(async () => {
+    await Promise.all(["connection", ...new Set([...queryRefresh.sleep, ...queryRefresh.workout])].map((name) => client.invalidateQueries({ queryKey: [name] })));
+  }, [client]);
 
   const status = useConnectionStatus(provider, showing);
 
@@ -61,28 +89,37 @@ export function useConnection(provider: WearableProvider, showing: boolean) {
     onError: (error) => toast.error(error.message),
   });
 
-  // The OAuth callback lands on /overview?connect=<provider>&result=<outcome>. Report it once and clean the URL.
+  // The OAuth callback lands on /overview?connect=<provider>&result=<outcome>, read once when the page loads.
+  const [callback] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+
+    return params.get("connect") === provider ? callbackResults.find((item) => item === params.get("result")) ?? null : null;
+  });
+
+  // Right after signing in, the page runs the first sync itself and reports its counts, so the background check
+  // waits for it instead of queueing a second one.
+  const importing = useBackgroundImports(provider, refresh, callback !== "connected" || sync.isSuccess || sync.isError);
+
+  // Report the callback once and clean the URL.
   const handled = useRef(false);
   const { mutate: startSync } = sync;
 
   useEffect(() => {
-    if (handled.current) return;
-    const params = new URLSearchParams(window.location.search);
-    const result = callbackResults.find((item) => item === params.get("result"));
-
-    if (params.get("connect") !== provider || !result) return;
+    if (handled.current || !callback) return;
     handled.current = true;
+    const params = new URLSearchParams(window.location.search);
+
     params.delete("connect");
     params.delete("result");
     window.history.replaceState(null, "", `${window.location.pathname}${params.size ? `?${params}` : ""}`);
 
-    if (result === "connected") {
+    if (callback === "connected") {
       toast.success(callbackMessages.connected);
       startSync();
     } else {
-      toast.error(callbackMessages[result]);
+      toast.error(callbackMessages[callback]);
     }
-  }, [provider, startSync]);
+  }, [callback, startSync]);
 
-  return { provider, status, connect, sync, disconnect };
+  return { provider, status, importing, connect, sync, disconnect };
 }

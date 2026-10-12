@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { googleHealthProvider } from "../../src/google-health/google.js";
+import { syncTiming } from "../../src/wearables/sync-timing.js";
 import type { Overview } from "../../src/overview/contract.js";
 import { FakeGoogle, googleConfig, googleScopes } from "../fake-google.js";
 import { createHarness } from "../harness.js";
@@ -26,7 +27,9 @@ async function connect() {
   return new URL(callback.headers.get("Location") ?? "", "http://x").searchParams.get("result");
 }
 
+// Sync now refuses a second sync within its cooldown, so each one here happens a little later.
 async function sync() {
+  now = new Date(now.getTime() + syncTiming.manualCooldownMs);
   const response = await app.request(`${base}/syncs`, { method: "POST", headers: auth });
 
   return { status: response.status, body: await response.json() };

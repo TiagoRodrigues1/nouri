@@ -1,7 +1,7 @@
 import type { BpmRange } from "../daily-totals/contract.js";
 import type { Stages } from "../sleep/contract.js";
 import type { Activity } from "../workouts/contract.js";
-import type { ImportKind, WearableProvider } from "./contract.js";
+import { importKinds, type ImportKind, type WearableProvider } from "./contract.js";
 
 export type OAuthGrant = { accessToken: string; refreshToken: string | null; expiresInSeconds: number; scope: string };
 
@@ -63,6 +63,23 @@ export type DayRange = { from: string; until: string };
 // started, because Google only filters exercise by civil start time, and daily totals by their local date.
 export type SyncWindow = { endedSince: Date; days: DayRange };
 
+// What one sync reads: some kinds, from a UTC date on or, when since is null, over the whole window.
+export type SyncScope = { kinds: readonly ImportKind[]; since: string | null };
+
+// Every kind over the whole window: what Sync now and reconciliation read.
+export const everything: SyncScope = { kinds: importKinds, since: null };
+
+// A provider's notice that some of a person's records of one kind changed, from `since` on (null when it does not say).
+export type ChangeNotice = { accountId: string; kind: ImportKind; since: string | null };
+
+// How a provider tells Nouri about changes, when the server is set up to receive them.
+export type ProviderWebhook = {
+  // Whether the Authorization header carries the secret the provider was registered with.
+  authorized: (authorization: string | undefined) => boolean;
+  // "verification" for the provider's endpoint check; otherwise the changes the request names, without any it cannot read.
+  read: (request: Request) => Promise<ChangeNotice[] | "verification">;
+};
+
 export function oauthCallbackPath(provider: string): string {
   return `/oauth/${provider}/callback`;
 }
@@ -91,6 +108,10 @@ export type CloudProvider = {
   // People can untick scopes on a consent screen, so a sync only pulls the kinds the stored grant covers.
   grantedKinds: (scope: string) => ImportKind[];
   revoke: (token: string) => Promise<boolean>;
+  // The provider's ID for the signed-in person, which its change notifications name.
+  accountId: (accessToken: string) => Promise<string>;
+  // Null when this server receives no notifications; then only app opens and reconciliation start imports.
+  webhook: ProviderWebhook | null;
   pull: { [K in ImportKind]: (accessToken: string, window: SyncWindow) => Promise<Pull<ImportRecords[K]>> };
 };
 

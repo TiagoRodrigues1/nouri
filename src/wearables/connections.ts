@@ -1,14 +1,15 @@
-import { and, eq, isNotNull, lt } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, lt, lte, or, type SQL } from "drizzle-orm";
 import { wearableConnections, wearableOauthStates } from "../db/schema.js";
 import type { AppDatabase, Transaction } from "../db/database.js";
 import { importKindNames } from "./contract.js";
 import type { CallbackResult, ConnectionStatus, DisconnectResult, ImportCounts, ImportKind, SyncResult, WearableProvider } from "./contract.js";
-import { ProviderFailure, reauthorizeMessage } from "./provider.js";
-import type { CloudProvider, OAuthGrant, SyncWindow, WearableRuntime } from "./provider.js";
+import { everything, ProviderFailure, reauthorizeMessage } from "./provider.js";
+import type { CloudProvider, OAuthGrant, SyncScope, SyncWindow, WearableRuntime } from "./provider.js";
 import { applyBatch, countImports, eachKind, removeImports } from "./import-sync.js";
 import { randomToken, sameSecret, sha256Base64url } from "../crypto.js";
 import { vault } from "./token-vault.js";
-import { shiftDate } from "../time.js";
+import { syncTiming } from "./sync-timing.js";
+import { shiftDate, utcDate } from "../time.js";
 
 type ConnectionRow = typeof wearableConnections.$inferSelect;
 
@@ -21,8 +22,6 @@ const nothing = { created: 0, updated: 0, removed: 0, skipped: 0 };
 
 const allOf = new Intl.ListFormat("en", { type: "conjunction" });
 
-const utcDate = (instant: Date) => instant.toISOString().slice(0, 10);
-
 export const stateLifetimeMs = 10 * 60_000;
 
 // A connection is live while it holds a refresh token. Losing the grant clears the tokens but keeps the row, so its last error still shows.
@@ -30,7 +29,7 @@ const isLive = (row: ConnectionRow): row is LiveRow => row.refreshToken !== null
 
 const live = isNotNull(wearableConnections.refreshToken);
 
-const connectionKey = (userId: string, provider: WearableProvider) => and(eq(wearableConnections.userId, userId), eq(wearableConnections.provider, provider));
+export const connectionKey = (userId: string, provider: WearableProvider) => and(eq(wearableConnections.userId, userId), eq(wearableConnections.provider, provider));
 
 async function recorded(db: AppDatabase, userId: string, provider: WearableProvider) {
   const [[row], imported] = await Promise.all([
@@ -61,6 +60,8 @@ export type CallbackInput = { state: string | undefined; cookie: string | undefi
 export type SyncOutcome =
   | { outcome: "synced"; result: SyncResult }
   | { outcome: "not-connected" }
+  // Nothing was read: another sync of this connection is running, or Sync now was pressed within its cooldown.
+  | { outcome: "busy"; reason: "running" | "cooldown"; retryAfterMs: number }
   | { outcome: "failed"; reason: "reauthorize" | "unavailable"; message: string };
 
 export type Connection = ReturnType<typeof connectionFor>;
@@ -109,20 +110,138 @@ export function connectionFor(db: AppDatabase, runtime: WearableRuntime, provide
   // Reads every kind the grant covers with one access token, so a sync applies all of them or none.
   const pullAll = (accessToken: string, kinds: ImportKind[], window: SyncWindow) => Promise.all(kinds.map((kind) => pullKind(accessToken, kind, window)));
 
-  async function pullWithRetry(row: LiveRow, kinds: ImportKind[], window: SyncWindow): Promise<Pulled[]> {
+  // The provider's ID for the person, or null when it cannot say right now; the next sync asks again.
+  const accountId = (accessToken: string) => provider.accountId(accessToken).catch(() => null);
+
+  async function withAccessToken<T>(row: LiveRow, use: (accessToken: string) => Promise<T>): Promise<T> {
     let refreshToken = tokens.open("refresh-token", row.refreshToken);
     let accessToken = cachedToken(row);
 
     if (!accessToken) ({ accessToken, refreshToken } = await refreshed(refreshToken));
 
     try {
-      return await pullAll(accessToken, kinds, window);
+      return await use(accessToken);
     } catch (failure) {
       if (!(failure instanceof ProviderFailure) || failure.reason !== "unauthorized") throw failure;
     }
 
     // A refused access token gets one refresh before the grant needs a new sign-in.
-    return pullAll((await refreshed(refreshToken)).accessToken, kinds, window);
+    return use((await refreshed(refreshToken)).accessToken);
+  }
+
+  // The full window ends `windowDays` before the sync started. A scope with a later `since` reads from that UTC date.
+  // The days start on the UTC date of endedSince. Any date works, as long as the provider's filter and the deletion
+  // scope use the same one. They end two days past today's UTC date, so today is in every zone. Google's own CLI
+  // asks for today with an end of tomorrow, so a range ending ahead of now is expected.
+  // `whole` says the window was not narrowed.
+  function windowFor(started: Date, since: string | null) {
+    const full = new Date(started.getTime() - provider.windowDays * 86_400_000);
+    const narrowed = since === null ? full : new Date(`${since}T00:00:00Z`);
+    const whole = narrowed <= full;
+    const endedSince = whole ? full : narrowed;
+
+    return { window: { endedSince, days: { from: utcDate(endedSince), until: shiftDate(utcDate(started), 2) } }, whole };
+  }
+
+  // Reads the kinds from the provider, then applies them all in one transaction. The caller holds the sync lease.
+  async function pullAndApply(row: LiveRow, started: Date, window: SyncWindow, kinds: ImportKind[], reconciled: boolean): Promise<SyncOutcome> {
+    let pulled: Pulled[];
+    let providerUserId: string | null;
+
+    try {
+      [pulled, providerUserId] = await withAccessToken(row, (accessToken) => Promise.all([pullAll(accessToken, kinds, window), row.providerUserId ?? accountId(accessToken)]));
+    } catch (failure) {
+      if (!(failure instanceof ProviderFailure)) throw failure;
+
+      const reason = failure.reason === "unavailable" ? "unavailable" : "reauthorize";
+
+      // Losing the grant drops the tokens but keeps imported sleep, which stays true until the provider says otherwise.
+      const common = { lastError: failure.message, updatedAt: started };
+
+      const update = reason === "reauthorize"
+        ? { ...common, refreshToken: null, accessToken: null, accessTokenExpiresAt: null }
+        : common;
+
+      await db.update(wearableConnections).set(update).where(key);
+
+      return { outcome: "failed", reason, message: failure.message };
+    }
+
+    const partial = pulled.flatMap((pull) => pull.complete ? [] : [importKindNames[pull.kind]]);
+    const lastError = partial.length === 0 ? null : `The provider returned more ${allOf.format(partial)} than one sync reads, so no deletions were applied there.`;
+    const byKind = new Map(pulled.map((pull) => [pull.kind, pull]));
+
+    const result = await db.transaction(async (tx): Promise<SyncResult | null> => {
+      // Writing the row first locks it, which serializes syncs and stops one racing a disconnect.
+      // Drizzle leaves a column it is given undefined for unchanged.
+      const columns = { lastSyncedAt: started, lastError, providerUserId, updatedAt: started, reconciledAt: reconciled ? started : undefined };
+      const [held] = await tx.update(wearableConnections).set(columns).where(and(key, live)).returning({ userId: wearableConnections.userId });
+
+      if (!held) return null;
+
+      // A kind the grant does not cover reports zeros.
+      return eachKind(async (kind) => byKind.get(kind)?.apply(tx) ?? nothing);
+    });
+
+    if (!result) return { outcome: "not-connected" };
+
+    return { outcome: "synced", result };
+  }
+
+  const lostGrant = (row: ConnectionRow): SyncOutcome => ({ outcome: "failed", reason: "reauthorize", message: row.lastError ?? reauthorizeMessage });
+
+  const table = wearableConnections;
+
+  // No other sync holds the lease, or the one that did has lapsed.
+  const idle = (started: Date) => or(isNull(table.syncStartedAt), lt(table.syncStartedAt, new Date(started.getTime() - syncTiming.leaseMs)));
+
+  // Sync now's cooldown: the last sync finished long enough ago, or the grant has not had a full read yet.
+  // Sync now is a full read, so the cooldown first applies once a sign-in's first one has run.
+  const cooled = (started: Date) =>
+    or(isNull(table.lastSyncedAt), lte(table.lastSyncedAt, new Date(started.getTime() - syncTiming.manualCooldownMs)), isNull(table.reconciledAt));
+
+  // Why the lease was refused: the connection changed, another sync holds it, or the cooldown has not passed.
+  async function refused(started: Date): Promise<SyncOutcome> {
+    const current = await stored();
+
+    if (!current) return { outcome: "not-connected" };
+
+    if (!isLive(current)) return lostGrant(current);
+    const running = current.syncStartedAt && current.syncStartedAt.getTime() > started.getTime() - syncTiming.leaseMs;
+
+    if (running || !current.lastSyncedAt) return { outcome: "busy", reason: "running", retryAfterMs: syncTiming.busyRetryMs };
+
+    return { outcome: "busy", reason: "cooldown", retryAfterMs: Math.max(current.lastSyncedAt.getTime() + syncTiming.manualCooldownMs - started.getTime(), 1000) };
+  }
+
+  // Reads the granted kinds the scope names while holding the connection's lease. `gate` is a further condition the
+  // lease must meet; taking the lease and checking it in one statement means two requests cannot both pass.
+  async function leasedSync(scope: SyncScope, gate: (started: Date) => SQL | undefined): Promise<SyncOutcome> {
+    const row = await stored();
+
+    if (!row) return { outcome: "not-connected" };
+
+    if (!isLive(row)) return lostGrant(row);
+
+    const started = runtime.now();
+    const { window, whole } = windowFor(started, scope.since);
+    const granted = provider.grantedKinds(row.scope);
+    const kinds = granted.filter((kind) => scope.kinds.includes(kind));
+    // Only a full re-read can see every deletion inside the window, so only it counts as reconciliation.
+    const reconciled = whole && kinds.length === granted.length;
+
+    // Nothing this grant covers changed, so Google is not asked.
+    if (kinds.length === 0) return { outcome: "synced", result: await eachKind(async () => nothing) };
+
+    const [leased] = await db.update(table).set({ syncStartedAt: started }).where(and(key, live, idle(started), gate(started))).returning({ userId: table.userId });
+
+    if (!leased) return refused(started);
+
+    try {
+      return await pullAndApply(row, started, window, kinds, reconciled);
+    } finally {
+      await db.update(table).set({ syncStartedAt: null }).where(and(key, eq(table.syncStartedAt, started)));
+    }
   }
 
   return {
@@ -181,8 +300,11 @@ export function connectionFor(db: AppDatabase, runtime: WearableRuntime, provide
       }
 
       if (!grant.refreshToken) return "token-failed";
+      // A sign-in may switch Google accounts, so the ID is read again, and left for the next sync to fill when that fails.
+      const providerUserId = await accountId(grant.accessToken);
       const now = runtime.now();
-      const columns = { scope: grant.scope, ...grantColumns(grant, now), lastError: null, updatedAt: now };
+      // A new grant may cover kinds never read, so it is not reconciled yet, and its first Sync now skips the cooldown.
+      const columns = { scope: grant.scope, ...grantColumns(grant, now), providerUserId, reconciledAt: null, lastError: null, updatedAt: now };
 
       await db.insert(wearableConnections).values({ userId, provider: provider.id, ...columns })
         .onConflictDoUpdate({ target: [wearableConnections.userId, wearableConnections.provider], set: columns });
@@ -190,59 +312,11 @@ export function connectionFor(db: AppDatabase, runtime: WearableRuntime, provide
       return "connected";
     },
 
-    async sync(): Promise<SyncOutcome> {
-      const row = await stored();
+    // A background import: the kinds and dates the scope names. Waits only for a sync already running.
+    sync: (scope: SyncScope): Promise<SyncOutcome> => leasedSync(scope, () => undefined),
 
-      if (!row) return { outcome: "not-connected" };
-
-      if (!isLive(row)) return { outcome: "failed", reason: "reauthorize", message: row.lastError ?? reauthorizeMessage };
-
-      const started = runtime.now();
-      const since = new Date(started.getTime() - provider.windowDays * 86_400_000);
-      // The days start on the UTC date of the same instant. Any date works, as long as the provider's filter and
-      // the deletion scope use the same one. They end two days past today's UTC date, so today is in every zone.
-      // Google's own CLI asks for today with an end of tomorrow, so a range ending ahead of now is expected.
-      const window: SyncWindow = { endedSince: since, days: { from: utcDate(since), until: shiftDate(utcDate(started), 2) } };
-      const kinds = provider.grantedKinds(row.scope);
-      let pulled: Pulled[];
-
-      try {
-        pulled = await pullWithRetry(row, kinds, window);
-      } catch (failure) {
-        if (!(failure instanceof ProviderFailure)) throw failure;
-
-        const reason = failure.reason === "unavailable" ? "unavailable" : "reauthorize";
-
-        // Losing the grant drops the tokens but keeps imported sleep, which stays true until the provider says otherwise.
-        const common = { lastError: failure.message, updatedAt: started };
-
-        const update = reason === "reauthorize"
-          ? { ...common, refreshToken: null, accessToken: null, accessTokenExpiresAt: null }
-          : common;
-
-        await db.update(wearableConnections).set(update).where(key);
-
-        return { outcome: "failed", reason, message: failure.message };
-      }
-
-      const partial = pulled.flatMap((pull) => pull.complete ? [] : [importKindNames[pull.kind]]);
-      const lastError = partial.length === 0 ? null : `The provider returned more ${allOf.format(partial)} than one sync reads, so no deletions were applied there.`;
-      const byKind = new Map(pulled.map((pull) => [pull.kind, pull]));
-
-      const result = await db.transaction(async (tx): Promise<SyncResult | null> => {
-        // Writing the row first locks it, which serializes syncs and stops one racing a disconnect.
-        const [held] = await tx.update(wearableConnections).set({ lastSyncedAt: started, lastError, updatedAt: started }).where(and(key, live)).returning({ userId: wearableConnections.userId });
-
-        if (!held) return null;
-
-        // A kind the grant does not cover reports zeros.
-        return eachKind(async (kind) => byKind.get(kind)?.apply(tx) ?? nothing);
-      });
-
-      if (!result) return { outcome: "not-connected" };
-
-      return { outcome: "synced", result };
-    },
+    // Sync now: everything, at most once per cooldown unless the grant is newer than the last sync.
+    manualSync: (): Promise<SyncOutcome> => leasedSync(everything, cooled),
 
     // Revokes the provider's grant, then forgets the tokens and removes everything imported from it.
     async disconnect(): Promise<DisconnectResult> {

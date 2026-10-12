@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { googleHealthProvider } from "../../src/google-health/google.js";
+import { syncTiming } from "../../src/wearables/sync-timing.js";
 import type { SleepDay, SleepSession } from "../../src/sleep/contract.js";
 import type { Workout, WorkoutDay } from "../../src/workouts/contract.js";
 import { FakeGoogle, fixture, googleConfig, googleScopes } from "../fake-google.js";
@@ -46,7 +47,9 @@ async function status() {
   return (await app.request(base, { headers: auth })).json();
 }
 
+// Sync now refuses a second sync within its cooldown, so each one here happens a little later.
 async function sync() {
+  now = new Date(now.getTime() + syncTiming.manualCooldownMs);
   const response = await send("POST", `${base}/syncs`);
 
   return { status: response.status, body: await response.json() };
@@ -178,7 +181,7 @@ void test("Google Health sleep and workouts", async (t) => {
       assert.equal((await status()).lastSyncedAt, now.toISOString());
       assert.deepEqual((await status()).imported, { sleep: 2, workouts: 2, activity: 0, heartRate: 0 });
       const filter = (type: string) => google.requests.find((request) => request.pathname.endsWith(`/${type}/dataPoints`))?.searchParams.get("filter");
-      assert.equal(filter("sleep"), 'sleep.interval.end_time >= "2026-08-28T12:00:00.000Z"');
+      assert.equal(filter("sleep"), `sleep.interval.end_time >= "${new Date(now.getTime() - 30 * 86_400_000).toISOString()}"`);
       assert.equal(filter("exercise"), 'exercise.interval.civil_start_time >= "2026-08-28"');
       assert.equal(filter("daily-resting-heart-rate"), 'daily_resting_heart_rate.date >= "2026-08-28"');
 
