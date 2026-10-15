@@ -19,6 +19,10 @@ export const styles = stylex.create({
   comparisonTitle: { display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600 },
   comparisonContent: { display: "grid", gap: 4, paddingTop: 0, paddingRight: 16, paddingBottom: 14, paddingLeft: 16 },
   comparisonValue: { margin: 0, fontSize: 22, fontWeight: 600, fontVariantNumeric: "tabular-nums" },
+  trendCard: { gap: 0 },
+  trendHeader: { display: "flex", flexWrap: "wrap", alignItems: "baseline", justifyContent: "space-between", gap: 8, paddingTop: 14, paddingRight: 16, paddingBottom: 4, paddingLeft: 16 },
+  trendChange: { color: colors.foreground, fontWeight: 600, fontVariantNumeric: "tabular-nums" },
+  trendContent: { paddingTop: 0, paddingRight: 16, paddingBottom: 12, paddingLeft: 16 },
   links: { display: "inline-flex", gap: 2 },
   hidden: {
     position: "absolute",

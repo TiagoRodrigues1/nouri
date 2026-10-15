@@ -1,6 +1,13 @@
 import { z } from "zod";
 
-export const reviewDays = 7;
+// The windows a review can cover, in days. A week unless the request asks for another.
+export const reviewRanges = [7, 14, 30, 90] as const;
+
+export const defaultReviewDays = 7;
+
+export const reviewRangeSchema = z.coerce.number().pipe(z.union(reviewRanges.map((days) => z.literal(days))));
+
+export type ReviewRange = (typeof reviewRanges)[number];
 
 // A day's calories count as on target within this share of its target. Protein counts once it reaches its target.
 export const calorieTolerance = 0.1;
@@ -35,7 +42,7 @@ export const reviewSchema = z.object({
   from: z.iso.date(),
   to: z.iso.date(),
   // Oldest first, one per local day from `from` to `to`.
-  days: z.array(reviewDaySchema).length(reviewDays),
+  days: z.array(reviewDaySchema).min(defaultReviewDays).max(Math.max(...reviewRanges)),
   // How many of the days have at least one record of each kind, and of any kind.
   recordedDays: z.object({
     food: z.number().int(),

@@ -125,6 +125,19 @@ void test("review lists seven days and leaves unrecorded ones null", async () =>
     assert.deepEqual(earlier.days[5].food, { entryCount: 1, kcal: 999, proteinG: 99 });
     assert.deepEqual(earlier.recordedDays, { food: 2, workouts: 0, sleep: 0, weight: 1, any: 3 });
 
+    // A longer range reaches back past the week, and only the listed ranges are accepted.
+    const month = await review("2026-09-30?days=30");
+    assert.equal(month.from, "2026-09-01");
+    assert.equal(month.days.length, 30);
+    assert.deepEqual(month.days.flatMap((day: { date: string; weightKg: number | null }) => day.weightKg === null ? [] : [[day.date, day.weightKg]]), [["2026-09-20", 83], ["2026-09-28", 82.1]]);
+    assert.deepEqual(month.recordedDays, { food: 3, workouts: 1, sleep: 1, weight: 2, any: 7 });
+    assert.equal((await review("2026-09-30?days=14")).days.length, 14);
+    assert.equal((await review("2026-09-30?days=90")).from, "2026-07-03");
+
+    for (const days of ["10", "365", "week"]) {
+      assert.equal((await app.request(`/v1/review/2026-09-30?days=${days}`, { headers: auth })).status, 400);
+    }
+
     const other = await review("2026-09-30", otherApp);
     assert.deepEqual(other.recordedDays, { food: 1, workouts: 0, sleep: 0, weight: 0, any: 1 });
     assert.deepEqual(other.days[3].food, { entryCount: 1, kcal: 700, proteinG: 40 });

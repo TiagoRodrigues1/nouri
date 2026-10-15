@@ -6,8 +6,8 @@ import { getSleepRange } from "../sleep/sleep.js";
 import { shiftDate } from "../time.js";
 import { targetsKind } from "../targets/targets.js";
 import { getWorkoutRange } from "../workouts/workouts.js";
-import { calorieTolerance, isCompleteFood, reviewDays } from "./contract.js";
-import type { Review, ReviewDay } from "./contract.js";
+import { calorieTolerance, defaultReviewDays, isCompleteFood } from "./contract.js";
+import type { Review, ReviewDay, ReviewRange } from "./contract.js";
 
 type CompleteDay = { kcal: number; proteinG: number; targets: ReviewDay["targets"] };
 
@@ -34,9 +34,9 @@ function nutrition(days: ReviewDay[]): Review["nutrition"] {
   };
 }
 
-// The seven local days ending on `to`. A day without a record of a kind reads null for it, never zero.
-export async function getReview(db: AppDatabase, userId: string, to: string): Promise<Review> {
-  const from = shiftDate(to, 1 - reviewDays);
+// The local days ending on `to`, a week by default. A day without a record of a kind reads null for it, never zero.
+export async function getReview(db: AppDatabase, userId: string, to: string, length: ReviewRange = defaultReviewDays): Promise<Review> {
+  const from = shiftDate(to, 1 - length);
 
   const [food, workouts, sleep, weights, targetsOn] = await Promise.all([
     getFoodRange(db, userId, from, to),
@@ -46,7 +46,7 @@ export async function getReview(db: AppDatabase, userId: string, to: string): Pr
     getDatedHistory(db, targetsKind, userId, to),
   ]);
 
-  const days = Array.from({ length: reviewDays }, (_, index): ReviewDay => {
+  const days = Array.from({ length }, (_, index): ReviewDay => {
     const date = shiftDate(from, index);
     const workout = workouts.get(date);
     const night = sleep.get(date);

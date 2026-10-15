@@ -79,9 +79,9 @@ export function shortDayLabel(value: string): string {
   return shortDay.format(calendarDate(value));
 }
 
-// The seven days ending on `value`: "Last 7 days" when it is today, otherwise the range.
-export function weekLabel(value: string, isToday: boolean): string {
-  if (isToday) return "Last 7 days";
+// The `days` days ending on `value`: "Last 7 days" when it is today, otherwise the range.
+export function rangeLabel(value: string, days: number, isToday: boolean): string {
+  if (isToday) return `Last ${days} days`;
 
-  return new Intl.DateTimeFormat("en", { day: "numeric", month: "short", year: "numeric" }).formatRange(calendarDate(shiftDate(value, -6)), calendarDate(value));
+  return new Intl.DateTimeFormat("en", { day: "numeric", month: "short", year: "numeric" }).formatRange(calendarDate(shiftDate(value, 1 - days)), calendarDate(value));
 }
