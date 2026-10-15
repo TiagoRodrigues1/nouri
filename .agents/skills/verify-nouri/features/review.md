@@ -10,7 +10,7 @@ Read `GET /v1/review/<date>` and assert `from`, the seven `days`, the null metri
 
 The `Review range` select beside the arrows offers `7 days`, `2 weeks`, `1 month`, and `3 months`. Seed weights across two months through the API, then choose `3 months`: the URL gains `?days=90`, the heading reads `Last 90 days`, the table has 90 rows, and `Previous range` moves back 90 days. The `Weight` card plots one dot per weighed day across the whole range, with the change from the first to the last weigh-in (`−2.9 kg since Sun, Aug 16`, Unicode minus). A range with no weights shows `No weight logged in these days.` `GET /v1/review/<date>?days=30` returns 30 days; any other `days` value answers 400.
 
-From an earlier Review window, choose `+ Log` > `Food`. The dialog must name the window's last day. Log a manual food and read `GET /v1/days/<window-end>` to confirm it landed there, then compare that day's calories and protein with `GET /v1/review/<window-end>`.
+From an earlier Review window, press `Ctrl+K` and choose `Log food`. The footer must read `Logging to <window's last day>`. Log a manual food and read `GET /v1/days/<window-end>` to confirm it landed there, then compare that day's calories and protein with `GET /v1/review/<window-end>`.
 
 ## Targets comparison
 

@@ -1,6 +1,6 @@
 # Meals
 
-Meals live on the **Meals** page (`/meals`, `Meals` in the main navigation). The food dialog only logs them.
+Meals live on the **Meals** page (`/meals`, `Meals` in the main navigation). The command palette only logs them.
 
 ## Build a meal from scratch
 
@@ -16,8 +16,8 @@ On Today with foods logged, choose `Save foods as a meal` in the Timeline header
 
 ## Log a meal
 
-Choose `+ Log`, `Food`, and the `Meals` tab. Choose the meal in the list named `Meals`. Unticking `Include <name>` or changing `Amount of <name> in g` applies to this time only. `Log meal` calls `POST /v1/saved-meals/<id>/logs` once; the toast reads `<name> added to your log.` and `GET /v1/days/<date>` shows the foods at the dialog's time. `Manage meals` goes to `/meals`.
+Press `Ctrl+K` and choose `Log food`. The `Saved meals` group lists meals, filtered as you type, each with its food count and kcal. Enter on a meal calls `POST /v1/saved-meals/<id>/logs` once at its saved amounts; the toast reads `<name> added to your log.` and `GET /v1/days/<date>` shows the foods at the palette's time. Change an amount afterwards with `Edit <name>` on the timeline.
 
 ## Daily meals
 
-Tick `Log every day at` in the editor before saving, or tick the `Log <name> every day` checkbox on a meal's card (which sends the meal back once as `PATCH /v1/saved-meals/<id>` with only `daily` changed; the toast reads `<name> will be logged every day at 08:00.`). Today's timeline then shows the meal's foods at that time, `GET /v1/days/<today>` returns them as ordinary entries in the totals, and `GET /v1/days/<tomorrow>` stays empty until it becomes today. The card's label turns `Every day at` purple, and the food dialog's Meals list adds `every day at 08:00`. Due days are filled when the day, Review, or recent-foods endpoints are read (including MCP `get_day`), not by `GET /v1/saved-meals`. Deleting a pre-filled food keeps it deleted; unticking toasts `<name> will no longer be logged every day.` and keeps the days already filled. `daily-meals.test.ts` covers missed days, which are filled on the next read.
+Tick `Log every day at` in the editor before saving, or tick the `Log <name> every day` checkbox on a meal's card (which sends the meal back once as `PATCH /v1/saved-meals/<id>` with only `daily` changed; the toast reads `<name> will be logged every day at 08:00.`). Today's timeline then shows the meal's foods at that time, `GET /v1/days/<today>` returns them as ordinary entries in the totals, and `GET /v1/days/<tomorrow>` stays empty until it becomes today. The card's label turns `Every day at` purple, and the palette's `Saved meals` row adds `every day at 08:00`. Due days are filled when the day, Review, or recent-foods endpoints are read (including MCP `get_day`), not by `GET /v1/saved-meals`. Deleting a pre-filled food keeps it deleted; unticking toasts `<name> will no longer be logged every day.` and keeps the days already filled. `daily-meals.test.ts` covers missed days, which are filled on the next read.

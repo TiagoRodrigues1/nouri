@@ -1,4 +1,4 @@
-import { scaleFood, totalNutrients, type FoodEntry, type FoodItemInput, type RecordedFood, type SubmittedFood } from "../../../src/food/contract.js";
+import { scaleFood, type FoodEntry, type FoodItemInput, type RecordedFood, type SubmittedFood } from "../../../src/food/contract.js";
 import { maxMealItems, type MealItemInput, type SavedMeal } from "../../../src/meals/contract.js";
 import { typedAmount } from "./typed-amount.js";
 import { portionFood, sourceOf } from "./food-portion.js";
@@ -14,33 +14,6 @@ export function rowFood(row: AmountRow): RecordedFood {
   const amount = typedAmount(row.amount);
 
   return amount === null ? row.food : scaleFood(row.food, amount);
-}
-
-// One saved item offered for logging, ticked to include it.
-export type MealRow = AmountRow & { id: string; included: boolean };
-
-export function mealRows(items: Array<{ id: string; food: RecordedFood }>): MealRow[] {
-  return items.map(({ id, food }) => ({ id, food, included: true, amount: String(food.quantity.amount) }));
-}
-
-// The rows to send, each with its amount; null while an included row has no usable amount.
-export function chosenAmounts(rows: MealRow[]): Array<{ id: string; amount: number }> | null {
-  const chosen = [];
-
-  for (const row of rows) {
-    if (!row.included) continue;
-    const amount = typedAmount(row.amount);
-
-    if (amount === null) return null;
-    chosen.push({ id: row.id, amount });
-  }
-
-  return chosen;
-}
-
-// Energy of the included rows; null when nothing is included or any of them lacks a value.
-export function includedKcal(rows: MealRow[]): number | null {
-  return totalNutrients(rows.flatMap((row) => (row.included ? [rowFood(row).nutrients] : []))).kcal;
 }
 
 // Where a ticked food came from, which decides what the server is sent: a logged food by entry, or a food as

@@ -9,7 +9,7 @@ This index is the maintained list of Nouri's user paths. Read the relevant file 
 - Start from an empty database and open the journal page.
 - The header date is a shadcn date picker, not a text input. Choose the `Choose log date` button (`Choose the last day of the range` on Review), use `Go to the Previous Month` or `Go to the Next Month` if needed, then choose the day button, named like `Friday, September 25th, 2026`. To return to the current date, use the popover's `Today` button (match it exactly; the calendar's current day is named `Today, Friday, …`).
 - The chosen date sticks for the browser tab. The sidebar `Today` link opens My Day on that remembered date, not on today, so check the `h1` reads `Today` before a recipe that says to stay on today's date.
-- `+ Log` opens a popover whose choices (`Food`, `Water`, `Sleep`, `Exercise`, `Measurement`) are buttons, not menu items: use `getByRole("dialog").getByRole("button", { name: "Food", exact: true })`.
+- `+ Log` and `Ctrl+K` open the command palette, where every record is logged (see [command-palette.md](command-palette.md)). Its search is `getByRole("combobox")` and its choices are `option`s.
 - Below 680px wide the sidebar becomes a top bar holding `+ Log`, the `Targets`, `Supplements`, `Wearables`, and theme (`Dark theme` or `Light theme`) icon buttons, and `Open user menu` (the account's name or address is hidden), and the page links move to a bottom tab bar. Names stay the same, so recipes that say "sidebar" work at phone width too.
 - Keep screenshots and redacted snapshots in `/tmp/nouri-verification-evidence/$RUN_ID`.
 
@@ -24,12 +24,13 @@ This index is the maintained list of Nouri's user paths. Read the relevant file 
 
 - [Account access](auth.md): signed-out page, test-user sign-in, sign-out, and protected API.
 - [Data export](account-data.md): Download my data in the account menu, export file contents, withheld tokens.
+- [Command palette](command-palette.md): `Ctrl+K` and `+ Log`, steps and Back, quick log for weight and water, foods by amount or ticked together, saved meals, water, measurements, starting a workout.
 - [Search foods](search.md): Ciqual search results, no-match state, attribution.
-- [Barcode lookup](barcode.md): typed or camera-scanned barcode in the Search foods tab, live Open Food Facts product, serving default, check-digit and not-found states, logging and editing a scanned product.
+- [Barcode lookup](barcode.md): typed or camera-scanned barcode in the palette's food search, live Open Food Facts product, serving default, check-digit and not-found states, logging and editing a scanned product.
 - [Log a catalog food](catalog-log.md): search, select, set grams, save and read back.
-- [Recent foods](recent-foods.md): Recent tab in the food dialog, one row per food, ticking foods from Recent and Search into one selection with amounts, logging them together on the chosen day.
-- [Log a manual food](manual-log.md): manual tab, label per 100 g or ml, amount eaten, save and read back.
-- [Community foods](community-foods.md): `Add this product` after a barcode miss, `Share with other Nouri users` in the manual tab, `User-added` results, review with `pnpm foods:review`.
+- [Recent foods](recent-foods.md): Recent group in the palette's food search, one row per food, ticking foods from Recent and search into one selection, logging them together on the chosen day.
+- [Log a manual food](manual-log.md): `Add a food manually` in the palette, label per 100 g or ml, amount eaten, save and read back.
+- [Community foods](community-foods.md): `Add this product` after a barcode miss, `Share with other Nouri users` in the manual form, `User-added` results, review with `pnpm foods:review`.
 - [Browse dates and delete](dates-delete.md): date picker and arrows, daily totals, remove a row.
 - [Edit a food](edit.md): pencil on timeline rows, catalog amount, manual fields and time, revision conflict.
 - [Log water](water.md): preset and custom amounts, daily total, remove a drink.
@@ -41,7 +42,7 @@ This index is the maintained list of Nouri's user paths. Read the relevant file 
 - [Wearable import](wearables.md): Wearables dialog in the sidebar, not-set-up state, fixture-backed Connect, imported sleep, workouts, and daily activity, repeat sync, disconnect, forged callback.
 - [Customize My Day cards](cards.md): show, hide, reorder, save, reload, and restore defaults.
 - [Log again](log-again.md): timeline log-again button on today and past days, recorded time zones, `/food` redirect.
-- [Meals](saved-meals.md): Meals page in the main navigation, build a meal from search, recent, and manual foods, edit and delete it, start one from the Timeline's Save as meal, log it from the Meals tab of `+ Log` > `Food`, make it log itself every day.
+- [Meals](saved-meals.md): Meals page in the main navigation, build a meal from search, recent, and manual foods, edit and delete it, start one from the Timeline's Save as meal, log it from the palette's `Saved meals` group, make it log itself every day.
 - [Supplements](supplements.md): sidebar dialog edits the list from today, My Day checklist ticks and unticks intakes, earlier days keep their list.
 - [Targets](targets.md): sidebar dialog, save, pages reflect new targets, earlier days keep old ones.
 - [MCP server](mcp.md): `/mcp` refuses requests without an OAuth token and points clients at Clerk; the tools themselves need a registered OAuth client.
