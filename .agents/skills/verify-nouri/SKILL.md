@@ -22,7 +22,7 @@ EVIDENCE="/tmp/nouri-verification-evidence/$RUN_ID"
 mkdir -p "$EVIDENCE"
 ```
 
-The helper prints `Healthy Nouri run ...` when the page, OpenAPI document, authenticated day request, server process, and database answer. It records its own process and container IDs under `/tmp/nouri-verify-$RUN_ID`. Keep the shell variables for the entire drive. Two runs with different IDs use separate databases, ports, Clerk users, and browser sessions. Never drive an instance started by somebody else.
+The helper prints `Healthy Nouri run ...` after checking the page, OpenAPI document, server process, database readiness, and rejection of an anonymous day request. It records its own process and container IDs under `/tmp/nouri-verify-$RUN_ID`. Keep the shell variables for the entire drive. Two runs with different IDs use separate databases, ports, Clerk users, and browser sessions. Never drive an instance started by somebody else.
 
 ## Doctor
 
