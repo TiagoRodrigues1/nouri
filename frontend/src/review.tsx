@@ -1,9 +1,9 @@
 import * as stylex from "@stylexjs/stylex";
 import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
-import { Beef, ChartColumn, Flame, LayoutDashboard } from "lucide-react";
-import { calorieTolerance, isCompleteFood } from "../../src/review/contract";
+import { Link, useSearch } from "@tanstack/react-router";
+import { Beef, ChartColumn, Flame, LayoutDashboard, Scale } from "lucide-react";
+import { calorieTolerance, defaultReviewDays, isCompleteFood } from "../../src/review/contract";
 import { Button } from "./components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "./components/ui/table";
@@ -11,6 +11,7 @@ import { useDashboardPage } from "./dashboard-page-context";
 import { format, getReview, type Review as ReviewData, type ReviewDay } from "./lib/api";
 import { shortDayLabel } from "./lib/time";
 import { duration } from "./overview/shared";
+import { ProgressChart } from "./progress-chart";
 import { queryFallback } from "./query-status";
 import { Bone, Loading } from "./loading";
 import { styles } from "./review-styles";
@@ -117,17 +118,44 @@ function Comparison({ title, icon, nutrient, rule, nutrition }: ComparisonProps)
   );
 }
 
+// The days with a weight, as a line across the whole range, with the change from the first to the last.
+function WeightTrend({ review }: { review: ReviewData }) {
+  const points = review.days.flatMap(({ date, weightKg }) => weightKg === null ? [] : [{ date, value: weightKg, label: shortDayLabel(date) }]);
+  const first = points[0];
+  const last = points.at(-1);
+  const change = first && last && points.length > 1 ? Math.round((last.value - first.value) * 10) / 10 : null;
+
+  return (
+    <Card {...stylex.props(styles.trendCard)}>
+      <CardHeader {...stylex.props(styles.trendHeader)}>
+        <CardTitle {...stylex.props(styles.comparisonTitle)}><Scale size={15} /> Weight</CardTitle>
+        {change !== null && first && (
+          <p {...stylex.props(styles.muted)}>
+            <strong {...stylex.props(styles.trendChange)}>{change === 0 ? "No change" : `${change > 0 ? "+" : "−"}${format(Math.abs(change), 1)} kg`}</strong> since {shortDayLabel(first.date)}
+          </p>
+        )}
+      </CardHeader>
+      <CardContent {...stylex.props(styles.trendContent)}>
+        {points.length === 0
+          ? <p {...stylex.props(styles.muted)}>No weight logged in these days.</p>
+          : <ProgressChart points={points} label="Weight in kilograms" unit="kg" noun="weigh-ins" span={{ from: review.from, to: review.to }} />}
+      </CardContent>
+    </Card>
+  );
+}
+
 export function Review() {
   const { date } = useDashboardPage();
+  const days = useSearch({ from: "/day/review", select: (search) => search.days ?? defaultReviewDays });
 
   const query = useQuery({
-    queryKey: ["review", date],
-    queryFn: () => getReview(date),
+    queryKey: ["review", date, days],
+    queryFn: () => getReview(date, days),
   });
 
   const review = query.data;
 
-  if (!review || query.isError) return queryFallback(query, <ReviewSkeleton />, styles.status);
+  if (!review || query.isError) return queryFallback(query, <ReviewSkeleton rows={days} />, styles.status);
   const total = review.days.length;
 
   return (
@@ -140,8 +168,9 @@ export function Review() {
         <Comparison title="Calories" icon={<Flame size={15} />} nutrient="kcal" rule={`Within ${calorieTolerance * 100}% of target`} nutrition={review.nutrition} />
         <Comparison title="Protein" icon={<Beef size={15} />} nutrient="proteinG" rule="Reached target" nutrition={review.nutrition} />
       </div>
+      <WeightTrend review={review} />
       <Card {...stylex.props(styles.card)}>
-        <Table aria-label="Seven-day review">
+        <Table aria-label={`${total}-day review`}>
           <TableHeader>
             <TableRow>
               <TableHead {...stylex.props(styles.dayColumn)}>Day</TableHead>
@@ -190,10 +219,10 @@ export function Review() {
   );
 }
 
-// The summary, the two comparisons, and the seven-day table, as placeholders.
-function ReviewSkeleton() {
+// The summary, the two comparisons, the weight chart, and the table, as placeholders.
+function ReviewSkeleton({ rows }: { rows: number }) {
   return (
-    <Loading label="Loading your week…">
+    <Loading label="Loading your review…">
       <div {...stylex.props(styles.page)}>
         <Bone width="62%" height={13} />
         <div {...stylex.props(styles.comparisons)}>
@@ -207,10 +236,14 @@ function ReviewSkeleton() {
             </Card>
           ))}
         </div>
+        <Card {...stylex.props(styles.trendCard)}>
+          <CardHeader {...stylex.props(styles.trendHeader)}><Bone width={80} height={13} /></CardHeader>
+          <CardContent {...stylex.props(styles.trendContent)}><Bone width="100%" height={220} /></CardContent>
+        </Card>
         <Card {...stylex.props(styles.card)}>
           <Table>
             <TableBody>
-              {Array.from({ length: 8 }, (_, row) => (
+              {Array.from({ length: rows + 1 }, (_, row) => (
                 <TableRow key={row}>
                   <TableCell><Bone width={row === 0 ? 40 : 70} height={12} /></TableCell>
                   {metrics.map((metric) => <TableCell key={metric.label}><Bone width="70%" height={12} /></TableCell>)}

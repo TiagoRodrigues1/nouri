@@ -22,7 +22,8 @@ function ticks(min: number, max: number): number[] {
   const low = Math.floor((max === min ? min - span / 2 : min) / step) * step;
   const high = Math.ceil((max === min ? max + span / 2 : max) / step) * step;
 
-  return Array.from({ length: Math.round((high - low) / step) + 1 }, (_, index) => low + index * step);
+  // Rounded so a step like 0.2 reads 81.6, not 81.60000000000001.
+  return Array.from({ length: Math.round((high - low) / step) + 1 }, (_, index) => Number((low + index * step).toPrecision(12)));
 }
 
 function useWidth() {
@@ -43,14 +44,24 @@ function useWidth() {
   return { ref, width };
 }
 
-// One series over calendar time: a 2 px line, ringed dots, and a crosshair that snaps to the nearest session.
-export function ProgressChart({ points, label, unit }: { points: ProgressPoint[]; label: string; unit: string }) {
+type ProgressChartProps = {
+  points: ProgressPoint[];
+  label: string;
+  unit: string;
+  // What each point is, for screen readers.
+  noun?: string;
+  // The days the time axis covers. Without it the axis runs from the first point to the last.
+  span?: { from: string; to: string };
+};
+
+// One series over calendar time: a 2 px line, ringed dots, and a crosshair that snaps to the nearest point.
+export function ProgressChart({ points, label, unit, noun = "sessions", span }: ProgressChartProps) {
   const { ref, width } = useWidth();
   const [active, setActive] = useState<number | null>(null);
 
   const times = points.map((point) => calendarDate(point.date).getTime());
-  const first = times[0] ?? 0;
-  const last = times.at(-1) ?? first;
+  const first = span ? calendarDate(span.from).getTime() : times[0] ?? 0;
+  const last = span ? calendarDate(span.to).getTime() : times.at(-1) ?? first;
   const values = ticks(Math.min(...points.map((point) => point.value)), Math.max(...points.map((point) => point.value)));
   const low = values[0] ?? 0;
   const high = values.at(-1) ?? 1;
@@ -91,7 +102,7 @@ export function ProgressChart({ points, label, unit }: { points: ProgressPoint[]
           width={width}
           height={height}
           role="img"
-          aria-label={`${label} over ${points.length} sessions. Use the arrow keys to read each session; the table below lists them all.`}
+          aria-label={`${label} over ${points.length} ${noun}. Use the arrow keys to read each one; the table below lists them all.`}
           tabIndex={0}
           onPointerMove={nearest}
           onPointerLeave={() => setActive(null)}

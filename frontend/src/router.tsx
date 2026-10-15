@@ -6,6 +6,7 @@ import {
   redirect,
 } from "@tanstack/react-router";
 import { z } from "zod";
+import { reviewRangeSchema } from "../../src/review/contract";
 import { DayLayout, Dashboard } from "./views";
 
 const rootRoute = createRootRoute({ component: Dashboard });
@@ -53,8 +54,8 @@ const progressRoute = createRoute({
 const reviewRoute = createRoute({
   getParentRoute: () => dayLayoutRoute,
   path: "/review",
-  // The last day of the week under review. Without it the week ends today.
-  validateSearch: z.object({ to: z.iso.date().optional().catch(undefined) }),
+  // The last day under review and how many days end on it. Without them the review covers the week ending today.
+  validateSearch: z.object({ to: z.iso.date().optional().catch(undefined), days: reviewRangeSchema.optional().catch(undefined) }),
   component: lazyRouteComponent(() => import("./review"), "Review"),
 });
 

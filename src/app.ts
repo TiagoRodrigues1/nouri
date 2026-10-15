@@ -31,7 +31,7 @@ import { measurementInputSchema } from "./measurements/contract.js";
 import { measurementRecords } from "./measurements/measurements.js";
 import { overviewSchema } from "./overview/contract.js";
 import { getOverview } from "./overview/overview.js";
-import { reviewSchema } from "./review/contract.js";
+import { reviewRangeSchema, reviewSchema } from "./review/contract.js";
 import { routineInputSchema, routineListSchema, routineSchema } from "./routines/contract.js";
 import { listRoutines, mutateRoutine } from "./routines/routines.js";
 import { getReview } from "./review/review.js";
@@ -433,12 +433,13 @@ export function createApp(db: AppDatabase, identity: Identity, packagedFoods: Pa
 
   app.get("/v1/review/:date", async (context) => {
     const date = z.iso.date().safeParse(context.req.param("date"));
+    const days = reviewRangeSchema.optional().safeParse(context.req.query("days"));
 
-    if (!date.success) return error(400, "Invalid review request");
+    if (!date.success || !days.success) return error(400, "Invalid review request");
 
-    return context.json(await getReview(db, context.get("userId"), date.data));
+    return context.json(await getReview(db, context.get("userId"), date.data, days.data));
   });
-  app.openAPIRegistry.registerPath({ method: "get", path: "/v1/review/{date}", request: { params: z.object({ date: z.iso.date() }) }, responses: { 200: { description: "Calories, protein, workouts, sleep, and weight for the seven local days ending on the date, with null for unrecorded days", ...json(reviewSchema) }, 400: failure("Invalid date") } });
+  app.openAPIRegistry.registerPath({ method: "get", path: "/v1/review/{date}", request: { params: z.object({ date: z.iso.date() }), query: z.object({ days: reviewRangeSchema.optional() }) }, responses: { 200: { description: "Calories, protein, workouts, sleep, and weight for the local days ending on the date (seven unless `days` asks for 14, 30, or 90), with null for unrecorded days", ...json(reviewSchema) }, 400: failure("Invalid date or range") } });
 
   app.get("/v1/dashboard", async (context) => context.json(await getDashboard(db, context.get("userId"))));
   app.openAPIRegistry.registerPath({ method: "get", path: "/v1/dashboard", responses: { 200: { description: "Cards shown on the My Day page, in display order; defaults until the user saves a layout", ...json(dashboardSchema) } } });

@@ -24,9 +24,11 @@ import {
 import { toast } from "sonner";
 import { Button } from "./components/ui/button";
 import { DatePicker } from "./components/ui/date-picker";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
+import { defaultReviewDays, reviewRanges, reviewRangeSchema } from "../../src/review/contract";
 import { UserButton, useUser } from "@clerk/react";
 import { createFood, deleteFood, downloadAccountExport } from "./lib/api";
-import { dateLabel, localDate, occurredAt, shiftDate, weekLabel, timeZone as zone } from "./lib/time";
+import { dateLabel, localDate, occurredAt, rangeLabel, shiftDate, timeZone as zone } from "./lib/time";
 import { useIdempotentWrite, useIdempotentDelete } from "./lib/use-idempotent";
 import { queryRefresh } from "./lib/query-refresh";
 import { useConnection } from "./lib/use-connection";
@@ -307,39 +309,58 @@ export function Dashboard() {
   );
 }
 
+const rangeNames: Record<(typeof reviewRanges)[number], string> = { 7: "7 days", 14: "2 weeks", 30: "1 month", 90: "3 months" };
+
 // The day pages' heading: the day or week shown and the controls that move it. Meals are not tied to a day, so
 // their routes sit outside this layout.
 export function DayLayout() {
   const { date, isToday, onCustomizingCardsChange } = useDashboardPage();
   const view = useView();
   const navigate = useNavigate();
+  const search = useSearch({ strict: false });
   const reviewing = view === "review";
-  const step = reviewing ? 7 : 1;
-  const unit = reviewing ? "week" : "day";
+  const step = reviewing ? search.days ?? defaultReviewDays : 1;
+  const unit = reviewing ? "range" : "day";
 
-  // Stays on the page and keeps its other search params; the review names the last day of its week `to`.
+  // Stays on the page and keeps its other search params; the review names the last day of its range `to`.
   function pickDate(next: string) {
     void navigate({ to: ".", search: (previous) => ({ ...previous, [reviewing ? "to" : "date"]: next }) });
     toast.dismiss();
   }
 
+  function pickRange(next: string) {
+    const days = reviewRangeSchema.safeParse(next);
+
+    if (days.success) void navigate({ to: ".", search: (previous) => ({ ...previous, days: days.data }) });
+  }
+
   return (
     <>
       <header {...stylex.props(styles.dayHeader)}>
-        <h1 {...stylex.props(styles.dayHeadline)}>{reviewing ? weekLabel(date, isToday) : isToday ? "Today" : dateLabel(date)}</h1>
+        <h1 {...stylex.props(styles.dayHeadline)}>{reviewing ? rangeLabel(date, step, isToday) : isToday ? "Today" : dateLabel(date)}</h1>
         <div {...stylex.props(styles.dateActions)}>
           {view === "today" && (
             <Button variant="outline" size="icon-sm" aria-label="Customize cards" title="Customize cards" onClick={() => onCustomizingCardsChange(true)}>
               <SlidersHorizontal size={16} />
             </Button>
           )}
+          {reviewing && (
+            <Select value={String(step)} onValueChange={pickRange}>
+              <SelectTrigger size="sm" aria-label="Review range" {...stylex.props(styles.rangePicker)}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {reviewRanges.map((days) => <SelectItem key={days} value={String(days)}>{rangeNames[days]}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          )}
           <Button variant="outline" size="icon-sm" aria-label={`Previous ${unit}`} onClick={() => pickDate(shiftDate(date, -step))}>
             <ChevronLeft size={17} />
           </Button>
           <DatePicker
-            label={reviewing ? "Choose the last day of the week" : "Choose log date"}
+            label={reviewing ? "Choose the last day of the range" : "Choose log date"}
             value={date}
-            days={reviewing ? 7 : 1}
+            days={step}
             onChange={pickDate}
           />
           <Button variant="outline" size="icon-sm" aria-label={`Next ${unit}`} onClick={() => pickDate(shiftDate(date, step))}>

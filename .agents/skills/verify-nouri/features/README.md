@@ -7,7 +7,7 @@ This index is the maintained list of Nouri's user paths. Read the relevant file 
 - Launch a fresh run with `control-nouri launch RUN_ID`, source its `/tmp/nouri-verify-RUN_ID/env`, and run `control-nouri doctor RUN_ID`.
 - Sign in by opening `$("$CONTROL" sign-in-url "$RUN_ID")` in the run's own `"$CONTROL" browser "$RUN_ID"` session. The page shows Clerk's sign-in until then.
 - Start from an empty database and open the journal page.
-- The header date is a shadcn date picker, not a text input. Choose the `Choose log date` button (`Choose the last day of the week` on Review), use `Go to the Previous Month` or `Go to the Next Month` if needed, then choose the day button, named like `Friday, September 25th, 2026`. To return to the current date, use the popover's `Today` button (match it exactly; the calendar's current day is named `Today, Friday, …`).
+- The header date is a shadcn date picker, not a text input. Choose the `Choose log date` button (`Choose the last day of the range` on Review), use `Go to the Previous Month` or `Go to the Next Month` if needed, then choose the day button, named like `Friday, September 25th, 2026`. To return to the current date, use the popover's `Today` button (match it exactly; the calendar's current day is named `Today, Friday, …`).
 - The chosen date sticks for the browser tab. The sidebar `Today` link opens My Day on that remembered date, not on today, so check the `h1` reads `Today` before a recipe that says to stay on today's date.
 - `+ Log` opens a popover whose choices (`Food`, `Water`, `Sleep`, `Exercise`, `Measurement`) are buttons, not menu items: use `getByRole("dialog").getByRole("button", { name: "Food", exact: true })`.
 - Below 680px wide the sidebar becomes a top bar holding `+ Log`, the `Targets`, `Supplements`, `Wearables`, and theme (`Dark theme` or `Light theme`) icon buttons, and `Open user menu` (the account's name or address is hidden), and the page links move to a bottom tab bar. Names stay the same, so recipes that say "sidebar" work at phone width too.
@@ -37,7 +37,7 @@ This index is the maintained list of Nouri's user paths. Read the relevant file 
 - [Exercise library](exercise-library.md): picker in the workout dialog, search and muscle and equipment filters, Recent group, create and delete a custom exercise.
 - [Workout routines](workouts.md): Workouts sidebar page, routine editor with rep targets, live workout with PREVIOUS and done sets, resume bar, Finish into an ordinary strength workout, body map.
 - [Workout progress](progress.md): last-time line and Repeat in the workout dialog, Progress sidebar page with exercise picker, chart, and sessions, links from Overview exercise names.
-- [Review](review.md): sidebar link, seven-day table with blank unrecorded days and recorded-day counts, day links into Today and Overview, Back, week arrows.
+- [Review](review.md): sidebar link, range picker (7 days to 3 months), weight chart, review table with blank unrecorded days and recorded-day counts, day links into Today and Overview, Back, range arrows.
 - [Wearable import](wearables.md): Wearables dialog in the sidebar, not-set-up state, fixture-backed Connect, imported sleep, workouts, and daily activity, repeat sync, disconnect, forged callback.
 - [Customize My Day cards](cards.md): show, hide, reorder, save, reload, and restore defaults.
 - [Log again](log-again.md): timeline log-again button on today and past days, recorded time zones, `/food` redirect.

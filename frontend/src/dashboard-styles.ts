@@ -155,6 +155,7 @@ export const styles = stylex.create({
       "@media (max-width: 680px)": "22px 16px calc(96px + env(safe-area-inset-bottom))",
     },
   },
+  rangePicker: { minWidth: "104px", fontSize: "12px", fontWeight: "500" },
   dateActions: {
     display: "flex",
     alignItems: "center",
