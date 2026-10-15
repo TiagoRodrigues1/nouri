@@ -18,7 +18,7 @@ import { isBarcode, isUserAdded, recordedFood } from "../../src/food/contract";
 
 // A food the tab offers. Its basis is 100 g or ml, which previews any amount. Ciqual foods log by reference,
 // so the server measures them; a scanned product or community food logs as the scaled label, carrying its reference.
-type Choice = {
+export type Choice = {
   key: string;
   source: FoodSource;
   brand: string | null;
@@ -47,7 +47,7 @@ function labelChoice(product: LabelFood, fallbackKey: string): Choice {
 }
 
 // A barcode finds one product and a name searches Nouri's foods and Ciqual; either way the tab shows choices and their sources.
-async function findChoices(term: string): Promise<{ choices: Choice[]; attribution: SearchResult["attribution"] }> {
+export async function findChoices(term: string): Promise<{ choices: Choice[]; attribution: SearchResult["attribution"] }> {
   if (isBarcode(term)) {
     const { product, attribution } = await lookupBarcode(term);
 
@@ -60,7 +60,7 @@ async function findChoices(term: string): Promise<{ choices: Choice[]; attributi
 }
 
 // Only an outage is worth asking again; a missing product stays missing.
-const retryOutage = (failures: number, error: Error) => failures < 1 && error instanceof ApiError && error.status === 502;
+export const retryOutage = (failures: number, error: Error) => failures < 1 && error instanceof ApiError && error.status === 502;
 
 // A food ticked into the selection starts at one serving, or 100 g or ml.
 function tick(selection: FoodSelection, key: string, { submitted, preview }: FoodPortion) {
