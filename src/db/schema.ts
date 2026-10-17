@@ -97,7 +97,7 @@ export const mealLogs = pgTable("meal_logs", {
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
-  index("meal_logs_user_recent_idx").on(table.userId, table.savedMealId, table.createdAt).where(sql`deleted_at IS NULL AND NOT daily`),
+  index("meal_logs_user_active_idx").on(table.userId, table.savedMealId, table.createdAt).where(sql`deleted_at IS NULL`),
 ]);
 
 export const waterEntries = pgTable("water_entries", {
