@@ -21,6 +21,18 @@ export function changeById<T extends Item>(items: T[], id: string, change: (item
   return next ? items.with(index, next) : items.toSpliced(index, 1);
 }
 
+// Moves the item with the id one place up (-1) or down (1). The same list comes back when the id is unknown or the
+// item is already at that end.
+export function moveById<T extends Item>(items: T[], id: string, offset: -1 | 1): T[] {
+  const index = items.findIndex((item) => item.id === id);
+  const item = items[index];
+  const other = items[index + offset];
+
+  if (!item || !other) return items;
+
+  return items.with(index, other).with(index + offset, item);
+}
+
 // Changes one set of one exercise, or removes it when the change returns null.
 export function changeSet<E extends ListedExercise>(exercises: E[], exerciseId: string, setId: string, change: (set: SetOf<E>) => SetOf<E> | null): E[] {
   return changeById(exercises, exerciseId, (exercise) => {

@@ -8,10 +8,11 @@ import { findExercise } from "../lib/body-map";
 import { exerciseDetail, exerciseLibraryQueryOptions } from "../lib/exercise-library";
 import { styles } from "./workouts-styles";
 
-type ExerciseHeadingProps = { name: string; onReplace: () => void; onRemove: () => void };
+// Null where the exercise cannot move that way: it is first, or last.
+type ExerciseHeadingProps = { name: string; onReplace: () => void; onRemove: () => void; onMoveUp: (() => void) | null; onMoveDown: (() => void) | null };
 
 // An exercise's muscle figure, name, muscle and equipment, and its menu.
-export function ExerciseHeading({ name, onReplace, onRemove }: ExerciseHeadingProps) {
+export function ExerciseHeading({ name, onReplace, onRemove, onMoveUp, onMoveDown }: ExerciseHeadingProps) {
   const library = useQuery(exerciseLibraryQueryOptions());
   const known = findExercise(library.data, name);
   const detail = known ? exerciseDetail(known) : null;
@@ -30,6 +31,8 @@ export function ExerciseHeading({ name, onReplace, onRemove }: ExerciseHeadingPr
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
+          <DropdownMenuItem disabled={!onMoveUp} onSelect={() => onMoveUp?.()}>Move up</DropdownMenuItem>
+          <DropdownMenuItem disabled={!onMoveDown} onSelect={() => onMoveDown?.()}>Move down</DropdownMenuItem>
           <DropdownMenuItem onSelect={onReplace}>Replace exercise</DropdownMenuItem>
           <DropdownMenuItem variant="destructive" onSelect={onRemove}>Remove exercise</DropdownMenuItem>
         </DropdownMenuContent>
