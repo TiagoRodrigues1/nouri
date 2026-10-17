@@ -3,14 +3,14 @@ import { recordPaths } from "../../../src/journal/paths";
 // A record kind owns the list of reads that include it.
 export const queryRefresh = {
   food: ["day", "overview", "review", "recent-foods"],
-  water: ["day", "overview"],
+  water: ["day", "overview", "review"],
   workout: ["overview", "review", "workout-summary", "exercise-history", "exercise-library"],
   exercises: ["exercise-library"],
   routines: ["routines"],
   sleep: ["overview", "review"],
   measurement: ["overview", "review"],
   photo: ["overview"],
-  supplements: ["day", "overview"],
+  supplements: ["day", "overview", "review"],
 } as const;
 
 export const recordQueryRefresh = {

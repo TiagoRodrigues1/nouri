@@ -190,20 +190,24 @@ type WeekMetric = {
   label: string;
   value: (week: ReviewPeriod) => number | null;
   show: (value: number) => string;
+  // The decimal places `show` keeps, so a change is taken between the values as shown.
+  digits: number;
 };
 
 const weekMetrics: WeekMetric[] = [
-  { label: "Calories", value: (week) => week.nutrition.kcal.average, show: kcal },
-  { label: "Protein", value: (week) => week.nutrition.proteinG.average, show: grams },
-  { label: "Water", value: (week) => week.water.average, show: millilitres },
-  { label: "Sleep", value: (week) => week.sleep.average, show: minutes },
+  { label: "Calories", value: (week) => week.nutrition.kcal.average, show: kcal, digits: 0 },
+  { label: "Protein", value: (week) => week.nutrition.proteinG.average, show: grams, digits: 0 },
+  { label: "Water", value: (week) => week.water.average, show: millilitres, digits: 0 },
+  { label: "Sleep", value: (week) => week.sleep.average, show: minutes, digits: 0 },
   // A week's total; a week without workouts stays blank, as a day does.
-  { label: "Workouts", value: (week) => week.workouts.count === 0 ? null : week.workouts.totalMinutes, show: minutes },
-  { label: "Weight", value: (week) => week.weightKg, show: (value) => `${format(value, 1)} kg` },
+  { label: "Workouts", value: (week) => week.workouts.count === 0 ? null : week.workouts.totalMinutes, show: minutes, digits: 0 },
+  { label: "Weight", value: (week) => week.weightKg, show: (value) => `${format(value, 1)} kg`, digits: 1 },
 ];
 
-function change(value: number, before: number, show: (value: number) => string): string {
-  const difference = value - before;
+// Two weeks that read the same show no change, never "+0 g".
+function change(value: number, before: number, { show, digits }: WeekMetric): string {
+  const scale = 10 ** digits;
+  const difference = (Math.round(value * scale) - Math.round(before * scale)) / scale;
 
   return difference === 0 ? "no change" : `${difference > 0 ? "+" : "−"}${show(Math.abs(difference))}`;
 }
@@ -242,7 +246,7 @@ function WeeklyTrends({ review }: { review: ReviewData }) {
                         <TableCell key={metric.label} {...stylex.props(styles.number)}>
                           {value === null ? <Blank /> : metric.show(value)}
                           {value !== null && before !== null && (
-                            <span {...stylex.props(styles.difference)} title="Change from the week before">{change(value, before, metric.show)}</span>
+                            <span {...stylex.props(styles.difference)} title="Change from the week before">{change(value, before, metric)}</span>
                           )}
                         </TableCell>
                       );
