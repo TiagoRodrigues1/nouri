@@ -10,8 +10,8 @@ type PendingLog = { meal: SavedMeal; input: MealLogInput };
 type PendingSave = { meal: SavedMeal | null; input: MealInput };
 
 // A meal saved as daily may fill today, and logging a meal or removing a log reorders the list, so the day's
-// reads and the list refresh together.
-const mealRefresh = ["saved-meals", ...queryRefresh.food];
+// reads and the list, both among the food reads, refresh together.
+const mealRefresh = queryRefresh.food;
 
 export function useSavedMeals() {
   return useQuery({ queryKey: ["saved-meals"], queryFn: getSavedMeals });

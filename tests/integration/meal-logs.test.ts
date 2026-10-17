@@ -154,13 +154,13 @@ void test("each day a daily meal fills is a log of its own that never ranks the 
 
     assert.equal(daily.status, 200);
 
+    // Listing meals fills today first, so a fill counts as the last day the meal is on.
     const today = localDate(new Date().toISOString(), timeZone);
+    assert.equal((await lastLogged()).Breakfast, today);
     const filled = await day(today);
     assert.equal(filled.food.entries.length, 1);
     assert.deepEqual(filled.mealLogs.map((log) => log.name), ["Breakfast"]);
     assert.deepEqual(await names(), ["Dinner", "Breakfast"]);
-    // A fill does count as the last day the meal is on.
-    assert.equal((await lastLogged()).Breakfast, today);
 
     // Skipped today: the fill is removed whole and is not filled again.
     const [log] = filled.mealLogs;
