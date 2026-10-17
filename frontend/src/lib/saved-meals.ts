@@ -1,9 +1,30 @@
 import { scaleFood, type FoodEntry, type FoodItemInput, type RecordedFood, type SubmittedFood } from "../../../src/food/contract.js";
-import { maxMealItems, type MealItemInput, type SavedMeal } from "../../../src/meals/contract.js";
+import { everyDay, maxMealItems, type MealItemInput, type SavedMeal } from "../../../src/meals/contract.js";
 import { typedAmount } from "./typed-amount.js";
 import { portionFood, sourceOf } from "./food-portion.js";
 
-export { maxMealItems };
+export { everyDay, maxMealItems };
+
+// Short names for ISO weekdays 1 to 7.
+export const weekdayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+const namedDays = new Map([
+  [everyDay.join(), { label: "Every day", phrase: "every day" }],
+  ["1,2,3,4,5", { label: "Weekdays", phrase: "on weekdays" }],
+  ["6,7", { label: "Weekends", phrase: "on weekends" }],
+]);
+
+// The days a daily meal logs itself on, as a label ("Weekdays", "Mon, Wed, Fri") and as a sentence ends
+// ("on weekdays", "on Mon, Wed, Fri").
+export function dailyDays(weekdays: number[]) {
+  const sorted = weekdays.toSorted((a, b) => a - b);
+  const named = namedDays.get(sorted.join());
+
+  if (named) return named;
+  const label = sorted.map((day) => weekdayNames[day - 1]).join(", ");
+
+  return { label, phrase: `on ${label}` };
+}
 
 // A food at some amount, which previews any other. The amount stays text while typing, so a half-typed "0." is
 // not rewritten under the cursor. Logging a meal and editing one both list rows like this.

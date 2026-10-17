@@ -1,4 +1,4 @@
-import { bigint, boolean, customType, date, integer, jsonb, pgTable, primaryKey, text, timestamp, uuid, index, uniqueIndex } from "drizzle-orm/pg-core";
+import { bigint, boolean, customType, date, integer, jsonb, smallint, pgTable, primaryKey, text, timestamp, uuid, index, uniqueIndex } from "drizzle-orm/pg-core";
 import type { Equipment, Muscle } from "../exercises/contract.js";
 import type { FoodProvider, FoodQuantity } from "../food/contract.js";
 import type { StoredMealItem } from "../meals/contract.js";
@@ -78,6 +78,7 @@ export const savedMeals = pgTable("saved_meals", {
   dailyTime: text("daily_time"),
   dailyTimeZone: text("daily_time_zone"),
   dailyFilledThrough: date("daily_filled_through"),
+  dailyWeekdays: smallint("daily_weekdays").array(),
   revision: integer("revision").notNull().default(1),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

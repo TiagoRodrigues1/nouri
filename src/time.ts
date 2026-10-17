@@ -36,6 +36,11 @@ export function shiftDate(date: string, days: number): string {
   return shifted.toISOString().slice(0, 10);
 }
 
+// The ISO weekday of a date: 1 Monday to 7 Sunday.
+export function isoWeekday(date: string): number {
+  return new Date(`${date}T00:00:00Z`).getUTCDay() || 7;
+}
+
 // How far the zone's wall clock is ahead of UTC at an instant, in milliseconds.
 function zoneOffset(zone: string, epoch: number): number {
   const parts = new Intl.DateTimeFormat("en-US", { timeZone: zone, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" }).formatToParts(new Date(epoch));

@@ -10,11 +10,12 @@ import { Checkbox } from "../components/ui/checkbox";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { TimePicker } from "../components/ui/time-picker";
+import { ToggleGroup, ToggleGroupItem } from "../components/ui/toggle-group";
 import { format, type SavedMeal } from "../lib/api";
 import { dayQueryOptions } from "../lib/day-query";
 import { nutrientLine, unitLabels } from "../lib/food-text";
 import { rowSelection } from "../lib/food-selection";
-import { draftItems, entryRows, maxMealItems, rowFood, savedRows, type DraftRow } from "../lib/saved-meals";
+import { draftItems, entryRows, everyDay, maxMealItems, rowFood, savedRows, weekdayNames, type DraftRow } from "../lib/saved-meals";
 import { totalNutrients } from "../../../src/food/contract";
 import { currentTime, dateLabel, timeZone } from "../lib/time";
 import { useDeleteMeal, useSaveMeal, useSavedMeals } from "../lib/use-saved-meals";
@@ -80,6 +81,7 @@ function MealEditor({ meal, initialRows, from }: { meal: SavedMeal | null; initi
   const rowMotion = useExitingRows();
   const [daily, setDaily] = useState(Boolean(meal?.daily));
   const [dailyTime, setDailyTime] = useState(meal?.daily?.time ?? "08:00");
+  const [weekdays, setWeekdays] = useState(meal?.daily?.weekdays ?? everyDay);
   const totals = totalNutrients(rows.map((row) => rowFood(row).nutrients));
   const tooMany = rows.length > maxMealItems;
 
@@ -106,7 +108,7 @@ function MealEditor({ meal, initialRows, from }: { meal: SavedMeal | null; initi
     const items = draftItems(rows);
 
     if (!items || items.length === 0 || tooMany) return;
-    save.mutate({ meal, input: { name: name.trim(), items, daily: daily ? { time: dailyTime, timeZone } : null } });
+    save.mutate({ meal, input: { name: name.trim(), items, daily: daily ? { time: dailyTime, timeZone, weekdays } : null } });
   }
 
   return (
@@ -145,10 +147,27 @@ function MealEditor({ meal, initialRows, from }: { meal: SavedMeal | null; initi
             <div {...stylex.props(styles.dailyBox)}>
               <div {...stylex.props(styles.daily)}>
                 <Checkbox id="meal-daily" checked={daily} onCheckedChange={(checked) => setDaily(checked === true)} />
-                <label htmlFor="meal-daily" {...stylex.props(styles.dailyLabel, daily && styles.dailyOn)}>Log every day at</label>
+                <label htmlFor="meal-daily" {...stylex.props(styles.dailyLabel, daily && styles.dailyOn)}>Log on these days at</label>
                 <TimePicker id="meal-daily-time" value={dailyTime} onChange={setDailyTime} onNow={() => setDailyTime(currentTime())} />
               </div>
-              <p {...stylex.props(styles.hint)}>Its foods are already on each day's log from today. Delete one on a day you skip it.</p>
+              {/* At least one day stays on: unpressing the last is ignored. */}
+              <ToggleGroup
+                type="multiple"
+                variant="outline"
+                size="sm"
+                spacing={0}
+                aria-label="Days to log it on"
+                disabled={!daily}
+                value={weekdays.map(String)}
+                onValueChange={(next) => { if (next.length > 0) setWeekdays(next.map(Number).toSorted((a, b) => a - b)); }}
+              >
+                {weekdayNames.map((day, index) => (
+                  <ToggleGroupItem key={day} value={String(index + 1)} aria-label={day} {...stylex.props(styles.weekday, daily && weekdays.includes(index + 1) && styles.weekdayOn)}>
+                    {day.charAt(0)}
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
+              <p {...stylex.props(styles.hint)}>Its foods are already on the log of each chosen day from today. Delete them on a day you skip it.</p>
             </div>
             <div {...stylex.props(styles.actions)}>
               {meal && (
