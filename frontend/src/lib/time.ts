@@ -72,6 +72,19 @@ export function calendarDate(value: string): Date {
   return new Date(y, m - 1, d);
 }
 
+const dayMonth = new Intl.DateTimeFormat("en", { day: "numeric", month: "short" });
+
+// "today", "yesterday", or "Sep 28", for when something was last on the log.
+export function recentDayLabel(value: string): string {
+  const today = localDate(new Date());
+
+  if (value === today) return "today";
+
+  if (value === shiftDate(today, -1)) return "yesterday";
+
+  return dayMonth.format(calendarDate(value));
+}
+
 const shortDay = new Intl.DateTimeFormat("en", { weekday: "short", day: "numeric", month: "short" });
 
 // "Mon, Sep 28", for one row of a timeline.

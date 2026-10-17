@@ -23,7 +23,7 @@ import { overviewSchema } from "../../../src/overview/contract";
 import { reviewSchema } from "../../../src/review/contract";
 import type { Review, ReviewRange } from "../../../src/review/contract";
 import { mealLogSchema, savedMealListSchema, savedMealSchema } from "../../../src/meals/contract";
-import type { MealInput, MealLogInput, SavedMeal } from "../../../src/meals/contract";
+import type { ListedMeal, MealInput, MealLogInput, SavedMeal } from "../../../src/meals/contract";
 import { authorizationSchema, callbackResults, connectionStatusSchema, importKindNames, importKinds, disconnectResultSchema, syncResultSchema } from "../../../src/wearables/contract";
 import type { ConnectionStatus, DisconnectResult, SyncResult, WearableProvider } from "../../../src/wearables/contract";
 import type { Overview } from "../../../src/overview/contract";
@@ -36,7 +36,7 @@ export type { Day } from "../../../src/days/contract";
 
 export type { BarcodeLookup, FoodEntry, LabelFood, PackagedProduct, RecentFood, SearchResult } from "../../../src/food/contract";
 
-export type { SavedMeal } from "../../../src/meals/contract";
+export type { ListedMeal, SavedMeal } from "../../../src/meals/contract";
 
 export type { WaterEntry } from "../../../src/water/contract";
 
@@ -193,7 +193,7 @@ export async function deleteFood(entry: FoodEntry, key: string): Promise<void> {
   await write(`/v1/food-entries/${encodeURIComponent(entry.id)}`, z.null(), { method: "DELETE", key, revision: entry.revision });
 }
 
-export async function getSavedMeals(): Promise<SavedMeal[]> {
+export async function getSavedMeals(): Promise<ListedMeal[]> {
   return (await request("/v1/saved-meals", savedMealListSchema)).meals;
 }
 

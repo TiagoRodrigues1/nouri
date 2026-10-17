@@ -51,7 +51,7 @@ void test("saved meals copy logged foods and log them again in one request", asy
 
     // Editing or deleting the day it came from never changes the meal.
     assert.equal((await app.request(`/v1/food-entries/${oats.id}`, { method: "DELETE", headers: { ...headers, "Idempotency-Key": "oats-delete", "If-Match": '"1"' } })).status, 204);
-    assert.deepEqual((await (await app.request("/v1/saved-meals", { headers })).json()).meals, [meal]);
+    assert.deepEqual((await (await app.request("/v1/saved-meals", { headers })).json()).meals, [{ ...meal, lastLogged: null }]);
     assert.equal((await post(app, "/v1/saved-meals", "meal-gone", { name: "Gone", items: [{ entryId: oats.id, amount: 60 }], daily: null })).status, 404);
     assert.equal((await post(app, "/v1/saved-meals", "meal-foreign", { name: "Foreign", items: [{ entryId: apple.id, amount: 1 }], daily: null })).status, 201);
     assert.equal((await post(otherApp, "/v1/saved-meals", "meal-foreign", { name: "Foreign", items: [{ entryId: apple.id, amount: 1 }], daily: null })).status, 404);

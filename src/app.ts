@@ -189,9 +189,10 @@ export function createApp(db: AppDatabase, identity: Identity, packagedFoods: Pa
     await next();
   });
 
-  // Daily meals log themselves on read: the reads that show logged foods (a day, a week, recent foods) bring the
-  // journal up to date first, so none of them misses a daily meal. Nothing due costs one indexed query.
-  for (const path of ["/v1/days/:date", "/v1/review/:date", "/v1/foods/recent"]) {
+  // Daily meals log themselves on read: the reads that show logged foods (a day, a week, recent foods, the day each
+  // saved meal was last on) bring the journal up to date first, so none of them misses a daily meal. Nothing due
+  // costs one indexed query.
+  for (const path of ["/v1/days/:date", "/v1/review/:date", "/v1/foods/recent", "/v1/saved-meals"]) {
     app.get(path, async (context, next) => {
       await fillDailyMeals(db, context.get("userId"));
       await next();

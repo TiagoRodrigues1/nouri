@@ -2,25 +2,13 @@ import * as stylex from "@stylexjs/stylex";
 import { styles } from "./form-styles";
 import { format } from "./lib/api";
 import { nutrientLine, unitLabels } from "./lib/food-text";
-import { calendarDate, localDate, shiftDate } from "./lib/time";
+import { recentDayLabel } from "./lib/time";
 import { useRecentFoods } from "./lib/use-recent-foods";
 import { draftRow } from "./lib/saved-meals";
 import type { FoodSelection } from "./lib/food-selection";
 import { SelectableResult } from "./selected-foods";
 import { ListSkeleton } from "./loading";
 import { queryFallback } from "./query-status";
-
-const shortDate = new Intl.DateTimeFormat("en", { day: "numeric", month: "short" });
-
-function lastEatenLabel(date: string): string {
-  const today = localDate(new Date());
-
-  if (date === today) return "today";
-
-  if (date === shiftDate(today, -1)) return "yesterday";
-
-  return shortDate.format(calendarDate(date));
-}
 
 // Foods logged before, most recent first, each ticked into the selection at its last amount.
 export function RecentFoodPicker({ selection }: { selection: FoodSelection }) {
@@ -44,7 +32,7 @@ export function RecentFoodPicker({ selection }: { selection: FoodSelection }) {
             <SelectableResult
               id={`recent-${recent.entryId}`}
               name={name}
-              meta={`${format(quantity.amount)} ${unitLabels[quantity.unit]} · ${nutrientLine(recent.food.nutrients)} · ${lastEatenLabel(recent.lastEaten)}`}
+              meta={`${format(quantity.amount)} ${unitLabels[quantity.unit]} · ${nutrientLine(recent.food.nutrients)} · ${recentDayLabel(recent.lastEaten)}`}
               checked={selection.has(key)}
               onToggle={() => selection.toggle({ ...draftRow({ kind: "entry", entryId: recent.entryId }, recent.food), key })}
             />
