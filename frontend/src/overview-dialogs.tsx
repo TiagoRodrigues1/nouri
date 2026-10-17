@@ -16,19 +16,11 @@ import { exerciseHistoryQueryOptions, lastSession, setsLabel } from "./lib/exerc
 import { exerciseDetail, exerciseLibraryQueryOptions } from "./lib/exercise-library";
 import { exerciseKey } from "../../src/workouts/contract";
 import { selectValue } from "./lib/select-value";
-import type { MeasurementInput } from "../../src/measurements/contract";
 import type { StrengthExercise, WorkoutInput } from "../../src/workouts/contract";
 import type { SleepInput } from "../../src/sleep/contract";
-import type { WaterInput } from "../../src/water/contract";
 import { activities } from "../../src/workouts/contract";
-import { measurementKinds, measurementLimits } from "../../src/measurements/contract";
 import type { Activity, ExerciseSession, MeasurementKind } from "./lib/api";
 import { currentTime, dateLabel, occurredAt, shiftDate, shortDayLabel, timeZone } from "./lib/time";
-
-const waterPresets = [
-  { volumeMl: 250, label: "Glass" },
-  { volumeMl: 500, label: "Bottle" },
-] as const;
 
 export const measurementLabels: Record<MeasurementKind, { name: string; unit: string; step: number }> = {
   weight: { name: "Weight", unit: "kg", step: 0.1 },
@@ -76,101 +68,6 @@ function RecordDialog({ open, onOpenChange, title, description, children }: Pick
         {children}
       </DialogContent>
     </Dialog>
-  );
-}
-
-export function MeasurementDialog({ open, onOpenChange, ...props }: RecordDialogProps<MeasurementInput>) {
-  return (
-    <RecordDialog open={open} onOpenChange={onOpenChange} title="Log a measurement" description={`Record a body measurement for ${dateLabel(props.date)}.`}>
-      <MeasurementForm {...props} />
-    </RecordDialog>
-  );
-}
-
-function MeasurementForm({ date, pending, onSave }: FormProps<MeasurementInput>) {
-  const [kind, setKind] = useState<MeasurementKind>("weight");
-  const [value, setValue] = useState("");
-  const [time, setTime] = useState(currentTime);
-  const { unit, step } = measurementLabels[kind];
-  const limits = measurementLimits[kind];
-
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    onSave({ occurredAt: occurredAt(date, time), timeZone, kind, value: Number(value) });
-  }
-
-  return (
-    <form {...stylex.props(formStyles.formStack)} onSubmit={submit}>
-      <div {...stylex.props(formStyles.manualGrid)}>
-        <div>
-          <Label htmlFor="measurement-kind" {...stylex.props(formStyles.formLabel)}>Measurement</Label>
-          <Select value={kind} onValueChange={(next) => setKind(selectValue(measurementKinds, next, "weight"))}>
-            <SelectTrigger id="measurement-kind" {...stylex.props(formStyles.selectTrigger)}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {measurementKinds.map((option) => (
-                <SelectItem key={option} value={option}>
-                  {measurementLabels[option].name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div>
-          <Label htmlFor="measurement-value" {...stylex.props(formStyles.formLabel)}>Value ({unit})</Label>
-          <Input id="measurement-value" type="number" inputMode="decimal" min={limits.min} max={limits.max} step={step} value={value} onChange={(event) => setValue(event.target.value)} required />
-        </div>
-      </div>
-      <div {...stylex.props(formStyles.timeField)}>
-        <Label htmlFor="measurement-time" {...stylex.props(formStyles.formLabel, formStyles.timeLabel)}>Time</Label>
-        <TimePicker id="measurement-time" value={time} onChange={setTime} onNow={() => setTime(currentTime())} />
-      </div>
-      <div {...stylex.props(formStyles.dialogActions)}>
-        <Button type="submit" disabled={pending}>{pending ? "Saving…" : "Save measurement"}</Button>
-      </div>
-    </form>
-  );
-}
-
-export function WaterDialog({ open, onOpenChange, ...props }: RecordDialogProps<WaterInput>) {
-  return (
-    <RecordDialog open={open} onOpenChange={onOpenChange} title="Log water" description={`Add a drink to ${dateLabel(props.date)}.`}>
-      <WaterForm {...props} />
-    </RecordDialog>
-  );
-}
-
-function WaterForm({ date, pending, onSave }: FormProps<WaterInput>) {
-  const [volume, setVolume] = useState("250");
-  const [time, setTime] = useState(currentTime);
-
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    onSave({ occurredAt: occurredAt(date, time), timeZone, volumeMl: Number(volume) });
-  }
-
-  return (
-    <form {...stylex.props(formStyles.formStack)} onSubmit={submit}>
-      <div>
-        <Label htmlFor="water-ml" {...stylex.props(formStyles.formLabel)}>Amount (ml)</Label>
-        <div {...stylex.props(styles.presets)}>
-          <Input id="water-ml" type="number" inputMode="numeric" min={1} max={5000} step={1} value={volume} onChange={(event) => setVolume(event.target.value)} required />
-          {waterPresets.map((preset) => (
-            <Button key={preset.volumeMl} type="button" variant={volume === String(preset.volumeMl) ? "secondary" : "outline"} aria-pressed={volume === String(preset.volumeMl)} onClick={() => setVolume(String(preset.volumeMl))}>
-              {preset.label}, {preset.volumeMl} ml
-            </Button>
-          ))}
-        </div>
-      </div>
-      <div {...stylex.props(formStyles.timeField)}>
-        <Label htmlFor="water-time" {...stylex.props(formStyles.formLabel, formStyles.timeLabel)}>Time</Label>
-        <TimePicker id="water-time" value={time} onChange={setTime} onNow={() => setTime(currentTime())} />
-      </div>
-      <div {...stylex.props(formStyles.dialogActions)}>
-        <Button type="submit" disabled={pending}>{pending ? "Saving…" : "Save water"}</Button>
-      </div>
-    </form>
   );
 }
 

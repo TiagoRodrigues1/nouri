@@ -165,10 +165,17 @@ export function nouriMcpServer(db: AppDatabase, userId: string): McpServer {
     const at = await resolveWhen(db, userId, time);
 
     if (!at) return noZone;
-    const foods: FoodItem[] = items.map((item) => "ref" in item ? item : { name: item.name, quantity: { amount: item.amount, unit: item.unit }, nutrients: item.nutrients, catalogRef: null });
-    const result = await logFoods(db, userId, at, foods);
 
-    if (result.outcome === "catalog-missing") return failure("A catalog ref is unknown. Use a ref exactly as search_foods returned it. Nothing was logged.");
+    const foods: FoodItem[] = items.map((item) => ({
+      food: "ref" in item
+        ? { kind: "catalog", ref: item.ref, quantity: { amount: item.grams, unit: "g" } }
+        : { name: item.name, quantity: { amount: item.amount, unit: item.unit }, nutrients: item.nutrients },
+    }));
+
+    const result = await db.transaction((tx) => logFoods(tx, userId, at, foods));
+
+    // Only a catalog ref can fail: these items copy no entries and keep their own amounts.
+    if (result.outcome !== "created") return failure("A catalog ref is unknown. Use a ref exactly as search_foods returned it. Nothing was logged.");
 
     return text({ date: localDate(at.occurredAt, at.timeZone), timeZone: at.timeZone, entries: result.entries });
   });

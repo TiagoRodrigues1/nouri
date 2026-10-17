@@ -7,22 +7,25 @@ import { Card } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
-import { ExercisePicker } from "../exercise-picker";
 import type { Routine } from "../lib/api";
-import type { RoutineExercise } from "../../../src/routines/contract";
+import { maxRoutineExercises, maxRoutineSets, type RoutineExercise } from "../../../src/routines/contract";
+import { appendExercise, appendSet, changeById, changeSet } from "../lib/exercise-list";
 import { useDeleteRoutine, useRoutines, useSaveRoutine } from "../lib/routines";
 import { localDate } from "../lib/time";
-import { maxRoutineExercises, maxRoutineSets, parseRepTarget, repTargetText } from "../lib/workout-session";
+import { parseRepTarget, repTargetText } from "../lib/workout-session";
 import { Bone, Loading } from "../loading";
 import { styles as pageStyles } from "../meals/meals-styles";
 import { styles as formStyles } from "../form-styles";
 import { queryFallback } from "../query-status";
 import { ExerciseHeading } from "./exercise-heading";
+import { PickExercise, type PickTarget } from "./pick-exercise";
 import { styles } from "./workouts-styles";
 
-type DraftExercise = { id: string; name: string; sets: { id: string; reps: string }[] };
+type DraftSet = { id: string; reps: string };
 
-const draftSet = (reps: string) => ({ id: crypto.randomUUID(), reps });
+type DraftExercise = { id: string; name: string; sets: DraftSet[] };
+
+const draftSet = (reps: string): DraftSet => ({ id: crypto.randomUUID(), reps });
 
 function draftExercises(routine: Routine | null): DraftExercise[] {
   return (routine?.exercises ?? []).map((exercise) => ({
@@ -30,6 +33,26 @@ function draftExercises(routine: Routine | null): DraftExercise[] {
     name: exercise.name,
     sets: exercise.sets.map((set) => draftSet(repTargetText(set.reps))),
   }));
+}
+
+// The routine's exercises; null while a rep target does not parse.
+function plannedExercises(exercises: DraftExercise[]): RoutineExercise[] | null {
+  const planned: RoutineExercise[] = [];
+
+  for (const exercise of exercises) {
+    const sets = [];
+
+    for (const set of exercise.sets) {
+      const reps = parseRepTarget(set.reps);
+
+      if (!reps) return null;
+      sets.push({ reps });
+    }
+
+    planned.push({ name: exercise.name, sets });
+  }
+
+  return planned;
 }
 
 export function NewRoutinePage() {
@@ -71,41 +94,14 @@ function RoutineEditor({ routine }: { routine: Routine | null }) {
   const remove = useDeleteRoutine(toList);
   const [name, setName] = useState(routine?.name ?? "");
   const [exercises, setExercises] = useState(() => draftExercises(routine));
-  // The exercise the picker is choosing for, or "new" for one it adds.
-  const [picking, setPicking] = useState<string | null>(null);
+  const [picking, setPicking] = useState<PickTarget | null>(null);
 
-  function update(id: string, change: (exercise: DraftExercise) => DraftExercise | null) {
-    setExercises((current) => current.flatMap((exercise) => {
-      if (exercise.id !== id) return [exercise];
-      const next = change(exercise);
-
-      return next ? [next] : [];
-    }));
-  }
-
-  function pick(picked: string) {
-    if (picking === "new") setExercises((current) => [...current, { id: crypto.randomUUID(), name: picked, sets: [draftSet("8-12"), draftSet("8-12"), draftSet("8-12")] }]);
-    else if (picking) update(picking, (exercise) => ({ ...exercise, name: picked }));
-  }
-
+  // The browser checks the name and each rep target before this runs.
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const planned: RoutineExercise[] = [];
+    const planned = plannedExercises(exercises);
 
-    for (const exercise of exercises) {
-      const sets = [];
-
-      for (const set of exercise.sets) {
-        const reps = parseRepTarget(set.reps);
-
-        if (!reps) return;
-        sets.push({ reps });
-      }
-
-      planned.push({ name: exercise.name, sets });
-    }
-
-    if (planned.length > 0) save.mutate({ routine, input: { name: name.trim(), exercises: planned } });
+    if (planned && planned.length > 0) save.mutate({ routine, input: { name: name.trim(), exercises: planned } });
   }
 
   return (
@@ -122,7 +118,7 @@ function RoutineEditor({ routine }: { routine: Routine | null }) {
         </div>
         {exercises.map((exercise) => (
           <Card key={exercise.id} {...stylex.props(styles.exerciseCard)}>
-            <ExerciseHeading name={exercise.name} onReplace={() => setPicking(exercise.id)} onRemove={() => update(exercise.id, () => null)} />
+            <ExerciseHeading name={exercise.name} onReplace={() => setPicking({ kind: "replace", exerciseId: exercise.id })} onRemove={() => setExercises((current) => changeById(current, exercise.id, () => null))} />
             <Table aria-label={`${exercise.name} sets`}>
               <TableHeader>
                 <TableRow>
@@ -145,7 +141,7 @@ function RoutineEditor({ routine }: { routine: Routine | null }) {
                           aria-invalid={invalid}
                           placeholder="8-12"
                           value={set.reps}
-                          onChange={(event) => update(exercise.id, (current) => ({ ...current, sets: current.sets.map((other) => (other.id === set.id ? { ...other, reps: event.target.value } : other)) }))}
+                          onChange={(event) => setExercises((current) => changeSet(current, exercise.id, set.id, (other) => ({ ...other, reps: event.target.value })))}
                           required
                           {...stylex.props(styles.numberInput)}
                         />
@@ -157,7 +153,7 @@ function RoutineEditor({ routine }: { routine: Routine | null }) {
                           size="icon-sm"
                           aria-label={`Remove ${exercise.name} set ${index + 1}`}
                           disabled={exercise.sets.length === 1}
-                          onClick={() => update(exercise.id, (current) => ({ ...current, sets: current.sets.filter((other) => other.id !== set.id) }))}
+                          onClick={() => setExercises((current) => changeSet(current, exercise.id, set.id, () => null))}
                         >
                           <X size={14} />
                         </Button>
@@ -172,14 +168,14 @@ function RoutineEditor({ routine }: { routine: Routine | null }) {
               variant="secondary"
               size="sm"
               disabled={exercise.sets.length >= maxRoutineSets}
-              onClick={() => update(exercise.id, (current) => ({ ...current, sets: [...current.sets, draftSet(current.sets.at(-1)?.reps ?? "8-12")] }))}
+              onClick={() => setExercises((current) => appendSet(current, exercise.id, (last) => draftSet(last?.reps ?? "8-12")))}
             >
               <Plus size={14} /> Add set
             </Button>
           </Card>
         ))}
         {exercises.length === 0 && <p {...stylex.props(pageStyles.noFoods)}>No exercises yet.</p>}
-        <Button type="button" variant="outline" disabled={exercises.length >= maxRoutineExercises} onClick={() => setPicking("new")}>
+        <Button type="button" variant="outline" disabled={exercises.length >= maxRoutineExercises} onClick={() => setPicking({ kind: "add" })}>
           <Plus size={16} /> Add exercise
         </Button>
         <div {...stylex.props(styles.actions)}>
@@ -193,7 +189,13 @@ function RoutineEditor({ routine }: { routine: Routine | null }) {
           <Button type="submit" disabled={save.isPending || exercises.length === 0}>Save routine</Button>
         </div>
       </form>
-      <ExercisePicker open={picking !== null} onOpenChange={(open) => { if (!open) setPicking(null); }} date={localDate(new Date())} onPick={pick} />
+      <PickExercise
+        target={picking}
+        onClose={() => setPicking(null)}
+        date={localDate(new Date())}
+        onAdd={(name) => setExercises((current) => appendExercise(current, { id: crypto.randomUUID(), name, sets: [draftSet("8-12"), draftSet("8-12"), draftSet("8-12")] }))}
+        onReplace={(exerciseId, name) => setExercises((current) => changeById(current, exerciseId, (exercise) => ({ ...exercise, name })))}
+      />
     </>
   );
 }

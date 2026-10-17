@@ -9,11 +9,9 @@ import {
   CalendarRange,
   ChartColumn,
   Download,
-  Droplet,
   Dumbbell,
   Moon,
   Pill,
-  Ruler,
   SlidersHorizontal,
   Sun,
   Target,
@@ -24,23 +22,25 @@ import {
 import { toast } from "sonner";
 import { Button } from "./components/ui/button";
 import { DatePicker } from "./components/ui/date-picker";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
+import { defaultReviewDays, reviewRanges, reviewRangeSchema } from "../../src/review/contract";
 import { UserButton, useUser } from "@clerk/react";
-import { createFood, deleteFood, downloadAccountExport } from "./lib/api";
-import { dateLabel, localDate, occurredAt, shiftDate, weekLabel, timeZone as zone } from "./lib/time";
-import { useIdempotentWrite, useIdempotentDelete } from "./lib/use-idempotent";
+import { deleteFood, downloadAccountExport } from "./lib/api";
+import { dateLabel, localDate, rangeLabel, shiftDate } from "./lib/time";
+import { useIdempotentDelete } from "./lib/use-idempotent";
 import { queryRefresh } from "./lib/query-refresh";
 import { useConnection } from "./lib/use-connection";
 import { setTheme, useTheme } from "./lib/theme";
-import { submissionSchema, type FoodSubmission } from "../../src/food/contract";
-import { LogFoodDialog } from "./log-food-dialog";
+import { CommandPalette, type PaletteRecord, type PaletteSetting } from "./command-palette";
 import { EditFoodDialog } from "./edit-food-dialog";
 import { TargetsDialog } from "./targets-dialog";
 import { SupplementsDialog } from "./supplements-dialog";
 import { WearablesDialog } from "./wearables-dialog";
 import { dashboardPageContext, useDashboardPage } from "./dashboard-page-context";
-import { MeasurementDialog, SleepDialog, WaterDialog, WorkoutDialog } from "./overview-dialogs";
+import { SleepDialog, WorkoutDialog } from "./overview-dialogs";
 import { useJournal } from "./overview/use-journal";
-import { Popover, PopoverContent, PopoverTrigger } from "./components/ui/popover";
+import { Kbd } from "./components/ui/kbd";
+import { styles as paletteStyles } from "./palette-styles";
 import type { FoodEntry, RecordCommand } from "./lib/api";
 import { recordPaths } from "../../src/journal/paths";
 import { useResumeFinish, useWorkoutSession } from "./lib/use-workout-session";
@@ -50,13 +50,7 @@ const dateKey = "nouri.selectedDate";
 
 const now = () => localDate(new Date());
 
-type FoodInput = FoodSubmission["food"];
-
 type View = "today" | "meals" | "workouts" | "overview" | "progress" | "review";
-
-type PendingFood = { input: FoodSubmission; signature: string };
-
-type RecordKind = "water" | "workout" | "sleep" | "measurement";
 
 function MealsIcon({ active }: { active: boolean }) {
   return (
@@ -119,10 +113,9 @@ export function Dashboard() {
     setStoredDate(search.date);
   }, [search.date]);
 
-  const [logOpen, setLogOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [logMenuOpen, setLogMenuOpen] = useState(false);
-  const [recordDialog, setRecordDialog] = useState<RecordKind | null>(null);
+  const [recordDialog, setRecordDialog] = useState<PaletteRecord | null>(null);
   const [customizingCards, setCustomizingCards] = useState(false);
   const [targetsOpen, setTargetsOpen] = useState(false);
   const [supplementsOpen, setSupplementsOpen] = useState(false);
@@ -139,23 +132,23 @@ export function Dashboard() {
     refresh: queryRefresh.food, success: () => "Food removed from your log.",
   });
 
-  const createMutation = useIdempotentWrite<PendingFood>((pending, key) => createFood(key, pending.input), {
-    refresh: queryRefresh.food, success: () => "Food added to your log.", onSuccess: () => setLogOpen(false),
-    signature: (pending) => pending.signature,
-  });
+  // Ctrl+K, or Cmd+K on a Mac, opens the palette from anywhere, and again closes it.
+  useEffect(() => {
+    function keyDown(event: KeyboardEvent) {
+      if (event.key.toLowerCase() !== "k" || !(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) return;
+      event.preventDefault();
+      setPaletteOpen((open) => !open);
+    }
 
-  function saveFood(food: FoodInput, time: string) {
-    createMutation.mutate({
-      input: submissionSchema.parse({ occurredAt: occurredAt(date, time), timeZone: zone, food }),
-      signature: JSON.stringify({ date, time, zone, food }),
-    });
-  }
+    window.addEventListener("keydown", keyDown);
 
-  function openLog(kind: "food" | RecordKind) {
-    setLogMenuOpen(false);
+    return () => window.removeEventListener("keydown", keyDown);
+  }, []);
 
-    if (kind === "food") setLogOpen(true);
-    else setRecordDialog(kind);
+  function openSetting(setting: PaletteSetting) {
+    if (setting === "targets") setTargetsOpen(true);
+    else if (setting === "supplements") setSupplementsOpen(true);
+    else setWearablesOpen(true);
   }
 
   function saveRecord(command: RecordCommand, label: string) {
@@ -172,20 +165,9 @@ export function Dashboard() {
           </span>
           <span {...stylex.props(styles.brandName)}>NOURI</span>
         </Link>
-        <Popover open={logMenuOpen} onOpenChange={setLogMenuOpen}>
-          <PopoverTrigger asChild>
-            <Button variant="ghost" {...stylex.props(styles.logButton)} aria-expanded={logMenuOpen}>
-              + Log
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent {...stylex.props(styles.logMenu)} align="start" sideOffset={8}>
-            <button type="button" {...stylex.props(styles.logMenuItem)} onClick={() => openLog("food")}><UtensilsCrossed size={17} /> Food</button>
-            <button type="button" {...stylex.props(styles.logMenuItem)} onClick={() => openLog("water")}><Droplet size={17} /> Water</button>
-            <button type="button" {...stylex.props(styles.logMenuItem)} onClick={() => openLog("sleep")}><Moon size={17} /> Sleep</button>
-            <button type="button" {...stylex.props(styles.logMenuItem)} onClick={() => openLog("workout")}><Dumbbell size={17} /> Exercise</button>
-            <button type="button" {...stylex.props(styles.logMenuItem)} onClick={() => openLog("measurement")}><Ruler size={17} /> Measurement</button>
-          </PopoverContent>
-        </Popover>
+        <Button variant="ghost" {...stylex.props(styles.logButton)} aria-keyshortcuts="Control+K" onClick={() => setPaletteOpen(true)}>
+          + Log <Kbd {...stylex.props(paletteStyles.logShortcut)}>Ctrl K</Kbd>
+        </Button>
         <nav {...stylex.props(styles.sidebarNav)} aria-label="Main navigation">
           <div {...stylex.props(styles.navPages)}>
             <Link
@@ -296,16 +278,16 @@ export function Dashboard() {
       <TargetsDialog open={targetsOpen} onOpenChange={setTargetsOpen} />
       <SupplementsDialog open={supplementsOpen} onOpenChange={setSupplementsOpen} />
       <WearablesDialog open={wearablesOpen} onOpenChange={setWearablesOpen} connection={googleHealth} />
-      <LogFoodDialog open={logOpen} onOpenChange={setLogOpen} date={date} isToday={isToday} pending={createMutation.isPending} onSave={saveFood} />
+      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} date={date} isToday={isToday} onOpenRecord={setRecordDialog} onOpenSetting={openSetting} />
       <EditFoodDialog date={date} entryId={editingId} onClose={() => setEditingId(null)} />
-      <WaterDialog open={recordDialog === "water"} onOpenChange={(open) => setRecordDialog(open ? "water" : null)} date={date} pending={journal.create.isPending} onSave={(input) => saveRecord({ path: recordPaths.water, input }, "Water")} />
       <WorkoutDialog open={recordDialog === "workout"} onOpenChange={(open) => setRecordDialog(open ? "workout" : null)} date={date} pending={journal.create.isPending} onSave={(input) => saveRecord({ path: recordPaths.workout, input }, "Workout")} />
       <SleepDialog open={recordDialog === "sleep"} onOpenChange={(open) => setRecordDialog(open ? "sleep" : null)} date={date} pending={journal.create.isPending} onSave={(input) => saveRecord({ path: recordPaths.sleep, input }, "Sleep")} />
-      <MeasurementDialog open={recordDialog === "measurement"} onOpenChange={(open) => setRecordDialog(open ? "measurement" : null)} date={date} pending={journal.create.isPending} onSave={(input) => saveRecord({ path: recordPaths.measurement, input }, "Measurement")} />
     </div>
     </dashboardPageContext.Provider>
   );
 }
+
+const rangeNames: Record<(typeof reviewRanges)[number], string> = { 7: "7 days", 14: "2 weeks", 30: "1 month", 90: "3 months" };
 
 // The day pages' heading: the day or week shown and the controls that move it. Meals are not tied to a day, so
 // their routes sit outside this layout.
@@ -313,33 +295,50 @@ export function DayLayout() {
   const { date, isToday, onCustomizingCardsChange } = useDashboardPage();
   const view = useView();
   const navigate = useNavigate();
+  const search = useSearch({ strict: false });
   const reviewing = view === "review";
-  const step = reviewing ? 7 : 1;
-  const unit = reviewing ? "week" : "day";
+  const step = reviewing ? search.days ?? defaultReviewDays : 1;
+  const unit = reviewing ? "range" : "day";
 
-  // Stays on the page and keeps its other search params; the review names the last day of its week `to`.
+  // Stays on the page and keeps its other search params; the review names the last day of its range `to`.
   function pickDate(next: string) {
     void navigate({ to: ".", search: (previous) => ({ ...previous, [reviewing ? "to" : "date"]: next }) });
     toast.dismiss();
   }
 
+  function pickRange(next: string) {
+    const days = reviewRangeSchema.safeParse(next);
+
+    if (days.success) void navigate({ to: ".", search: (previous) => ({ ...previous, days: days.data }) });
+  }
+
   return (
     <>
       <header {...stylex.props(styles.dayHeader)}>
-        <h1 {...stylex.props(styles.dayHeadline)}>{reviewing ? weekLabel(date, isToday) : isToday ? "Today" : dateLabel(date)}</h1>
+        <h1 {...stylex.props(styles.dayHeadline)}>{reviewing ? rangeLabel(date, step, isToday) : isToday ? "Today" : dateLabel(date)}</h1>
         <div {...stylex.props(styles.dateActions)}>
           {view === "today" && (
             <Button variant="outline" size="icon-sm" aria-label="Customize cards" title="Customize cards" onClick={() => onCustomizingCardsChange(true)}>
               <SlidersHorizontal size={16} />
             </Button>
           )}
+          {reviewing && (
+            <Select value={String(step)} onValueChange={pickRange}>
+              <SelectTrigger size="sm" aria-label="Review range" {...stylex.props(styles.rangePicker)}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {reviewRanges.map((days) => <SelectItem key={days} value={String(days)}>{rangeNames[days]}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          )}
           <Button variant="outline" size="icon-sm" aria-label={`Previous ${unit}`} onClick={() => pickDate(shiftDate(date, -step))}>
             <ChevronLeft size={17} />
           </Button>
           <DatePicker
-            label={reviewing ? "Choose the last day of the week" : "Choose log date"}
+            label={reviewing ? "Choose the last day of the range" : "Choose log date"}
             value={date}
-            days={reviewing ? 7 : 1}
+            days={step}
             onChange={pickDate}
           />
           <Button variant="outline" size="icon-sm" aria-label={`Next ${unit}`} onClick={() => pickDate(shiftDate(date, step))}>

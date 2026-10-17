@@ -1,4 +1,4 @@
-import { scaleFood, totalNutrients, type FoodEntry, type RecordedFood, type SubmittedFood } from "../../../src/food/contract.js";
+import { scaleFood, type FoodEntry, type FoodItemInput, type RecordedFood, type SubmittedFood } from "../../../src/food/contract.js";
 import { maxMealItems, type MealItemInput, type SavedMeal } from "../../../src/meals/contract.js";
 import { typedAmount } from "./typed-amount.js";
 import { portionFood, sourceOf } from "./food-portion.js";
@@ -16,44 +16,24 @@ export function rowFood(row: AmountRow): RecordedFood {
   return amount === null ? row.food : scaleFood(row.food, amount);
 }
 
-// One saved item offered for logging, ticked to include it.
-export type MealRow = AmountRow & { id: string; included: boolean };
-
-export function mealRows(items: Array<{ id: string; food: RecordedFood }>): MealRow[] {
-  return items.map(({ id, food }) => ({ id, food, included: true, amount: String(food.quantity.amount) }));
-}
-
-// The rows to send, each with its amount; null while an included row has no usable amount.
-export function chosenAmounts(rows: MealRow[]): Array<{ id: string; amount: number }> | null {
-  const chosen = [];
-
-  for (const row of rows) {
-    if (!row.included) continue;
-    const amount = typedAmount(row.amount);
-
-    if (amount === null) return null;
-    chosen.push({ id: row.id, amount });
-  }
-
-  return chosen;
-}
-
-// Energy of the included rows; null when nothing is included or any of them lacks a value.
-export function includedKcal(rows: MealRow[]): number | null {
-  return totalNutrients(rows.flatMap((row) => (row.included ? [rowFood(row).nutrients] : []))).kcal;
-}
-
-// Where a food in the meal editor came from, which decides what the server is sent: a saved item by id, a logged
-// food by entry, or a food as logging submits it (a Ciqual reference, or a typed or scanned label).
-export type DraftSource =
-  | { kind: "saved"; id: string }
+// Where a ticked food came from, which decides what the server is sent: a logged food by entry, or a food as
+// logging submits it (a Ciqual reference, or a typed or scanned label).
+export type FoodSource =
   | { kind: "entry"; entryId: string }
   | { kind: "submitted"; food: SubmittedFood };
 
-// One food in the meal being edited.
-export type DraftRow = AmountRow & { key: string; source: DraftSource };
+// Where a food in the meal editor came from: a saved item by id, or any ticked food.
+export type DraftSource = { kind: "saved"; id: string } | FoodSource;
 
-export function draftRow(source: DraftSource, food: RecordedFood, amount = food.quantity.amount): DraftRow {
+type Row<S> = AmountRow & { key: string; source: S };
+
+// One ticked food, in the log dialog's selection or added to a meal.
+export type FoodRow = Row<FoodSource>;
+
+// One food in the meal being edited.
+export type DraftRow = Row<DraftSource>;
+
+export function draftRow<S extends DraftSource>(source: S, food: RecordedFood, amount = food.quantity.amount): Row<S> {
   return { key: crypto.randomUUID(), source, food, amount: String(amount) };
 }
 
@@ -65,22 +45,30 @@ export function entryRows(entries: FoodEntry[]): DraftRow[] {
   return entries.map((entry) => draftRow({ kind: "entry", entryId: entry.id }, entry.food));
 }
 
-// The items to send; null while a row has no usable amount.
-export function draftItems(rows: DraftRow[]): MealItemInput[] | null {
-  const items: MealItemInput[] = [];
+// Each row's item at its typed amount; null while a row has no usable amount.
+function rowItems<R extends AmountRow, T>(rows: R[], item: (row: R, amount: number) => T): T[] | null {
+  const items: T[] = [];
 
   for (const row of rows) {
     const amount = typedAmount(row.amount);
 
     if (amount === null) return null;
-    const { source } = row;
-
-    if (source.kind === "saved") items.push({ id: source.id, amount });
-    else if (source.kind === "entry") items.push({ entryId: source.entryId, amount });
-    else {
-      items.push({ food: portionFood(sourceOf(source.food, row.food), amount).submitted });
-    }
+    items.push(item(row, amount));
   }
 
   return items;
+}
+
+function foodItem(source: FoodSource, food: RecordedFood, amount: number): FoodItemInput {
+  return source.kind === "entry" ? { entryId: source.entryId, amount } : { food: portionFood(sourceOf(source.food, food), amount).submitted };
+}
+
+// The ticked foods to log; null while a row has no usable amount.
+export function foodItems(rows: FoodRow[]): FoodItemInput[] | null {
+  return rowItems(rows, (row, amount) => foodItem(row.source, row.food, amount));
+}
+
+// The meal's items to send; null while a row has no usable amount.
+export function draftItems(rows: DraftRow[]): MealItemInput[] | null {
+  return rowItems(rows, ({ source, food }, amount) => (source.kind === "saved" ? { id: source.id, amount } : foodItem(source, food, amount)));
 }

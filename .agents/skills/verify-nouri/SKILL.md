@@ -1,6 +1,6 @@
 ---
 name: verify-nouri
-description: Verify Nouri's signed-in food journal web page and API through an isolated local PostgreSQL instance and a real browser. Use after changes to account access, data export, theme, food search, food or water logging, food edits, saved meals, daily totals, date navigation, deletion, My Day cards, targets, supplements (the list and daily ticks on My Day), the Overview page (measurements, workouts, sleep, progress photos), workout history on the Progress page, workout routines and live workouts on the Workouts page, or the seven-day Review page, including Google Health sleep, workout, steps, active energy, and heart rate import, the phone layout, and the MCP server's sign-in handshake.
+description: Verify Nouri's signed-in food journal web page and API through an isolated local PostgreSQL instance and a real browser. Use after changes to account access, data export, theme, food search, food or water logging, food edits, saved meals, daily totals, date navigation, deletion, My Day cards, targets, supplements (the list and daily ticks on My Day), the Overview page (measurements, workouts, sleep, progress photos), workout history on the Progress page, workout routines and live workouts on the Workouts page, or the Review page (its range picker and weight chart), including Google Health sleep, workout, steps, active energy, and heart rate import, the phone layout, and the MCP server's sign-in handshake.
 ---
 
 # Verify Nouri
@@ -22,7 +22,7 @@ EVIDENCE="/tmp/nouri-verification-evidence/$RUN_ID"
 mkdir -p "$EVIDENCE"
 ```
 
-The helper prints `Healthy Nouri run ...` when the page, its linked assets, OpenAPI document, server process, and database answer, and the API refuses an anonymous day request. It records its own process and container IDs under `/tmp/nouri-verify-$RUN_ID`. Keep the shell variables for the entire drive. Two runs with different IDs use separate databases, ports, Clerk users, and browser sessions. Never drive an instance started by somebody else.
+The helper prints `Healthy Nouri run ...` after checking the page and its linked assets, OpenAPI document, server process, database readiness, and rejection of an anonymous day request. It records its own process and container IDs under `/tmp/nouri-verify-$RUN_ID`. Keep the shell variables for the entire drive. Two runs with different IDs use separate databases, ports, Clerk users, and browser sessions. Never drive an instance started by somebody else.
 
 ## Doctor
 

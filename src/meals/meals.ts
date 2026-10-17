@@ -2,11 +2,11 @@ import { randomUUID } from "node:crypto";
 import { and, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import type { AppDatabase, Transaction } from "../db/database.js";
 import { savedMeals } from "../db/schema.js";
-import { insertFoods, recordedFoods, resolveFood } from "../food/food.js";
+import { foodSources, insertFoods } from "../food/food.js";
 import { softDelete } from "../journal/records.js";
 import { requestHash, withReceipt } from "../journal/receipt.js";
 import { scaledFood } from "../food/contract.js";
-import type { RecordedFood } from "../food/contract.js";
+import type { FoodItemInput } from "../food/contract.js";
 import { instantAt, localDate, shiftDate } from "../time.js";
 import { mealLogSchema, savedMealSchema } from "./contract.js";
 import type { MealDaily, MealInput, MealItemInput, MealLog, MealLogInput, SavedMeal, SavedMealList, StoredMealItem } from "./contract.js";
@@ -74,42 +74,30 @@ type ItemFailure = { outcome: "missing" | "catalog-missing" | "invalid-item" };
 
 type Resolved = { outcome: "resolved"; items: StoredMealItem[] } | ItemFailure;
 
-type Source = { outcome: "found"; item: StoredMealItem } | ItemFailure;
-
-const newItem = (food: RecordedFood): Source => ({ outcome: "found", item: { id: randomUUID(), food } });
-
-// The item an input names, before its amount is applied: a saved item keeps its id and basis; anything else is a
-// new item whose basis is the food as resolved now, so later edits scale from it.
-function source(input: MealItemInput, saved: Map<string, StoredMealItem>, entries: Map<string, RecordedFood>): Source {
-  if ("id" in input) {
-    const item = saved.get(input.id);
-
-    return item ? { outcome: "found", item } : { outcome: "invalid-item" };
-  }
-
-  if ("entryId" in input) {
-    const food = entries.get(input.entryId);
-
-    return food ? newItem(food) : { outcome: "missing" };
-  }
-
-  const food = resolveFood(input.food);
-
-  return food ? newItem(food) : { outcome: "catalog-missing" };
-}
-
-// Each input as a stored item at its amount, in the order given. A submitted food is kept at the amount it was sent.
+// Each input as a stored item at its amount, in the order given. A saved item keeps its id and basis; any other is a
+// new item whose basis is the food as resolved now, so later edits scale from it. A submitted food is kept at the
+// amount it was sent.
 async function resolveItems(tx: Transaction, userId: string, saved: StoredMealItem[], inputs: MealItemInput[]): Promise<Resolved> {
   const savedById = new Map(saved.map((item) => [item.id, item]));
-  const entryIds = inputs.flatMap((input) => ("entryId" in input ? [input.entryId] : []));
-  const entries = entryIds.length > 0 ? await recordedFoods(tx, userId, entryIds) : new Map<string, RecordedFood>();
+  const source = await foodSources(tx, userId, inputs.filter((input): input is FoodItemInput => !("id" in input)));
   const items = [];
 
   for (const input of inputs) {
-    const from = source(input, savedById, entries);
+    let from: StoredMealItem;
 
-    if (from.outcome !== "found") return from;
-    const item = portion(from.item, "amount" in input ? input.amount : input.food.quantity.amount);
+    if ("id" in input) {
+      const item = savedById.get(input.id);
+
+      if (!item) return { outcome: "invalid-item" };
+      from = item;
+    } else {
+      const found = source(input);
+
+      if (found.outcome !== "found") return found;
+      from = { id: randomUUID(), food: found.food };
+    }
+
+    const item = portion(from, "amount" in input ? input.amount : input.food.quantity.amount);
 
     if (!item) return { outcome: "invalid-item" };
     items.push(item);

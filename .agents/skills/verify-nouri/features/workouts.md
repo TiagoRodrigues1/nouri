@@ -6,7 +6,7 @@ Create a routine. Fill `Routine name` with `Push day`, and use `Add exercise` to
 
 Choose `Start Push day`. `/workouts/session` shows `Push day`, `Finish`, and a `Workout so far` strip of Time (counting), Volume, and Sets. Each set row has a PREVIOUS cell, `<exercise> set N weight in kg`, `<exercise> set N reps` with the target as its placeholder (`8–12`), a `<exercise> set N done` checkbox, and `Remove <exercise> set N`.
 
-Before ticking any sets, choose `Finish`: the dialog says `No sets are ticked yet, so there is nothing to log.`, with `Keep going` and `Discard`. Choose `Keep going`.
+Before ticking any sets, choose `Finish`: the dialog says `No sets are ticked yet, so there is nothing to log.`, with `Keep going` and `Discard workout`. Choose `Keep going`.
 
 Type `60` as set 1's weight and tick it: reps fill with `5`, the row turns green (`tr[data-done]`), and Volume reads `300 kg`. A decimal comma (`62,5`) is accepted. Reload: the ticks and values stay, and the clock keeps counting from the start.
 

@@ -13,6 +13,7 @@ import { TimePicker } from "../components/ui/time-picker";
 import { format, type SavedMeal } from "../lib/api";
 import { dayQueryOptions } from "../lib/day-query";
 import { nutrientLine, unitLabels } from "../lib/food-text";
+import { rowSelection } from "../lib/food-selection";
 import { draftItems, entryRows, maxMealItems, rowFood, savedRows, type DraftRow } from "../lib/saved-meals";
 import { totalNutrients } from "../../../src/food/contract";
 import { currentTime, dateLabel, timeZone } from "../lib/time";
@@ -88,6 +89,13 @@ function MealEditor({ meal, initialRows, from }: { meal: SavedMeal | null; initi
     toast.success(`${row.food.name} added to the meal.`);
   }
 
+  function removeRow(key: string) {
+    rowMotion.remove(key, () => setRows((current) => current.filter((row) => row.key !== key)));
+  }
+
+  // Unticking in the picker removes the row at once, so the checkbox follows the click; the row's own Remove fades.
+  const selection = rowSelection(rows, add, (key) => setRows((current) => current.filter((row) => row.key !== key)));
+
   function change(key: string, amount: string) {
     setRows((current) => current.map((row) => (row.key === key ? { ...row, amount } : row)));
   }
@@ -123,7 +131,7 @@ function MealEditor({ meal, initialRows, from }: { meal: SavedMeal | null; initi
                 <p {...stylex.props(styles.noFoods)}>No foods yet. Add some from the panel{" "}<span aria-hidden>→</span></p>
               ) : (
                 <ul {...stylex.props(styles.rows)} aria-label="Foods in this meal">
-                  {rows.map((row, index) => <FoodRow key={row.key} row={row} first={index === 0} motion={rowMotion.rowProps(row.key)} onAmount={(amount) => change(row.key, amount)} onRemove={() => rowMotion.remove(row.key, () => setRows((current) => current.filter((other) => other.key !== row.key)))} />)}
+                  {rows.map((row, index) => <FoodRow key={row.key} row={row} first={index === 0} motion={rowMotion.rowProps(row.key)} onAmount={(amount) => change(row.key, amount)} onRemove={() => removeRow(row.key)} />)}
                 </ul>
               )}
               {tooMany && <p {...stylex.props(styles.hint, styles.danger)} role="alert">A meal holds up to {maxMealItems} foods.</p>}
@@ -154,7 +162,7 @@ function MealEditor({ meal, initialRows, from }: { meal: SavedMeal | null; initi
             </div>
           </form>
         </Card>
-        <AddFoodPanel onAdd={add} />
+        <AddFoodPanel selection={selection} onAdd={add} />
       </div>
     </>
   );

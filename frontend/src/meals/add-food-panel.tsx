@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Card } from "../components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { styles as formStyles } from "../form-styles";
+import type { FoodSelection } from "../lib/food-selection";
 import { draftRow, type DraftRow } from "../lib/saved-meals";
 import { ManualFoodForm } from "../manual-food-form";
 import { RecentFoodPicker } from "../recent-foods-tab";
@@ -10,9 +11,9 @@ import { SearchFoodPicker } from "../search-foods-tab";
 import { recordedFood } from "../../../src/food/contract";
 import { styles } from "./meals-styles";
 
-// The food dialog's pickers, adding to the meal instead of the log. A Ciqual food is added by reference so the
-// server measures it; a scanned or typed food is added as its label reads.
-export function AddFoodPanel({ onAdd }: { onAdd: (row: DraftRow) => void }) {
+// The food dialog's pickers, ticking foods into the meal instead of the log. A Ciqual food is added by reference so
+// the server measures it; a scanned or typed food is added as its label reads.
+export function AddFoodPanel({ selection, onAdd }: { selection: FoodSelection; onAdd: (row: DraftRow) => void }) {
   // Remounting the manual form clears it for the next food.
   const [manualKey, setManualKey] = useState(0);
 
@@ -26,16 +27,10 @@ export function AddFoodPanel({ onAdd }: { onAdd: (row: DraftRow) => void }) {
           <TabsTrigger value="manual" {...stylex.props(formStyles.flexOne)}>Manual</TabsTrigger>
         </TabsList>
         <TabsContent value="recent">
-          <RecentFoodPicker
-            actionLabel="Add to meal"
-            onPick={(recent, amount) => onAdd(draftRow({ kind: "entry", entryId: recent.entryId }, recent.food, amount))}
-          />
+          <RecentFoodPicker selection={selection} />
         </TabsContent>
         <TabsContent value="search">
-          <SearchFoodPicker
-            actionLabel="Add to meal"
-            onPick={({ submitted, preview }) => onAdd(draftRow({ kind: "submitted", food: submitted }, preview))}
-          />
+          <SearchFoodPicker selection={selection} />
         </TabsContent>
         <TabsContent value="manual">
           <ManualFoodForm

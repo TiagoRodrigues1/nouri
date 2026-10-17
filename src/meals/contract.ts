@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { entrySchema, positiveAmount, recordedFoodSchema, submittedFoodSchema } from "../food/contract.js";
+import { entrySchema, foodItemInputSchema, positiveAmount, recordedFoodSchema } from "../food/contract.js";
 import type { RecordedFood } from "../food/contract.js";
 import { occurredAtSchema, timeZoneSchema } from "../time.js";
 
@@ -31,14 +31,10 @@ const mealNameSchema = z.string().trim().min(1).max(80);
 const itemAmountsSchema = z.array(z.object({ id: z.uuid(), amount: positiveAmount.max(10_000) }).strict())
   .min(1).max(maxMealItems).refine((items) => unique(items.map((item) => item.id)), "Items must be unique");
 
-const mealAmount = positiveAmount.max(10_000);
-
-// Where a meal's food comes from: a saved item kept at an amount (editing only), a logged entry copied at an
-// amount, or a food as logging submits it, so a Ciqual food is a reference the server measures.
+// Where a meal's food comes from: a saved item kept at an amount (editing only), or any food item.
 export const mealItemInputSchema = z.union([
-  z.object({ id: z.uuid(), amount: mealAmount }).strict(),
-  z.object({ entryId: z.uuid(), amount: mealAmount }).strict(),
-  z.object({ food: submittedFoodSchema }).strict(),
+  z.object({ id: z.uuid(), amount: positiveAmount.max(10_000) }).strict(),
+  ...foodItemInputSchema.options,
 ]);
 
 // The whole meal. Creating and editing send the same body, and an edit replaces the meal: a saved item left out

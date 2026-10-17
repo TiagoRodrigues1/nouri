@@ -21,7 +21,7 @@ import { barcodeLookupSchema, entrySchema, foodBatchSchema, labelFoodSchema, rec
 import type { BarcodeLookup, CommunityFoodInput, FoodEntry, LabelFood, RecentFood, SearchResult } from "../../../src/food/contract";
 import { overviewSchema } from "../../../src/overview/contract";
 import { reviewSchema } from "../../../src/review/contract";
-import type { Review } from "../../../src/review/contract";
+import type { Review, ReviewRange } from "../../../src/review/contract";
 import { mealLogSchema, savedMealListSchema, savedMealSchema } from "../../../src/meals/contract";
 import type { MealInput, MealLogInput, SavedMeal } from "../../../src/meals/contract";
 import { authorizationSchema, callbackResults, connectionStatusSchema, importKindNames, importKinds, disconnectResultSchema, syncResultSchema } from "../../../src/wearables/contract";
@@ -215,8 +215,8 @@ export async function deleteSavedMeal(meal: SavedMeal, key: string): Promise<voi
   await write(`/v1/saved-meals/${encodeURIComponent(meal.id)}`, z.null(), { method: "DELETE", key, revision: meal.revision });
 }
 
-export async function getReview(date: string): Promise<Review> {
-  return request(`/v1/review/${date}`, reviewSchema);
+export async function getReview(date: string, days: ReviewRange): Promise<Review> {
+  return request(`/v1/review/${date}?days=${days}`, reviewSchema);
 }
 
 export async function getOverview(date: string): Promise<Overview> {
