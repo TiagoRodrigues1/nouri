@@ -7,7 +7,7 @@ import { softDelete } from "../journal/records.js";
 import { requestHash, withReceipt } from "../journal/receipt.js";
 import { scaledFood } from "../food/contract.js";
 import type { FoodItemInput } from "../food/contract.js";
-import { instantAt, localDate, shiftDate } from "../time.js";
+import { instantAt, isoWeekday, localDate, shiftDate } from "../time.js";
 import { mealLogSchema, savedMealSchema } from "./contract.js";
 import type { MealDaily, MealInput, MealItemInput, MealLog, MealLogInput, MealLogRef, SavedMeal, SavedMealList, StoredMealItem } from "./contract.js";
 
@@ -32,7 +32,8 @@ export type MealLogUndoResult = { outcome: "deleted" | "missing" | "key-reuse" }
 type MealRow = typeof savedMeals.$inferSelect;
 
 function meal(row: MealRow): SavedMeal {
-  const daily = row.dailyTime && row.dailyTimeZone ? { time: row.dailyTime, timeZone: row.dailyTimeZone } : null;
+  const { dailyTime: time, dailyTimeZone: timeZone, dailyWeekdays: weekdays } = row;
+  const daily = time && timeZone && weekdays ? { time, timeZone, weekdays } : null;
 
   return { id: row.id, revision: row.revision, name: row.name, items: row.items.map(({ id, food }) => ({ id, food })), daily };
 }
@@ -57,10 +58,10 @@ function portion(item: StoredMealItem, amount: number): StoredMealItem | null {
 // The daily columns a write sets, given the meal as stored (none for a new meal). Only turning a meal on moves the
 // cursor: to yesterday, so today fills next, and never back, so turning it off and on again the same day fills
 // nothing twice. A meal already on keeps its cursor, so an edit never skips days not yet filled, and turning it
-// off keeps the days already filled.
+// off keeps the days already filled. New weekdays apply from the next unfilled day.
 function dailyColumns(daily: MealDaily | null, stored: Pick<MealRow, "dailyTime" | "dailyFilledThrough"> | null) {
-  if (!daily) return { dailyTime: null, dailyTimeZone: null };
-  const setting = { dailyTime: daily.time, dailyTimeZone: daily.timeZone };
+  if (!daily) return { dailyTime: null, dailyTimeZone: null, dailyWeekdays: null };
+  const setting = { dailyTime: daily.time, dailyTimeZone: daily.timeZone, dailyWeekdays: daily.weekdays.toSorted((a, b) => a - b) };
 
   // A meal already on always has a cursor (saved_meals_daily_check).
   if (stored?.dailyTime) return setting;
@@ -251,18 +252,24 @@ export async function mealLogsFor(db: AppDatabase, userId: string, ids: string[]
     .orderBy(mealLogs.createdAt, mealLogs.id);
 }
 
-// What a daily meal still has to log: each local day after its cursor through today in its zone, at its time.
-// Null when it is off or already up to date. The three columns are set together (saved_meals_daily_check).
-function dueFill(row: Pick<MealRow, "dailyTime" | "dailyTimeZone" | "dailyFilledThrough">) {
-  const { dailyTime: time, dailyTimeZone: timeZone, dailyFilledThrough: cursor } = row;
+// What a daily meal still has to log: each local day after its cursor through today in its zone that falls on one
+// of its weekdays, at its time. The cursor still moves past the other days, so changing the weekdays later never
+// fills a day already passed. Null when it is off or already up to date. The columns are set together
+// (saved_meals_daily_check, saved_meals_daily_weekdays_check).
+function dueFill(row: Pick<MealRow, "dailyTime" | "dailyTimeZone" | "dailyFilledThrough" | "dailyWeekdays">) {
+  const { dailyTime: time, dailyTimeZone: timeZone, dailyFilledThrough: cursor, dailyWeekdays: weekdays } = row;
 
-  if (!time || !timeZone || !cursor) return null;
+  if (!time || !timeZone || !cursor || !weekdays) return null;
   const through = today(timeZone);
+
+  if (cursor >= through) return null;
   const days = [];
 
-  for (let date = shiftDate(cursor, 1); date <= through; date = shiftDate(date, 1)) days.push(date);
+  for (let date = shiftDate(cursor, 1); date <= through; date = shiftDate(date, 1)) {
+    if (weekdays.includes(isoWeekday(date))) days.push(date);
+  }
 
-  return days.length > 0 ? { time, timeZone, days, through } : null;
+  return { time, timeZone, days, through };
 }
 
 // Logs each daily meal on every local day it is due, at its time, and moves the cursor. The reads that show logged
@@ -271,7 +278,7 @@ function dueFill(row: Pick<MealRow, "dailyTime" | "dailyTimeZone" | "dailyFilled
 // reads at once fill each day once.
 export async function fillDailyMeals(db: AppDatabase, userId: string): Promise<void> {
   const active = and(eq(savedMeals.userId, userId), isNotNull(savedMeals.dailyTime), isNull(savedMeals.deletedAt));
-  const candidates = await db.select({ id: savedMeals.id, dailyTime: savedMeals.dailyTime, dailyTimeZone: savedMeals.dailyTimeZone, dailyFilledThrough: savedMeals.dailyFilledThrough }).from(savedMeals).where(active);
+  const candidates = await db.select({ id: savedMeals.id, dailyTime: savedMeals.dailyTime, dailyTimeZone: savedMeals.dailyTimeZone, dailyFilledThrough: savedMeals.dailyFilledThrough, dailyWeekdays: savedMeals.dailyWeekdays }).from(savedMeals).where(active);
   const due = candidates.filter((row) => dueFill(row) !== null).map(({ id }) => id);
 
   if (due.length === 0) return;

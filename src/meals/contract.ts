@@ -5,10 +5,17 @@ import { occurredAtSchema, timeZoneSchema } from "../time.js";
 
 export const maxMealItems = 20;
 
-// A meal that logs itself every day at a local time, in the zone it was turned on in.
+// ISO weekdays, 1 Monday to 7 Sunday.
+export const everyDay = [1, 2, 3, 4, 5, 6, 7];
+
+// A meal that logs itself on chosen weekdays at a local time, in the zone it was turned on in. The weekdays default
+// to every day, so callers and receipts from before weekdays were added still mean what they did.
 export const mealDailySchema = z.object({
   time: z.string().regex(/^([01][0-9]|2[0-3]):[0-5][0-9]$/),
   timeZone: timeZoneSchema,
+  weekdays: z.array(z.number().int().min(1).max(7)).min(1).max(7)
+    .refine((days) => new Set(days).size === days.length, "Weekdays must be unique")
+    .default(() => [...everyDay]),
 }).strict();
 
 export const savedMealSchema = z.object({
