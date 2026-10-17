@@ -4,30 +4,45 @@ import { colors } from "./theme.stylex";
 const phone = "@media (max-width: 680px)";
 
 export const styles = stylex.create({
-  // Floats near the top without dimming the page, so the day stays readable while logging. Phones get the
-  // whole screen.
+  // Floats near the top without dimming the page, so the day stays readable while logging. Phones get a sheet
+  // from the bottom, kept above the on-screen keyboard.
   palette: {
     position: "fixed",
     zIndex: 50,
-    top: { default: "12vh", [phone]: 0 },
+    top: { default: "12vh", [phone]: "auto" },
+    bottom: { default: "auto", [phone]: "var(--keyboard-inset, 0px)" },
     left: { default: "50%", [phone]: 0 },
     transform: { default: "translateX(-50%)", [phone]: "none" },
     width: { default: "min(600px, calc(100% - 2rem))", [phone]: "100%" },
-    height: { default: "auto", [phone]: "100dvh" },
+    maxHeight: { default: "none", [phone]: "calc(100dvh - 24px - var(--keyboard-inset, 0px))" },
     display: "flex",
     flexDirection: "column",
     overflow: "hidden",
     backgroundColor: colors.card,
     color: colors.foreground,
-    borderWidth: { default: 1, [phone]: 0 },
+    borderWidth: 1,
+    borderBottomWidth: { default: 1, [phone]: 0 },
     borderStyle: "solid",
     borderColor: colors.border,
-    borderRadius: { default: 12, [phone]: 0 },
+    borderRadius: { default: 12, [phone]: "18px 18px 0 0" },
+    paddingBottom: { default: 0, [phone]: "env(safe-area-inset-bottom)" },
     boxShadow: "0 12px 40px rgba(39, 52, 59, .18), 0 1px 2px rgba(0, 0, 0, .05)",
     outline: "none",
   },
+  // How much of the screen the on-screen keyboard covers, which the phone sheet sits above.
+  keyboardInset: (inset: string) => ({ "--keyboard-inset": inset }),
+  // The sheet's handle, which only says it is a sheet.
+  grab: {
+    display: { default: "none", [phone]: "block" },
+    flexShrink: 0,
+    width: 36,
+    height: 4,
+    margin: "8px auto 2px",
+    borderRadius: 2,
+    backgroundColor: colors.input,
+  },
   command: {
-    flex: { default: "none", [phone]: "1" },
+    flex: { default: "none", [phone]: "0 1 auto" },
     minHeight: 0,
     padding: 0,
     borderRadius: 0,
@@ -42,6 +57,18 @@ export const styles = stylex.create({
     borderBottomWidth: 1,
     borderBottomStyle: "solid",
     borderBottomColor: colors.border,
+  },
+  headerBottom: {
+    order: 1,
+    margin: "4px 12px 12px",
+    borderWidth: 1,
+    borderStyle: "solid",
+    borderColor: colors.input,
+    borderRadius: 12,
+  },
+  // A long list, such as the food search, takes most of a phone's height so it does not jump as results arrive.
+  tall: {
+    height: { default: "auto", [phone]: "85dvh" },
   },
   headerIcon: {
     color: colors.mutedForeground,
@@ -93,12 +120,15 @@ export const styles = stylex.create({
   },
   list: {
     maxHeight: { default: 380, [phone]: "none" },
-    flex: { default: "none", [phone]: "1" },
+    flex: { default: "none", [phone]: "1 1 auto" },
+    minHeight: 0,
     padding: "4px 6px",
   },
   item: {
     gap: 10,
-    minHeight: 36,
+    minHeight: { default: 36, [phone]: 48 },
+    // cmdk still marks an item as highlighted on touch, where it means nothing.
+    backgroundColor: { default: null, [phone]: "transparent" },
     padding: "7px 8px",
     borderRadius: 7,
     fontSize: 13.5,
@@ -125,8 +155,8 @@ export const styles = stylex.create({
     display: "grid",
     placeItems: "center",
     flexShrink: 0,
-    width: 16,
-    height: 16,
+    width: { default: 16, [phone]: 20 },
+    height: { default: 16, [phone]: 20 },
     padding: 0,
     borderWidth: 1.5,
     borderStyle: "solid",
@@ -274,6 +304,92 @@ export const styles = stylex.create({
     display: "flex",
     justifyContent: "flex-end",
     gap: 8,
+  },
+  // A food's amount on a phone, which opens it to change.
+  amountButton: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 2,
+    minHeight: 32,
+    padding: "0 4px 0 8px",
+    borderWidth: 1,
+    borderStyle: "solid",
+    borderColor: colors.border,
+    borderRadius: 8,
+    backgroundColor: colors.card,
+    color: colors.foreground,
+    fontSize: 12,
+    cursor: "pointer",
+  },
+  logBar: {
+    flexWrap: "nowrap",
+    gap: 8,
+    padding: "10px 12px",
+    backgroundColor: colors.card,
+  },
+  logBarButton: {
+    flex: 1,
+    height: 40,
+  },
+  desktopOnly: {
+    display: { default: "inline-flex", [phone]: "none" },
+  },
+  launcher: {
+    padding: "6px 6px 0",
+  },
+  tiles: {
+    display: "grid",
+    gridTemplateColumns: "repeat(3, 1fr)",
+    gap: 8,
+  },
+  // Each tile takes its color from --tint, which the tint styles below set.
+  tile: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    height: 76,
+    borderWidth: 0,
+    borderRadius: 14,
+    backgroundColor: "color-mix(in srgb, var(--tint) 13%, transparent)",
+    color: "var(--tint)",
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: "pointer",
+    transform: { default: "none", ":active": "scale(.97)" },
+    transition: "transform 120ms",
+  },
+  tintFood: { "--tint": colors.food },
+  tintWater: { "--tint": colors.water },
+  tintScan: { "--tint": colors.foreground },
+  tintWeight: { "--tint": colors.measurements },
+  tintWorkout: { "--tint": colors.activityStrong },
+  tintSleep: { "--tint": colors.sleep },
+  launcherHeading: {
+    margin: "16px 4px 8px",
+  },
+  chips: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 6,
+    paddingBottom: 4,
+  },
+  chip: {
+    maxWidth: "100%",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+    minHeight: 34,
+    padding: "0 12px",
+    borderWidth: 1,
+    borderStyle: "solid",
+    borderColor: colors.border,
+    borderRadius: 999,
+    backgroundColor: colors.muted,
+    color: colors.foreground,
+    fontSize: 13,
+    cursor: "pointer",
   },
   // The + Log button's shortcut, on the primary fill. Phones have no keyboard to press it with.
   logShortcut: {
