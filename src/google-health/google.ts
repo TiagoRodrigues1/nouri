@@ -1,10 +1,11 @@
 import type { z } from "zod";
-import { activeEnergyRollupSchema, dataPageSchema, exerciseDataPointSchema, heartRateRollupSchema, restingHeartRatePointSchema, rollupPageSchema, scopes, sleepDataPointSchema, stepsRollupSchema, syncWindowDays, tokenErrorSchema, tokenResponseSchema } from "./contract.js";
+import { activeEnergyRollupSchema, apiErrorSchema, dataPageSchema, exerciseDataPointSchema, heartRateRollupSchema, identitySchema, restingHeartRatePointSchema, rollupPageSchema, scopes, sleepDataPointSchema, stepsRollupSchema, syncWindowDays, tokenErrorSchema, tokenResponseSchema } from "./contract.js";
 import type { GoogleHealthConfig, RestingHeartRatePoint } from "./contract.js";
 import type { BpmRange } from "../daily-totals/contract.js";
 import { activityRecords, heartRateRecords, type DaySeries, type DayValue } from "./daily-import.js";
 import { sleepRecord } from "./sleep-import.js";
 import { workoutRecord } from "./workout-import.js";
+import { googleWebhook } from "./webhook.js";
 import { importKinds } from "../wearables/contract.js";
 import { ProviderFailure, reauthorizeMessage } from "../wearables/provider.js";
 import type { CloudProvider, DayRange, OAuthGrant, Pull } from "../wearables/provider.js";
@@ -16,6 +17,7 @@ export const googleEndpoints = {
   token: "https://oauth2.googleapis.com/token",
   revoke: "https://oauth2.googleapis.com/revoke",
   dataTypes: "https://health.googleapis.com/v4/users/me/dataTypes",
+  identity: "https://health.googleapis.com/v4/users/me/identity",
 } as const;
 
 const dataPoints = (dataType: string) => `${googleEndpoints.dataTypes}/${dataType}/dataPoints`;
@@ -90,6 +92,15 @@ async function tokenRequest(config: GoogleHealthConfig, body: Record<string, str
   throw new ProviderFailure("unavailable", `Google sign-in failed (${response.status}). Try again in a few minutes.`);
 }
 
+export const notLinkedMessage = "Your Google account isn't linked to Google Health yet. Set it up in the Google Health app or at https://fitbit.google.com/auth/signup, then choose Connect again.";
+
+// Whether a 400 says the account has no Google Health profile, which identity and data requests both report.
+async function notLinked(response: Response): Promise<boolean> {
+  const body = apiErrorSchema.safeParse(await response.clone().json().catch(() => null));
+
+  return body.success && body.data.error.details.some((detail) => detail.reason === "ACCOUNT_NOT_LINKED");
+}
+
 // Reads one page of a data type, turning Google's refusals into messages for the person.
 async function readPage<Body>(config: GoogleHealthConfig, accessToken: string, noun: string, request: { url: string; body?: string }, schema: z.ZodType<Body>): Promise<Body> {
   const headers = { Authorization: `Bearer ${accessToken}`, Accept: "application/json" };
@@ -99,6 +110,8 @@ async function readPage<Body>(config: GoogleHealthConfig, accessToken: string, n
     : { method: "POST", headers: { ...headers, "Content-Type": "application/json" }, body: request.body });
 
   if (response.status === 401) throw new ProviderFailure("unauthorized", reauthorizeMessage);
+
+  if (response.status === 400 && await notLinked(response)) throw new ProviderFailure("not-linked", notLinkedMessage);
 
   if (response.status === 403) throw new ProviderFailure("reauthorize", `Google Health did not allow Nouri to read ${noun}. Choose Connect and allow ${noun} access.`);
 
@@ -275,6 +288,9 @@ export function googleHealthProvider(config: GoogleHealthConfig): CloudProvider 
 
       return response?.ok ?? false;
     },
+    // Any of Nouri's read scopes may read the identity.
+    accountId: async (accessToken) => (await readPage(config, accessToken, "your account", { url: googleEndpoints.identity }, identitySchema)).healthUserId,
+    webhook: config.webhookSecret ? googleWebhook(config.webhookSecret) : null,
     pull: {
       sleep: (accessToken, window) => pullPoints(config, accessToken, {
         dataType: "sleep", noun: "sleep", schema: sleepDataPointSchema, toRecord: sleepRecord,

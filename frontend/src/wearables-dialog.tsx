@@ -28,7 +28,7 @@ const views: Record<ConnectionStatus["connection"], ConnectionView> = {
   "not-connected": { actions: ["connect"], showStats: true },
   connected: {
     actions: ["sync", "disconnect"], showStats: true,
-    note: (name, windowDays) => <>Each sync rereads the last {windowDays} days, so edits and deletions in {name} reach Nouri.</>,
+    note: (name, windowDays) => <>New data from {name} arrives on its own. Imports reread up to the last {windowDays} days, so edits and deletions there reach Nouri too.</>,
   },
   reauthorize: { actions: ["reconnect", "disconnect"], showStats: true },
 };
@@ -48,7 +48,7 @@ export function WearablesDialog({ open, onOpenChange, connection }: WearablesDia
       <DialogContent>
         <DialogTitle {...stylex.props(formStyles.dialogTitle)}>Wearables</DialogTitle>
         <DialogDescription {...stylex.props(formStyles.dialogDescription)}>
-          Imported sleep, workouts, steps, active energy, and heart rate appear on the Overview next to what you log by hand. They change only at their source, so edit or delete them there, then sync.
+          Imported sleep, workouts, steps, active energy, and heart rate appear on the Overview next to what you log by hand. They change only at their source, so edit or delete them there and Nouri follows.
         </DialogDescription>
         <ProviderPanel connection={connection} />
       </DialogContent>
@@ -57,7 +57,7 @@ export function WearablesDialog({ open, onOpenChange, connection }: WearablesDia
 }
 
 function ProviderPanel({ connection }: { connection: ReturnType<typeof useConnection> }) {
-  const { provider, status, connect, sync, disconnect } = connection;
+  const { provider, status, importing, connect, sync, disconnect } = connection;
   const [confirming, setConfirming] = useState(false);
   const { name, description } = providerDetails[provider];
   const data = status.data;
@@ -68,7 +68,8 @@ function ProviderPanel({ connection }: { connection: ReturnType<typeof useConnec
     if (data) previousState.current = data.connection;
   }, [data?.connection]);
 
-  const busy = connect.isPending || sync.isPending || disconnect.isPending;
+  // A background import already reads everything Sync now would, so the button waits for it.
+  const busy = connect.isPending || sync.isPending || disconnect.isPending || importing;
   const view = data && views[data.connection];
   const badge = data && connectionBadges[data.connection];
   // A grant from before a kind existed, or one with a box unticked, imports only some kinds until the person connects again.
@@ -103,7 +104,7 @@ function ProviderPanel({ connection }: { connection: ReturnType<typeof useConnec
             );
             case "sync": return (
               <Button key={action} size="sm" variant="outline" disabled={busy} onClick={() => sync.mutate()}>
-                <RefreshCw size={15} /> {sync.isPending ? "Syncing…" : "Sync now"}
+                <RefreshCw size={15} /> {sync.isPending || importing ? "Syncing…" : "Sync now"}
               </Button>
             );
             case "disconnect": return (

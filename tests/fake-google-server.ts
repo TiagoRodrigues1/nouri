@@ -9,6 +9,7 @@ import { oauthCallbackPath } from "../src/wearables/provider.js";
 import { wearablesFromEnv } from "../src/google-health/config.js";
 import { identityFromEnv } from "../src/identity/identity.js";
 import { openFoodFacts } from "../src/food/packaged.js";
+import { syncQueue } from "../src/wearables/sync-queue.js";
 import { FakeGoogle, fixture, googleConfig } from "./fake-google.js";
 import { FakeOpenFoodFacts } from "./fake-open-food-facts.js";
 
@@ -30,6 +31,13 @@ google.days = new Map([
   ["2026-09-26", { restingBpm: 60 }],
 ]);
 
-const wearables = wearablesFromEnv({ GOOGLE_HEALTH_CLIENT_ID: googleConfig.clientId, GOOGLE_HEALTH_CLIENT_SECRET: googleConfig.clientSecret, GOOGLE_HEALTH_REDIRECT_URI: redirectUri, WEARABLE_TOKEN_KEY: Buffer.alloc(32, 9).toString("hex") }, google.fetch);
+const runtime = wearablesFromEnv({ GOOGLE_HEALTH_CLIENT_ID: googleConfig.clientId, GOOGLE_HEALTH_CLIENT_SECRET: googleConfig.clientSecret, GOOGLE_HEALTH_REDIRECT_URI: redirectUri, WEARABLE_TOKEN_KEY: Buffer.alloc(32, 9).toString("hex") }, google.fetch);
 
-serve({ fetch: createApp(drizzle(postgres(settings.DATABASE_URL)), identityFromEnv(process.env), openFoodFacts(new FakeOpenFoodFacts().fetch), wearables).fetch, port: settings.PORT, hostname: "127.0.0.1" });
+const db = drizzle(postgres(settings.DATABASE_URL));
+
+const wearables = runtime && { runtime, queue: syncQueue(db, runtime) };
+
+// Like the real server, without webhooks: opening the page imports when the stored data is stale.
+wearables?.queue.start();
+
+serve({ fetch: createApp(db, identityFromEnv(process.env), openFoodFacts(new FakeOpenFoodFacts().fetch), wearables).fetch, port: settings.PORT, hostname: "127.0.0.1" });

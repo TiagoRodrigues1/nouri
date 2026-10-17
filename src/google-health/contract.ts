@@ -20,6 +20,8 @@ export type GoogleHealthConfig = {
   clientId: string;
   clientSecret: string;
   redirectUri: string;
+  // Set when Google sends change notifications to this server.
+  webhookSecret?: string | undefined;
   fetch: typeof fetch;
 };
 
@@ -31,6 +33,13 @@ export const tokenResponseSchema = z.object({
   scope: z.string().default(""),
   token_type: z.string(),
 });
+
+// From users/me/identity. healthUserId is the ID webhook notifications name the person by.
+export const identitySchema = z.object({ healthUserId: z.string().min(1) });
+
+// Google's error body. ACCOUNT_NOT_LINKED in the details means the Google account has no Google Health profile:
+// https://developers.google.com/health/troubleshooting
+export const apiErrorSchema = z.object({ error: z.object({ details: z.array(z.object({ reason: z.string().optional() })).default([]) }) });
 
 export const tokenErrorSchema = z.object({ error: z.string() });
 

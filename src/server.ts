@@ -7,6 +7,7 @@ import { createApp } from "./app.js";
 import { openFoodFacts } from "./food/packaged.js";
 import { wearablesFromEnv } from "./google-health/config.js";
 import { identityFromEnv } from "./identity/identity.js";
+import { syncQueue } from "./wearables/sync-queue.js";
 
 const settings = z.object({
   DATABASE_URL: z.string().min(1),
@@ -16,11 +17,16 @@ const settings = z.object({
   NOURI_PUBLIC_URL: z.url().transform((url) => new URL(url).origin).optional(),
 }).parse(process.env);
 
-const wearables = wearablesFromEnv(process.env, fetch);
-
 const client = postgres(settings.DATABASE_URL);
 
 const db = drizzle(client);
+
+const runtime = wearablesFromEnv(process.env, fetch);
+
+const wearables = runtime && { runtime, queue: syncQueue(db, runtime) };
+
+// Imports from wearables run in the background, in this process like the retention sweep.
+const syncWorker = wearables?.queue.start();
 
 const app = createApp(db, identityFromEnv(process.env), openFoodFacts(fetch), wearables, settings.NOURI_PUBLIC_URL);
 
@@ -36,5 +42,6 @@ sweep();
 // Hosts stop the app with SIGTERM on each deploy; finish open requests before releasing the database connections.
 process.once("SIGTERM", () => {
   clearInterval(sweeps);
+  syncWorker?.stop();
   server.close(() => void client.end());
 });

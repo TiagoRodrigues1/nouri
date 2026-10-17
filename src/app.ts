@@ -21,7 +21,7 @@ import { mealInputSchema, mealLogInputSchema, mealLogSchema, savedMealListSchema
 import { fillDailyMeals, listMeals, logMeal, mutateMeal, undoMealLog } from "./meals/meals.js";
 import { integrationRoutes } from "./wearables/routes.js";
 import { error, errorSchema } from "./http-error.js";
-import type { WearableRuntime } from "./wearables/provider.js";
+import type { Wearables } from "./wearables/sync-queue.js";
 import { clerkFrontendOrigin, userFor, type Identity } from "./identity/identity.js";
 import { recordPaths } from "./journal/paths.js";
 import { mutateRecord } from "./journal/records.js";
@@ -52,7 +52,7 @@ function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (character) => `&#${character.charCodeAt(0)};`);
 }
 
-export function createApp(db: AppDatabase, identity: Identity, packagedFoods: PackagedFoods, wearables?: WearableRuntime, publicUrl?: string) {
+export function createApp(db: AppDatabase, identity: Identity, packagedFoods: PackagedFoods, wearables?: Wearables, publicUrl?: string) {
   const app = new OpenAPIHono<{ Variables: { userId: string; idempotencyKey: string } }>();
   const limits = requestPolicy();
   app.use("/v1/progress-photos", async (context, next) => {
@@ -172,7 +172,7 @@ export function createApp(db: AppDatabase, identity: Identity, packagedFoods: Pa
     if (event === "forged") return error(401, "Invalid webhook signature");
 
     if (event.deletedUser) {
-      await eraseAccount(db, wearables, event.deletedUser);
+      await eraseAccount(db, wearables?.runtime, event.deletedUser);
       userIds.delete(event.deletedUser);
     }
 

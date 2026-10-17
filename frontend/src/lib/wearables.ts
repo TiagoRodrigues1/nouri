@@ -18,6 +18,7 @@ export const callbackMessages: Record<CallbackResult, string> = {
   denied: "Access was not granted, so nothing was connected.",
   "expired-link": "That sign-in link expired or was opened in another browser. Choose Connect again.",
   "missing-scope": "Nouri needs permission to read sleep, activity, or health metrics. Choose Connect again and allow at least one.",
+  "not-linked": "Your Google account isn't linked to Google Health yet. Set it up in the Google Health app, then choose Connect again.",
   "token-failed": "Sign-in did not finish. Choose Connect to try again.",
 };
 

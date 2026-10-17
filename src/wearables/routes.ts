@@ -4,10 +4,11 @@ import type { Context } from "hono";
 import { z } from "zod";
 import type { AppDatabase } from "../db/database.js";
 import { error, errorSchema } from "../http-error.js";
-import { authorizationSchema, connectionStatusSchema, disconnectResultSchema, syncResultSchema, wearableProviderSchema } from "./contract.js";
+import { authorizationSchema, connectionStatusSchema, disconnectResultSchema, syncResultSchema, syncStateSchema, wearableProviderSchema } from "./contract.js";
 import type { WearableProvider } from "./contract.js";
 import { connectionFor, stateLifetimeMs, stateOwner, unconfiguredStatus, type Connection } from "./connections.js";
-import { oauthCallbackPath, type CloudProvider, type WearableRuntime } from "./provider.js";
+import { oauthCallbackPath, type CloudProvider } from "./provider.js";
+import { syncState, type Wearables } from "./sync-queue.js";
 
 const integrationPath = "/v1/integrations/:provider";
 
@@ -20,8 +21,9 @@ function stateCookie(id: WearableProvider, secure: boolean) {
   return { name: `nouri_${id}_state`, options: { path: oauthCallbackPath(id), httpOnly: true, sameSite: "Lax" as const, secure } };
 }
 
-export function integrationRoutes(db: AppDatabase, runtime: WearableRuntime | undefined) {
+export function integrationRoutes(db: AppDatabase, wearables: Wearables | undefined) {
   const app = new OpenAPIHono<Env>();
+  const { runtime, queue } = wearables ?? {};
   const providers = new Map<WearableProvider, CloudProvider>(runtime?.providers.map((provider) => [provider.id, provider]));
 
   const connection = (id: WearableProvider, userId: string) => {
@@ -88,22 +90,62 @@ export function integrationRoutes(db: AppDatabase, runtime: WearableRuntime | un
   });
 
   app.post(`${integrationPath}/syncs`, withConfigured(async (connection, context) => {
-    const synced = await connection.sync();
+    const synced = await connection.manualSync();
 
     switch (synced.outcome) {
       case "synced": return context.json(synced.result);
       case "not-connected": return error(409, "Not connected. Choose Connect first.");
+      case "busy": {
+        const seconds = Math.ceil(synced.retryAfterMs / 1000);
+        const response = error(429, synced.reason === "running" ? "A sync is already running. New data appears when it finishes." : `Synced moments ago. Try again in ${seconds} seconds.`);
+
+        response.headers.set("Retry-After", String(seconds));
+
+        return response;
+      }
+
       case "failed": return error(synced.reason === "reauthorize" ? 409 : 502, synced.message);
     }
   }));
 
   app.delete(integrationPath, withConfigured(async (connection, context) => context.json(await connection.disconnect())));
 
+  // The page calls this when it opens and while it stays open. It answers at once; any import runs in the background.
+  // A provider this server has no settings for has nothing to refresh, so it reports what is stored.
+  app.post(`${integrationPath}/refreshes`, withProvider(async (id, connection, context) => {
+    const userId = context.get("userId");
+
+    return context.json(connection && queue ? await queue.refreshIfStale(connection.provider, userId) : await syncState(db, id, userId));
+  }));
+
+  // The provider's change notifications. Outside /v1: the provider authenticates with the secret it was registered with.
+  // Notifications only say what to re-read, never what to store, so a forged one costs at most a sync.
+  // The app-wide body limit (256 KB) already covers Google's largest batch of 99 notifications.
+  app.post("/webhooks/:provider", async (context) => {
+    const id = providerParam(context);
+    const provider = id && providers.get(id);
+    const webhook = provider?.webhook;
+
+    if (!queue || !provider || !webhook) return error(404, "Unknown webhook");
+
+    // The provider checks that a request without the secret is refused before it sends any notification.
+    if (!webhook.authorized(context.req.header("Authorization"))) return error(401, "Unauthorized");
+    const notices = await webhook.read(context.req.raw);
+
+    if (notices === "verification") return context.body(null, 200);
+
+    // A failure answers 500 and the provider sends the notification again later.
+    await queue.queueChanges(provider, notices);
+
+    return context.body(null, 204);
+  });
+
   const providerParams = z.object({ provider: wearableProviderSchema });
   const documentedPath = "/v1/integrations/{provider}";
   app.openAPIRegistry.registerPath({ method: "get", path: documentedPath, request: { params: providerParams }, responses: { 200: { description: "Connection state, last successful sync, and last error. Never includes tokens.", content: { "application/json": { schema: connectionStatusSchema } } } } });
   app.openAPIRegistry.registerPath({ method: "post", path: `${documentedPath}/authorizations`, request: { params: providerParams }, responses: { 200: { description: "Provider sign-in URL for read access to sleep and workouts. Sets an HttpOnly state cookie the callback checks.", content: { "application/json": { schema: authorizationSchema } } }, 409: { description: "The provider is not configured on this server", content: { "application/json": { schema: errorSchema } } } } });
-  app.openAPIRegistry.registerPath({ method: "post", path: `${documentedPath}/syncs`, request: { params: providerParams }, responses: { 200: { description: "Imported, updated, and removed sleep sessions and workouts from the sync window, per kind", content: { "application/json": { schema: syncResultSchema } } }, 409: { description: "Not connected, or access expired and needs Connect again", content: { "application/json": { schema: errorSchema } } }, 502: { description: "The provider was unreachable or refused the request", content: { "application/json": { schema: errorSchema } } } } });
+  app.openAPIRegistry.registerPath({ method: "post", path: `${documentedPath}/syncs`, request: { params: providerParams }, responses: { 200: { description: "Imported, updated, and removed sleep sessions and workouts from the sync window, per kind", content: { "application/json": { schema: syncResultSchema } } }, 409: { description: "Not connected, or access expired and needs Connect again", content: { "application/json": { schema: errorSchema } } }, 429: { description: "A sync of this connection is running, or one finished less than a minute ago. Retry-After says when to try again.", content: { "application/json": { schema: errorSchema } } }, 502: { description: "The provider was unreachable or refused the request", content: { "application/json": { schema: errorSchema } } } } });
+  app.openAPIRegistry.registerPath({ method: "post", path: `${documentedPath}/refreshes`, request: { params: providerParams }, responses: { 200: { description: "Queues a background import when the stored imports are stale and none is waiting, and reports whether one is pending. Returns at once.", content: { "application/json": { schema: syncStateSchema } } } } });
   app.openAPIRegistry.registerPath({ method: "delete", path: documentedPath, request: { params: providerParams }, responses: { 200: { description: "Revoked the grant, forgot the tokens, and removed imported sleep and workouts", content: { "application/json": { schema: disconnectResultSchema } } } } });
 
   return app;

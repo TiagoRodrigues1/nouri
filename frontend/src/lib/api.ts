@@ -24,8 +24,8 @@ import { reviewSchema } from "../../../src/review/contract";
 import type { Review, ReviewRange } from "../../../src/review/contract";
 import { mealLogSchema, savedMealListSchema, savedMealSchema } from "../../../src/meals/contract";
 import type { MealInput, MealLogInput, SavedMeal } from "../../../src/meals/contract";
-import { authorizationSchema, callbackResults, connectionStatusSchema, importKindNames, importKinds, disconnectResultSchema, syncResultSchema } from "../../../src/wearables/contract";
-import type { ConnectionStatus, DisconnectResult, SyncResult, WearableProvider } from "../../../src/wearables/contract";
+import { authorizationSchema, callbackResults, connectionStatusSchema, importKindNames, importKinds, disconnectResultSchema, syncResultSchema, syncStateSchema } from "../../../src/wearables/contract";
+import type { ConnectionStatus, DisconnectResult, SyncResult, SyncState, WearableProvider } from "../../../src/wearables/contract";
 import type { Overview } from "../../../src/overview/contract";
 
 export { callbackResults, importKindNames, importKinds };
@@ -298,6 +298,11 @@ export async function startConnection(provider: WearableProvider): Promise<strin
 
 export async function syncConnection(provider: WearableProvider): Promise<SyncResult> {
   return request(`/v1/integrations/${provider}/syncs`, syncResultSchema, { method: "POST" });
+}
+
+// Asks the server to import in the background if what it stored is stale. It answers at once.
+export async function refreshConnection(provider: WearableProvider): Promise<SyncState> {
+  return request(`/v1/integrations/${provider}/refreshes`, syncStateSchema, { method: "POST" });
 }
 
 export async function disconnectConnection(provider: WearableProvider): Promise<DisconnectResult> {

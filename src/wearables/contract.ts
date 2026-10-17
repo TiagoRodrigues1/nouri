@@ -51,6 +51,14 @@ export const connectionStatusSchema = z.object({
   windowDays: z.number().int().nullable(),
 });
 
+// Whether stored imports are current. The page shows them right away and reloads them when lastSyncedAt moves.
+export const syncStateSchema = z.object({
+  // A background import is queued or running. One waiting out a failure is not pending; lastError says why.
+  pending: z.boolean(),
+  lastSyncedAt: z.iso.datetime().nullable(),
+  lastError: z.string().nullable(),
+});
+
 export const importCountsSchema = z.object({
   created: z.number().int(),
   updated: z.number().int(),
@@ -67,13 +75,15 @@ export const disconnectResultSchema = z.object({ revoked: z.boolean(), removed: 
 export const authorizationSchema = z.object({ authorizationUrl: z.url() });
 
 // The OAuth callback reports its outcome to the page through the `connect` query parameter.
-export const callbackResults = ["connected", "denied", "expired-link", "missing-scope", "token-failed"] as const;
+export const callbackResults = ["connected", "denied", "expired-link", "missing-scope", "not-linked", "token-failed"] as const;
 
 export type CallbackResult = (typeof callbackResults)[number];
 
 export type ConnectionStatus = z.infer<typeof connectionStatusSchema>;
 
 export type ImportCounts = z.infer<typeof importCountsSchema>;
+
+export type SyncState = z.infer<typeof syncStateSchema>;
 
 export type SyncResult = z.infer<typeof syncResultSchema>;
 

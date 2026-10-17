@@ -11,8 +11,10 @@ src/wearables/            provider-neutral
   contract.ts             provider list, import kinds, connection status, sync results (shared with the page)
   import-sync.ts          applyBatch: dedupe, revise, revive, delete; one store per kind's table
   provider.ts             CloudProvider interface, the record type of each kind, SyncWindow, the OAuth callback path
-  connections.ts          sign-in state, PKCE, encrypted tokens, sync runner, disconnect
-  routes.ts               integration routes and OAuth callback
+  connections.ts          sign-in state, PKCE, encrypted tokens, sync runner and its lease, disconnect
+  sync-queue.ts           syncQueue: one job per connection, app-open refresh, reconciliation, retries, and the worker it wakes
+  sync-timing.ts          every delay: the sync lease, Sync now's cooldown, debounce, staleness, reconciliation, retries
+  routes.ts               integration routes, OAuth callback, and the webhook receiver
   token-vault.ts           AES-256-GCM token storage
 src/google-health/        one CloudProvider
   config.ts               env settings and runtime construction
@@ -21,6 +23,7 @@ src/google-health/        one CloudProvider
   sleep-import.ts         Google sleep data point -> SleepRecord
   workout-import.ts       Google exercise data point -> WorkoutRecord
   daily-import.ts         daily rollups and resting heart rate -> ActivityRecord, HeartRateRecord
+  webhook.ts              Google's change notifications -> which kinds changed and from which date
   contract.ts             Google's response schemas, one scope per import kind
 src/daily-totals/         the Overview's reader for imported daily totals
 ```
@@ -52,10 +55,44 @@ Imported sleep and workouts are outside the manual delete path, so deleting thei
 - Resting heart rate: `GET .../dataTypes/daily-resting-heart-rate/dataPoints` with `filter=daily_resting_heart_rate.date >= "<YYYY-MM-DD>"`. Each point has `dailyRestingHeartRate.date` and `beatsPerMinute`.
 - Daily values outside what Nouri stores become unknown: steps above 200,000, active energy above 20,000 kcal, and heart rates outside 20 to 250 bpm. The day's average, lowest, and highest are dropped together when one is out of range or they are out of order. A day left with no value is counted as skipped. A rollup bucket or resting heart rate point Nouri cannot read fails the sync as unavailable instead: dropping it would delete or blank a day already stored. Sessions differ, and an unreadable session is skipped. Rollups carry no update time, so a day's fingerprint hashes its values, and today's partial totals update on every sync.
 - OAuth: authorization code with PKCE (S256), `access_type=offline`, `prompt=consent`, and `include_granted_scopes=false`. Endpoints come from Google's [data access guide](https://developers.google.com/health/migration/data-access). Access tokens last an hour and are refreshed before use.
-- Sync window: 30 days. Each sync re-reads the window and reconciles it. Nouri does not use [webhooks](https://developers.google.com/health/webhooks) because they need a public HTTPS endpoint, and Nouri runs on localhost. A deletion older than the window is not seen.
+- Sync window: 30 days. A full sync re-reads the window and reconciles it. A background import may read less; see below. A deletion older than the window is not seen.
+- Unlinked accounts: a Google account without a Google Health profile gets `400` with reason `ACCOUNT_NOT_LINKED` from identity and data requests. Google asks apps to check the identity right after sign-in and not show such an account as connected, so the callback revokes the grant and reports `not-linked`. A connected account that later reports it asks for a new sign-in. Source: [troubleshooting](https://developers.google.com/health/troubleshooting).
+- Identity: `GET https://health.googleapis.com/v4/users/me/identity` returns `healthUserId`, the ID notifications name the person by. Any of Nouri's read scopes may call it, so no new consent is needed. Nouri reads it after each sign-in and stores it as `provider_user_id`. When that read fails, the next sync fills it in.
 - Stages: for `STAGES` sleep, `summary.stagesSummary` minutes map to awake, light, deep, and REM. The code falls back to adding up the stage intervals. `CLASSIC` sleep (asleep and restless) imports without stages. Points that do not parse, or that are not 0–24 hours long, are counted as skipped.
 - Workouts: `exerciseType` maps onto Nouri's six activities. Running, walking, cycling, swimming, and strength types map to their group; everything else becomes `other`, and the `displayName` keeps the detail. Duration is `activeDuration`, which leaves out pauses, or the whole interval when that is missing. Distance comes from `metricsSummary.distanceMillimeters` and energy from `caloriesKcal`. Strength workouts never carry a distance. A value outside what a Nouri workout stores becomes unknown. A session under a minute or over 24 hours is skipped.
 - A sync stops after 40 pages per kind. When that cap is hit, it imports what it read but deletes nothing and says so.
+
+## Background imports
+
+Nobody needs to press **Sync now**. Three triggers queue imports, and one worker in the server process runs them.
+
+1. **Webhooks**, when `GOOGLE_HEALTH_WEBHOOK_SECRET` is set. Google posts to `POST /webhooks/google-health` when a person's sleep, exercise, steps, heart rate, or resting heart rate changes. Nouri maps each notification's `healthUserId` to its connections, its `dataType` to a kind, and its interval to the earliest UTC date that changed, one day early because a local date can lead UTC. It queues a job due 30 seconds later. One phone upload sends several notifications within seconds, and they all merge into that job. Active energy has no notification type. It changes with steps, and the activity pull reads both.
+2. **Opening Nouri.** The page calls `POST /v1/integrations/{provider}/refreshes` on load, on window focus, and every five minutes while visible. It shows the stored data at once and does not wait. The server queues a job only when the last sync is stale and no job is waiting. With webhooks, data counts as stale after 6 hours, so this only catches what notifications missed. Without webhooks, as on localhost, it counts as stale after 15 minutes, and opening the page is what imports. The job reads every kind from three days before the last sync, so late uploads still land. When the last reconciliation is more than a day old, the job re-reads the whole window instead. The page checks every 3 seconds while a job is pending. When `lastSyncedAt` moves, the page reloads the Overview.
+3. **Reconciliation.** Every 6 hours the worker queues a full re-read for connections that were opened in the last 14 days and not reconciled in the last 24 hours, spread over ten minutes. It catches notifications that never arrived and deletions that a narrow read cannot see. People who stopped using Nouri are not polled. Their next app open re-reads the window.
+
+`wearable_sync_jobs` holds at most one job per connection. A new request merges into the waiting job: the kinds add up, the earliest date wins, and the sooner due time wins. That is the deduplication. The worker reads due jobs and runs them one at a time. It calls `sync(scope)`, the same sync and `applyBatch` that Sync now uses, with the window narrowed to the job's date and kinds. Jobs have no lock of their own: one worker runs per server, and the connection's sync lease (below) keeps two syncs off one connection. The deletion scope uses the same narrowed window as the provider's filter, so a narrow import deletes only what it read. A job counts the requests merged into it. If one arrives while a worker runs the job, the count moves, the job stays, and it runs again.
+
+A failure Google may recover from (unreachable, 429, 5xx) retries after 1, 2, 4, … 256, then 360 minutes, each with jitter between half and all of the delay, so it keeps trying through an outage of several hours. A new notification does not cut a retry short. After 11 failures, about 14 hours at most, the job is dropped. The connection's `lastError` says why, and the next app open or reconciliation tries again. A revoked grant drops the job at once.
+
+One sync runs per connection at a time. A sync takes a lease, `sync_started_at`, before it calls Google, and releases it when it finishes. A lease older than 15 minutes no longer counts, which covers a full read at its worst: 40 pages per kind at 20 seconds a request. While a sync runs, only the lease holder may write to the connection: its records, its refreshed tokens, and its failure. A sync that outlives its lease, or one still running when the person signs in again, therefore saves nothing and cannot clear the new grant. Signing in clears the lease for that reason. A grant that has never had a full read, such as one just signed in, gets one on its next sync whatever the job asked, because a sign-in may have switched accounts or added kinds. **Sync now** is also refused within a minute of the last sync, unless the grant is new since then. It answers `429` with `Retry-After` and reads nothing. A background job that finds a sync running waits 30 seconds, and the wait does not count as a failure. The **Sync now** button waits while a background import is pending.
+
+Costs stay low because each notification batch becomes one narrow read, an app open with fresh data reads nothing, and reconciliation runs once a day only for active people. The database scales to zero when idle, so the worker never polls it. Every job is queued in the server process, so the worker sets a timer for the next due job and wakes when a request queues one. With nothing queued it sets no timer, and only the reconciliation scan touches the database, 4 times a day. A notification carries no data. It only says what to re-read from Google, so a forged one could cost at most one sync. The webhook still checks the secret.
+
+### Registering the webhook
+
+Webhooks need a public HTTPS endpoint, so only a deployed Nouri can use them. Register a subscriber once per Google Cloud project, with the project number rather than the project ID. The secret goes in `endpointAuthorization.secret` with the `Bearer ` prefix:
+
+```sh
+curl -X POST "https://health.googleapis.com/v4/projects/$PROJECT_NUMBER/subscribers?subscriberId=nouri" \
+  -H "Authorization: Bearer $(gcloud auth print-access-token)" -H "Content-Type: application/json" \
+  -d '{
+    "endpointUri": "https://<your host>/webhooks/google-health",
+    "subscriberConfigs": [{ "dataTypes": ["sleep", "exercise", "steps", "heart-rate", "daily-resting-heart-rate"], "subscriptionCreatePolicy": "AUTOMATIC" }],
+    "endpointAuthorization": { "secret": "Bearer '"$GOOGLE_HEALTH_WEBHOOK_SECRET"'" }
+  }'
+```
+
+Google checks the endpoint first. A request with the secret must get `200`, and one without it must get `401`. Nouri does both once the secret is set and the server restarted. `AUTOMATIC` covers everyone who consents, now and later. It sends nothing from before the subscriber existed, which the first full sync after connecting covers. To rotate the secret, `PATCH ...?updateMask=endpointAuthorization` with the new one after Nouri accepts it. Nouri accepts one secret at a time, so expect a few minutes of `401` retries, which Google redelivers. Nouri does not check the `GOOGLE-HEALTH-API-SIGNATURE` header. The secret authenticates the sender, and a notification carries no data. Source: [Google Health webhooks](https://developers.google.com/health/webhooks).
 
 ## Security
 
@@ -71,7 +108,10 @@ Imported sleep and workouts are outside the manual delete path, so deleting thei
 | --- | --- |
 | Access token refused (401) | Refreshes once and retries |
 | Refresh fails with `invalid_grant`, or a 403 | Status `reauthorize`, tokens dropped, imports kept, tile says **Connect again** |
-| Google unreachable, 429, or 5xx | `502` with the reason; still connected; last successful sync unchanged |
+| Google unreachable, 429, or 5xx | `502` with the reason; still connected; last successful sync unchanged. A background job retries with backoff |
+| Sync now pressed during a sync, or within a minute of the last | `429` with `Retry-After`; nothing read from Google |
+| A webhook without the secret | `401`; nothing queued |
+| A notification Nouri cannot read, or for someone it does not know | `204`, ignored, so Google does not resend it for a week |
 | Disconnect | Revokes the refresh token, removes imported nights and workouts, forgets tokens; reports if Google did not confirm the revocation |
 
 ## Adding a provider
@@ -83,6 +123,8 @@ Imported sleep and workouts are outside the manual delete path, so deleting thei
 ## Automated tests
 
 `tests/integration/google-health.test.ts` and `tests/integration/google-health-daily.test.ts` run the real app against PostgreSQL. `tests/fake-google.ts` stands in for Google. It serves the documented shapes from `src/google-health/fixtures/` and checks client credentials, the redirect URI, and PKCE. It also serves daily rollups and resting heart rate from a map of days, and refuses rollups longer than Google allows. The subtests cover first import of sleep and workouts, repeated import, correction, deletion and revival, token refresh, an outage, a revoked grant, reconnect, a sleep-only grant, disconnect, and CSRF rejections. The daily test covers first import, the rollup pieces, repeat, correction, deletion and return, unreadable days, an incomplete read, days older than the window, a grant without heart rate, and disconnect. `tests/unit/wearables.test.ts` covers the exercise and daily mappings.
+
+`tests/integration/google-health-background.test.ts` drives the queue with a fake clock. It covers webhook verification, one narrow import from a burst of notifications, a notification during a run, app-open refresh with and without webhooks, retries with backoff, dropping a job after its last attempt, reconciliation, a revoked grant, disconnect, the Sync now cooldown, one sync at a time per connection, a lapsed sync lease, and a worker that sets no timer while nothing is queued.
 
 `tests/fake-google-server.ts` runs the app with the same fixtures, for driving the page in a browser without a Google account. A sync there proves Nouri's handling of fixtures. It is not a live connection.
 
