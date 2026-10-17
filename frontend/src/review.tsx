@@ -2,13 +2,13 @@ import * as stylex from "@stylexjs/stylex";
 import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useSearch } from "@tanstack/react-router";
-import { Beef, ChartColumn, Flame, LayoutDashboard, Scale } from "lucide-react";
+import { Beef, ChartColumn, Droplet, Flame, LayoutDashboard, Lightbulb, Moon, Scale, TrendingUp } from "lucide-react";
 import { calorieTolerance, defaultReviewDays, isCompleteFood } from "../../src/review/contract";
 import { Button } from "./components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "./components/ui/table";
 import { useDashboardPage } from "./dashboard-page-context";
-import { format, getReview, type Review as ReviewData, type ReviewDay } from "./lib/api";
+import { format, getReview, type Review as ReviewData, type ReviewDay, type ReviewPeriod } from "./lib/api";
 import { shortDayLabel } from "./lib/time";
 import { duration } from "./overview/shared";
 import { ProgressChart } from "./progress-chart";
@@ -68,6 +68,19 @@ function foodTotal(day: ReviewDay, nutrient: Nutrient) {
 const metrics: Metric[] = [
   { label: "Calories", cell: (day) => foodTotal(day, "kcal"), recorded: (counts) => counts.food },
   { label: "Protein", cell: (day) => foodTotal(day, "proteinG"), recorded: (counts) => counts.food },
+  { label: "Water", cell: ({ water }) => water.totalMl === null ? <Blank /> : <Amount value={format(water.totalMl)} unit="ml" />, recorded: (counts) => counts.water },
+  {
+    label: "Supplements",
+    // Taken out of that day's list; intakes of supplements since removed still count as taken.
+    cell: ({ supplements }) => {
+      if (supplements.intakeCount === 0) return <Blank />;
+
+      if (supplements.stackSize === 0) return <Amount value={format(supplements.intakeCount)} unit="taken" />;
+
+      return <Amount value={`${supplements.taken} of ${supplements.stackSize}`} unit="taken" />;
+    },
+    recorded: (counts) => counts.supplements,
+  },
   {
     label: "Workouts",
     cell: ({ workouts }) => workouts.totalMinutes === null ? <Blank /> : (
@@ -85,15 +98,17 @@ const metrics: Metric[] = [
 type ComparisonProps = {
   title: string;
   icon: ReactNode;
-  nutrient: Nutrient;
+  comparison: ReviewPeriod["water"];
+  show: (value: number) => string;
   rule: string;
-  nutrition: ReviewData["nutrition"];
+  // How many days were compared, and what one and several of them are called.
+  measured: number;
+  noun: [one: string, many: string];
+  empty: string;
 };
 
-function Comparison({ title, icon, nutrient, rule, nutrition }: ComparisonProps) {
-  const { average, averageTarget, daysOnTarget } = nutrition[nutrient];
-  const unit = units[nutrient];
-  const days = nutrition.completeDays;
+function Comparison({ title, icon, comparison, show, rule, measured, noun, empty }: ComparisonProps) {
+  const { average, averageTarget, daysOnTarget } = comparison;
 
   return (
     <Card>
@@ -102,16 +117,145 @@ function Comparison({ title, icon, nutrient, rule, nutrition }: ComparisonProps)
       </CardHeader>
       <CardContent {...stylex.props(styles.comparisonContent)}>
         {average === null || averageTarget === null ? (
-          <p {...stylex.props(styles.muted)}>No complete food days to compare yet.</p>
+          <p {...stylex.props(styles.muted)}>{empty}</p>
         ) : (
           <>
-            <p {...stylex.props(styles.comparisonValue)}>
-              <Amount value={format(average)} unit={`${unit} a day`} />
-            </p>
+            <p {...stylex.props(styles.comparisonValue)}>{show(average)}</p>
             <p {...stylex.props(styles.muted)}>
-              Target {format(averageTarget)} {unit}. {rule} on <strong>{daysOnTarget} of {days}</strong> complete {days === 1 ? "day" : "days"}.
+              Target {show(averageTarget)}. {rule} on <strong>{daysOnTarget} of {measured}</strong> {measured === 1 ? noun[0] : noun[1]}.
             </p>
           </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+const kcal = (value: number) => `${format(value)} kcal`;
+
+const grams = (value: number) => `${format(value)} g`;
+
+const millilitres = (value: number) => `${format(value)} ml`;
+
+const minutes = (value: number) => duration(Math.round(value));
+
+// Food is compared over complete days only; water and sleep over the days that have them.
+function Comparisons({ review }: { review: ReviewData }) {
+  const { nutrition, recordedDays } = review;
+  const food: Pick<ComparisonProps, "measured" | "noun" | "empty"> = { measured: nutrition.completeDays, noun: ["complete day", "complete days"], empty: "No complete food days to compare yet." };
+
+  return (
+    <div {...stylex.props(styles.comparisons)}>
+      <Comparison title="Calories" icon={<Flame size={15} />} comparison={nutrition.kcal} show={kcal} rule={`Within ${calorieTolerance * 100}% of target`} {...food} />
+      <Comparison title="Protein" icon={<Beef size={15} />} comparison={nutrition.proteinG} show={grams} rule="Reached target" {...food} />
+      <Comparison
+        title="Water" icon={<Droplet size={15} />} comparison={review.water} show={millilitres} rule="Reached target"
+        measured={recordedDays.water} noun={["day", "days"]} empty="No water logged in these days."
+      />
+      <Comparison
+        title="Sleep" icon={<Moon size={15} />} comparison={review.sleep} show={minutes} rule="Reached target"
+        measured={recordedDays.sleep} noun={["night", "nights"]} empty="No sleep recorded in these days."
+      />
+    </div>
+  );
+}
+
+// Drawn from the last week of the range, each with what it rests on.
+function Suggestions({ review }: { review: ReviewData }) {
+  const week = review.weeks.at(-1);
+
+  if (!week || review.suggestions.length === 0) return null;
+
+  return (
+    <Card {...stylex.props(styles.trendCard)}>
+      <CardHeader {...stylex.props(styles.trendHeader)}>
+        <CardTitle {...stylex.props(styles.comparisonTitle)}><Lightbulb size={15} /> Suggestions</CardTitle>
+        <p {...stylex.props(styles.muted)}>From {shortDayLabel(week.from)} to {shortDayLabel(week.to)}</p>
+      </CardHeader>
+      <CardContent {...stylex.props(styles.trendContent)}>
+        <ul {...stylex.props(styles.suggestions)}>
+          {review.suggestions.map((suggestion) => (
+            <li key={suggestion.kind} {...stylex.props(styles.suggestion)}>
+              <strong>{suggestion.title}</strong>
+              <span {...stylex.props(styles.muted)}>{suggestion.because}</span>
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+    </Card>
+  );
+}
+
+type WeekMetric = {
+  label: string;
+  value: (week: ReviewPeriod) => number | null;
+  show: (value: number) => string;
+  // The decimal places `show` keeps, so a change is taken between the values as shown.
+  digits: number;
+};
+
+const weekMetrics: WeekMetric[] = [
+  { label: "Calories", value: (week) => week.nutrition.kcal.average, show: kcal, digits: 0 },
+  { label: "Protein", value: (week) => week.nutrition.proteinG.average, show: grams, digits: 0 },
+  { label: "Water", value: (week) => week.water.average, show: millilitres, digits: 0 },
+  { label: "Sleep", value: (week) => week.sleep.average, show: minutes, digits: 0 },
+  // A week's total; a week without workouts stays blank, as a day does.
+  { label: "Workouts", value: (week) => week.workouts.count === 0 ? null : week.workouts.totalMinutes, show: minutes, digits: 0 },
+  { label: "Weight", value: (week) => week.weightKg, show: (value) => `${format(value, 1)} kg`, digits: 1 },
+];
+
+// Two weeks that read the same show no change, never "+0 g".
+function change(value: number, before: number, { show, digits }: WeekMetric): string {
+  const scale = 10 ** digits;
+  const difference = (Math.round(value * scale) - Math.round(before * scale)) / scale;
+
+  return difference === 0 ? "no change" : `${difference > 0 ? "+" : "−"}${show(Math.abs(difference))}`;
+}
+
+// One row per whole week with its averages, and each one's change from the week before.
+function WeeklyTrends({ review }: { review: ReviewData }) {
+  return (
+    <Card {...stylex.props(styles.trendCard)}>
+      <CardHeader {...stylex.props(styles.trendHeader)}>
+        <CardTitle {...stylex.props(styles.comparisonTitle)}><TrendingUp size={15} /> Weekly trends</CardTitle>
+        <p {...stylex.props(styles.muted)}>Daily averages, with workouts totalled</p>
+      </CardHeader>
+      <CardContent {...stylex.props(styles.trendContent)}>
+        {review.weeks.length < 2 ? (
+          <p {...stylex.props(styles.muted)}>Choose 2 weeks or longer to compare weeks.</p>
+        ) : (
+          <Table aria-label="Weekly trends">
+            <TableHeader>
+              <TableRow>
+                <TableHead {...stylex.props(styles.dayColumn)}>Week</TableHead>
+                {weekMetrics.map((metric) => <TableHead key={metric.label} {...stylex.props(styles.number)}>{metric.label}</TableHead>)}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {review.weeks.map((week, index) => {
+                const previous = review.weeks[index - 1];
+
+                return (
+                  <TableRow key={week.from}>
+                    <TableHead scope="row" {...stylex.props(styles.dayColumn)}>{shortDayLabel(week.from)} – {shortDayLabel(week.to)}</TableHead>
+                    {weekMetrics.map((metric) => {
+                      const value = metric.value(week);
+                      const before = previous ? metric.value(previous) : null;
+
+                      return (
+                        <TableCell key={metric.label} {...stylex.props(styles.number)}>
+                          {value === null ? <Blank /> : metric.show(value)}
+                          {value !== null && before !== null && (
+                            <span {...stylex.props(styles.difference)} title="Change from the week before">{change(value, before, metric)}</span>
+                          )}
+                        </TableCell>
+                      );
+                    })}
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
         )}
       </CardContent>
     </Card>
@@ -163,12 +307,12 @@ export function Review() {
       <p {...stylex.props(styles.summary)}>
         Records on <strong>{review.recordedDays.any} of {total} days</strong>. Complete food records on <strong>{review.nutrition.completeDays} of {total} days</strong>:
         food logged and every food has calories and protein. Only those days are compared with your targets.
+        {review.supplements.stackDays > 0 && <> Every supplement on your list taken on <strong>{review.supplements.fullDays} of {review.supplements.stackDays} days</strong>.</>}
       </p>
-      <div {...stylex.props(styles.comparisons)}>
-        <Comparison title="Calories" icon={<Flame size={15} />} nutrient="kcal" rule={`Within ${calorieTolerance * 100}% of target`} nutrition={review.nutrition} />
-        <Comparison title="Protein" icon={<Beef size={15} />} nutrient="proteinG" rule="Reached target" nutrition={review.nutrition} />
-      </div>
+      <Suggestions review={review} />
+      <Comparisons review={review} />
       <WeightTrend review={review} />
+      <WeeklyTrends review={review} />
       <Card {...stylex.props(styles.card)}>
         <Table aria-label={`${total}-day review`}>
           <TableHeader>
@@ -219,14 +363,14 @@ export function Review() {
   );
 }
 
-// The summary, the two comparisons, the weight chart, and the table, as placeholders.
+// The summary, the four comparisons, the weight chart, and the table, as placeholders.
 function ReviewSkeleton({ rows }: { rows: number }) {
   return (
     <Loading label="Loading your review…">
       <div {...stylex.props(styles.page)}>
         <Bone width="62%" height={13} />
         <div {...stylex.props(styles.comparisons)}>
-          {[0, 1].map((index) => (
+          {[0, 1, 2, 3].map((index) => (
             <Card key={index}>
               <CardHeader {...stylex.props(styles.comparisonHeader)}><Bone width={90} height={13} /></CardHeader>
               <CardContent {...stylex.props(styles.comparisonContent)}>

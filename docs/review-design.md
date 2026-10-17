@@ -72,6 +72,57 @@ The rules live in `getReview`, not the page: calories are on target within `calo
 
 Candidate A extended `/v1/review` with per-day targets and the weekly comparison. Candidate B kept the API and had the page read `/v1/targets/{date}`: either seven more requests, or only the window's last day, which misjudges the days before a mid-week change. B would also put the completeness and on-target rules in the page, where a native client would have to copy them, which the targets design set out to avoid. A is the base. From B it keeps the idea that the arithmetic per day (the difference) is plain enough to do in the page; only the rules that need a threshold stay on the server.
 
+## Water, supplements, weekly trends, and suggestions
+
+Review now covers every kind the journal records, compares weeks, and makes a few modest suggestions from the last week.
+
+```ts
+review.days[0].water          // { entryCount: 2, totalMl: 1800 }; null total when no water was logged
+review.days[0].supplements    // { intakeCount: 2, taken: 1, stackSize: 2 }: 1 of the day's 2 supplements taken
+review.water                  // { average: 1200, averageTarget: 2000, daysOnTarget: 1 }, over days with water
+review.sleep                  // the same comparison over recorded nights
+review.supplements            // { stackDays: 7, fullDays: 2 }: days with a list, and days with all of it taken
+review.weeks                  // whole weeks ending on `to`, oldest first, each the same summary as the range
+review.suggestions[0]         // { kind: "protein", title: "Add a protein source to one meal", because: "Protein reached target on 2 of 5 days, …" }
+```
+
+### Shape
+
+```
+src/water/water.ts               getWaterRange(db, userId, from, to)        per-day count, ml
+src/supplements/supplements.ts   getSupplementRange(db, userId, from, to)   per-day intakes, list items taken, list size
+src/review/review.ts             summarize(days): ReviewPeriod              one rule set for the range and for each week
+src/coaching/contract.ts         suggestionSchema, coachingPolicy           the thresholds, named
+src/coaching/coaching.ts         coach(week): Suggestion[]                  pure rules over one week's summary
+```
+
+`Review` is a `ReviewPeriod` with its `days`, `weeks`, and `suggestions`. `summarize` is the only place that knows which days count as recorded, complete, or on target, so a week's numbers can never disagree with the range's. Weeks are whole seven-day runs ending on `to`. A 30-day range has four, and its two oldest days belong to no week. A day's supplements count only items on that day's list, as Today's checklist does. Intakes of items since removed still count as a record.
+
+`coach` reads only the last week's summary and returns suggestions most important first. Each one says what it rests on. The rules follow the coaching flow in `backend-architecture.md`:
+
+- Food needs `minEvidenceDays` (4) complete days. With fewer, the only food suggestion is to log every food for a few more days. Sparse logs block calorie and protein suggestions.
+- Protein: reached target on fewer than half of the complete days.
+- Calories: the average falls outside `calorieTolerance` of the average target.
+- Water: the target was reached on fewer than half of at least 4 days with water.
+- Sleep: at least 4 nights recorded and an average 30 minutes or more under target. Missing nights block any claim about sleep.
+- Supplements: the full list was taken on fewer than half of at least 4 days with a list.
+
+No suggestion proposes a new target. That is still an open product decision.
+
+### Synthesis decision
+
+For trends, candidate A extended the review with a per-week summary built from the same days. Candidate B added `GET /v1/trends` with weekly SQL aggregates. B would restate the completeness and on-target rules in SQL, and the page would join two responses with different null rules. A computing weeks in the page was rejected for the reason the targets comparison gives: a native client or the MCP server would have to copy the rules. A is the base. B's useful idea was a summary with no tie to a range. That became `ReviewPeriod`, which the range and its weeks share.
+
+For suggestions, candidate A is a pure function over a week's summary, recomputed on every read. Candidate B is the persisted design in `backend-architecture.md`: `suggestion_runs`, evidence hashes, a job worker, and accept or dismiss responses. B exists for model output, which costs money, varies between runs, and needs an audit trail. Deterministic rules over current records are cheap and give the same answer each time, so persisting them would only add staleness to manage. A is the base. B returns when a model phrases or ranks suggestions. From B it keeps the evidence on every suggestion (`because`) and the named policy thresholds.
+
+### Tradeoffs accepted
+
+- Weekly trends need a range of two weeks or more. The default 7-day view shows a hint instead of fetching earlier weeks.
+- Days before the oldest whole week are left out of the trends.
+- Suggestions come from the last week of the range, whatever its length, so a 90-day view suggests from its final week.
+- A day with a supplement list and no app use counts as a day the list was missed.
+- Suggestions are not saved, cannot be dismissed, and change as soon as the records do.
+
 ## Not in this version
 
-Trends across weeks, charts, carbohydrate and fat comparisons, and coaching suggestions. Water and supplements are not in the timeline.
+Carbohydrate and fat comparisons, workout suggestions, accepting or dismissing suggestions, and model-written suggestions.

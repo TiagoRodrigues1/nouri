@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, between, eq, isNull } from "drizzle-orm";
 import { supplementIntakes, supplementStacks } from "../db/schema.js";
 import type { AppDatabase, Transaction } from "../db/database.js";
-import { getDated, type DatedKind } from "../effective-dated.js";
+import { getDated, getDatedHistory, type DatedKind } from "../effective-dated.js";
 import type { RecordKind } from "../journal/records.js";
-import { localDate } from "../time.js";
+import { localDate, shiftDate } from "../time.js";
 import { stackForDaySchema, supplementIntakeSchema, supplementStackSchema } from "./contract.js";
 import type { IntakeInput, StackForDay, SupplementDay, SupplementIntake, SupplementStack } from "./contract.js";
 
@@ -107,4 +107,33 @@ export async function getSupplementDay(db: AppDatabase, userId: string, date: st
     items: stack.supplements.map((supplement) => ({ supplement, intakes: intakes.filter((entry) => entry.supplementId === supplement.id) })),
     unlisted: intakes.filter((entry) => !listed.has(entry.supplementId)),
   };
+}
+
+// `taken` counts the day's stack supplements with at least one intake; `intakeCount` also includes unlisted ones.
+export type SupplementRangeDay = { intakeCount: number; taken: number; stackSize: number };
+
+// Days from `from` to `to` that have a stack in force or an intake, by local date.
+export async function getSupplementRange(db: AppDatabase, userId: string, from: string, to: string): Promise<Map<string, SupplementRangeDay>> {
+  const [stackOn, rows] = await Promise.all([
+    getDatedHistory(db, stackKind, userId, to),
+    db.select({ localDate: supplementIntakes.localDate, supplementId: supplementIntakes.supplementId }).from(supplementIntakes).where(and(
+      eq(supplementIntakes.userId, userId), between(supplementIntakes.localDate, from, to), isNull(supplementIntakes.deletedAt),
+    )),
+  ]);
+
+  const intakes = new Map<string, string[]>();
+
+  for (const row of rows) intakes.set(row.localDate, [...intakes.get(row.localDate) ?? [], row.supplementId]);
+
+  const days = new Map<string, SupplementRangeDay>();
+
+  for (let date = from; date <= to; date = shiftDate(date, 1)) {
+    const { supplements } = stackOn(date);
+    const ids = intakes.get(date) ?? [];
+
+    if (supplements.length === 0 && ids.length === 0) continue;
+    days.set(date, { intakeCount: ids.length, taken: supplements.filter((supplement) => ids.includes(supplement.id)).length, stackSize: supplements.length });
+  }
+
+  return days;
 }

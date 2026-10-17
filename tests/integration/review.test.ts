@@ -5,6 +5,8 @@ import { test } from "node:test";
 import type { z } from "zod";
 import type { FoodInput } from "../../src/food/contract.js";
 import type { MeasurementInput } from "../../src/measurements/contract.js";
+import type { IntakeInput } from "../../src/supplements/contract.js";
+import type { WaterInput } from "../../src/water/contract.js";
 import { defaultTargets } from "../../src/targets/contract.js";
 import type { SleepInput } from "../../src/sleep/contract.js";
 import type { workoutInputSchema } from "../../src/workouts/contract.js";
@@ -15,7 +17,7 @@ const auth = { Authorization: `Bearer ${token}` };
 
 const zone = "Europe/Lisbon";
 
-type Body = FoodInput | z.input<typeof workoutInputSchema> | SleepInput | MeasurementInput;
+type Body = FoodInput | z.input<typeof workoutInputSchema> | SleepInput | MeasurementInput | WaterInput | IntakeInput;
 
 async function post(path: string, body: Body, target = app) {
   const response = await target.request(path, { method: "POST", headers: { ...auth, "Content-Type": "application/json", "Idempotency-Key": randomUUID() }, body: JSON.stringify(body) });
@@ -52,8 +54,19 @@ void test("review lists seven days and leaves unrecorded ones null", async () =>
     assert.equal(empty.from, "2026-09-24");
     assert.equal(empty.to, "2026-09-30");
     assert.deepEqual(empty.days.map((day: { date: string }) => day.date), ["2026-09-24", "2026-09-25", "2026-09-26", "2026-09-27", "2026-09-28", "2026-09-29", "2026-09-30"]);
-    assert.deepEqual(empty.days[0], { date: "2026-09-24", food: { entryCount: 0, kcal: null, proteinG: null }, workouts: { entryCount: 0, totalMinutes: null }, sleep: { sessionCount: 0, totalMinutes: null }, weightKg: null, targets: { kcal: 2000, proteinG: 50 } });
-    assert.deepEqual(empty.recordedDays, { food: 0, workouts: 0, sleep: 0, weight: 0, any: 0 });
+    assert.deepEqual(empty.days[0], {
+      date: "2026-09-24",
+      food: { entryCount: 0, kcal: null, proteinG: null },
+      water: { entryCount: 0, totalMl: null },
+      supplements: { intakeCount: 0, taken: 0, stackSize: 0 },
+      workouts: { entryCount: 0, totalMinutes: null },
+      sleep: { sessionCount: 0, totalMinutes: null },
+      weightKg: null,
+      targets: { kcal: 2000, proteinG: 50, waterMl: 2000, sleepMinutes: 480 },
+    });
+    assert.deepEqual(empty.recordedDays, { food: 0, water: 0, supplements: 0, workouts: 0, sleep: 0, weight: 0, any: 0 });
+    // Nothing recorded, so nothing to suggest.
+    assert.deepEqual(empty.suggestions, []);
     const nothing = { average: null, averageTarget: null, daysOnTarget: 0 };
     assert.deepEqual(empty.nutrition, { completeDays: 0, kcal: nothing, proteinG: nothing });
 
@@ -110,7 +123,7 @@ void test("review lists seven days and leaves unrecorded ones null", async () =>
     assert.equal(d28.weightKg, 82.1);
     assert.equal(d29.weightKg, null);
     assert.equal(d24.weightKg, null);
-    assert.deepEqual(week.recordedDays, { food: 2, workouts: 1, sleep: 1, weight: 1, any: 5 });
+    assert.deepEqual(week.recordedDays, { food: 2, water: 0, supplements: 0, workouts: 1, sleep: 1, weight: 1, any: 5 });
     // The 30th lacks a protein value, so only the 24th is compared, against the default targets.
     assert.deepEqual(week.nutrition, {
       completeDays: 1,
@@ -123,14 +136,14 @@ void test("review lists seven days and leaves unrecorded ones null", async () =>
     assert.equal(earlier.from, "2026-09-18");
     assert.equal(earlier.days[2].weightKg, 83);
     assert.deepEqual(earlier.days[5].food, { entryCount: 1, kcal: 999, proteinG: 99 });
-    assert.deepEqual(earlier.recordedDays, { food: 2, workouts: 0, sleep: 0, weight: 1, any: 3 });
+    assert.deepEqual(earlier.recordedDays, { food: 2, water: 0, supplements: 0, workouts: 0, sleep: 0, weight: 1, any: 3 });
 
     // A longer range reaches back past the week, and only the listed ranges are accepted.
     const month = await review("2026-09-30?days=30");
     assert.equal(month.from, "2026-09-01");
     assert.equal(month.days.length, 30);
     assert.deepEqual(month.days.flatMap((day: { date: string; weightKg: number | null }) => day.weightKg === null ? [] : [[day.date, day.weightKg]]), [["2026-09-20", 83], ["2026-09-28", 82.1]]);
-    assert.deepEqual(month.recordedDays, { food: 3, workouts: 1, sleep: 1, weight: 2, any: 7 });
+    assert.deepEqual(month.recordedDays, { food: 3, water: 0, supplements: 0, workouts: 1, sleep: 1, weight: 2, any: 7 });
     assert.equal((await review("2026-09-30?days=14")).days.length, 14);
     assert.equal((await review("2026-09-30?days=90")).from, "2026-07-03");
 
@@ -139,7 +152,7 @@ void test("review lists seven days and leaves unrecorded ones null", async () =>
     }
 
     const other = await review("2026-09-30", otherApp);
-    assert.deepEqual(other.recordedDays, { food: 1, workouts: 0, sleep: 0, weight: 0, any: 1 });
+    assert.deepEqual(other.recordedDays, { food: 1, water: 0, supplements: 0, workouts: 0, sleep: 0, weight: 0, any: 1 });
     assert.deepEqual(other.days[3].food, { entryCount: 1, kcal: 700, proteinG: 40 });
   } finally {
     await cleanup();
@@ -171,9 +184,8 @@ void test("review compares each complete food day with the targets in force that
 
     const week = await review("2026-09-30");
 
-    assert.deepEqual(week.days.map((day: { targets: unknown }) => day.targets), [
-      { kcal: 1800, proteinG: 120 }, { kcal: 1800, proteinG: 120 }, { kcal: 1800, proteinG: 120 },
-      { kcal: 2200, proteinG: 100 }, { kcal: 2200, proteinG: 100 }, { kcal: 2200, proteinG: 100 }, { kcal: 2200, proteinG: 100 },
+    assert.deepEqual(week.days.map((day: { targets: { kcal: number; proteinG: number } }) => [day.targets.kcal, day.targets.proteinG]), [
+      [1800, 120], [1800, 120], [1800, 120], [2200, 100], [2200, 100], [2200, 100], [2200, 100],
     ]);
     assert.equal(week.recordedDays.food, 4);
     assert.equal(week.nutrition.completeDays, 3);
@@ -186,7 +198,75 @@ void test("review compares each complete food day with the targets in force that
 
     // Another user's targets stay at the defaults.
     const other = await review("2026-09-30", otherApp);
-    assert.deepEqual(other.days[6].targets, { kcal: 2000, proteinG: 50 });
+    assert.deepEqual(other.days[6].targets, { kcal: 2000, proteinG: 50, waterMl: 2000, sleepMinutes: 480 });
+  } finally {
+    await cleanup();
+  }
+});
+
+void test("review adds water and supplements to the timeline, splits weeks, and suggests from the last one", async () => {
+  ({ app, otherApp, token, setup, cleanup } = createHarness());
+  await setup();
+
+  try {
+    const vitaminD = { id: randomUUID(), name: "Vitamin D", kind: "vitamin", dose: { amount: 1000, unit: "IU" } };
+    const creatine = { id: randomUUID(), name: "Creatine", kind: "creatine", dose: { amount: 5, unit: "g" } };
+    const stack = await app.request("/v1/supplement-stack/2026-09-20", { method: "PUT", headers: { ...auth, "Content-Type": "application/json" }, body: JSON.stringify({ supplements: [vitaminD, creatine] }) });
+    assert.equal(stack.status, 200);
+
+    // Water short of the 2,000 ml default on four days of the last week, and reached on one.
+    for (const [date, volumeMl] of [["2026-09-24", 800], ["2026-09-25", 1000], ["2026-09-26", 1200], ["2026-09-27", 900], ["2026-09-28", 2100]] as const) {
+      await post("/v1/water-entries", { occurredAt: `${date}T09:00:00Z`, timeZone: zone, volumeMl: volumeMl - 300 });
+      await post("/v1/water-entries", { occurredAt: `${date}T15:00:00Z`, timeZone: zone, volumeMl: 300 });
+    }
+
+    // A week earlier, every day reached target.
+    for (let day = 17; day <= 23; day += 1) await post("/v1/water-entries", { occurredAt: `2026-09-${day}T09:00:00Z`, timeZone: zone, volumeMl: 2500 });
+
+    // Both supplements on the 24th, one on the 25th, both on the 30th.
+    await post("/v1/supplement-intakes", { occurredAt: "2026-09-24T08:00:00Z", timeZone: zone, supplementId: vitaminD.id });
+    await post("/v1/supplement-intakes", { occurredAt: "2026-09-24T08:00:00Z", timeZone: zone, supplementId: creatine.id });
+    await post("/v1/supplement-intakes", { occurredAt: "2026-09-25T08:00:00Z", timeZone: zone, supplementId: creatine.id });
+    await post("/v1/supplement-intakes", { occurredAt: "2026-09-30T08:00:00Z", timeZone: zone, supplementId: vitaminD.id });
+    await post("/v1/supplement-intakes", { occurredAt: "2026-09-30T08:00:00Z", timeZone: zone, supplementId: creatine.id });
+
+    const week = await review("2026-09-30");
+    const [d24, d25, , , d28, d29] = week.days;
+
+    assert.deepEqual(d24.water, { entryCount: 2, totalMl: 800 });
+    assert.deepEqual(d28.water, { entryCount: 2, totalMl: 2100 });
+    assert.deepEqual(d29.water, { entryCount: 0, totalMl: null });
+    assert.deepEqual(d24.supplements, { intakeCount: 2, taken: 2, stackSize: 2 });
+    assert.deepEqual(d25.supplements, { intakeCount: 1, taken: 1, stackSize: 2 });
+    assert.deepEqual(d29.supplements, { intakeCount: 0, taken: 0, stackSize: 2 });
+    assert.equal(week.recordedDays.water, 5);
+    assert.equal(week.recordedDays.supplements, 3);
+    assert.equal(week.recordedDays.any, 6);
+    assert.deepEqual(week.water, { average: 1200, averageTarget: 2000, daysOnTarget: 1 });
+    assert.deepEqual(week.supplements, { stackDays: 7, fullDays: 2 });
+
+    // A week is one whole week, and its summary matches the range.
+    assert.equal(week.weeks.length, 1);
+    assert.deepEqual(week.weeks[0], { from: week.from, to: week.to, recordedDays: week.recordedDays, nutrition: week.nutrition, water: week.water, sleep: week.sleep, supplements: week.supplements, workouts: week.workouts, weightKg: week.weightKg });
+
+    // No food logged, so food rules ask for records; water and supplements fell short.
+    assert.deepEqual(week.suggestions.map((suggestion: { kind: string }) => suggestion.kind), ["log-food", "water", "supplements"]);
+    assert.match(week.suggestions[1].because, /reached target on 1 of 5 days, averaging 1,200 ml against 2,000 ml/);
+
+    // Thirty days hold four whole weeks; the two days before them belong to none.
+    const month = await review("2026-09-30?days=30");
+    assert.deepEqual(month.weeks.map((period: { from: string; to: string }) => [period.from, period.to]), [
+      ["2026-09-03", "2026-09-09"], ["2026-09-10", "2026-09-16"], ["2026-09-17", "2026-09-23"], ["2026-09-24", "2026-09-30"],
+    ]);
+    assert.deepEqual(month.weeks[2].water, { average: 2500, averageTarget: 2000, daysOnTarget: 7 });
+    assert.deepEqual(month.weeks[3].water, week.water);
+    // The stack took effect on the 20th, so the third week has four stack days and none full.
+    assert.deepEqual(month.weeks[2].supplements, { stackDays: 4, fullDays: 0 });
+    assert.deepEqual(month.suggestions, week.suggestions);
+
+    const other = await review("2026-09-30", otherApp);
+    assert.deepEqual(other.supplements, { stackDays: 0, fullDays: 0 });
+    assert.equal(other.recordedDays.water, 0);
   } finally {
     await cleanup();
   }
