@@ -1,5 +1,5 @@
 import * as stylex from "@stylexjs/stylex";
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type UIEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Badge } from "./components/ui/badge";
 import { Button } from "./components/ui/button";
@@ -31,6 +31,10 @@ const equipmentOptions = ["all", ...equipment] as const;
 
 const createEquipmentOptions = ["none", ...equipment] as const;
 
+// Every row draws a body figure of about a hundred polygons, so the whole library at once stalls each keystroke.
+// The list shows this many matches, and more as it scrolls near its end.
+const rowsPerPage = 50;
+
 // Choose an exercise from the library, or create one. The body mounts only while the picker is open, so each
 // opening starts from an empty search. Render it outside other forms: React bubbles the create form's submit
 // through the portal to any form around it.
@@ -59,8 +63,21 @@ function ExerciseList({ date, filter, onFilterChange, onPick, onCreate }: { date
   const library = useQuery(exerciseLibraryQueryOptions());
   const history = useQuery(exerciseHistoryQueryOptions());
   const remove = useDeleteExercise();
+  const [shown, setShown] = useState(rowsPerPage);
   const { recent, all } = library.data ? pickerGroups(library.data.exercises, history.data?.exercises ?? [], date, filter) : { recent: [], all: [] };
   const typed = filter.query.trim();
+
+  // A new search starts from the first page again.
+  function changeFilter(next: PickerFilter) {
+    setShown(rowsPerPage);
+    onFilterChange(next);
+  }
+
+  function showMoreNearEnd(event: UIEvent<HTMLDivElement>) {
+    const list = event.currentTarget;
+
+    if (shown < all.length && list.scrollHeight - list.scrollTop - list.clientHeight < 400) setShown(shown + rowsPerPage);
+  }
 
   function row(exercise: LibraryExercise, group: string) {
     const detail = exerciseDetail(exercise);
@@ -87,9 +104,9 @@ function ExerciseList({ date, filter, onFilterChange, onPick, onCreate }: { date
       <DialogTitle {...stylex.props(formStyles.dialogTitle)}>Choose an exercise</DialogTitle>
       <DialogDescription {...stylex.props(formStyles.dialogDescription)}>Search the library, or create an exercise of your own.</DialogDescription>
       <Command shouldFilter={false} loop>
-        <CommandInput placeholder="Search exercises" value={filter.query} onValueChange={(query) => onFilterChange({ ...filter, query })} aria-label="Search exercises" />
+        <CommandInput placeholder="Search exercises" value={filter.query} onValueChange={(query) => changeFilter({ ...filter, query })} aria-label="Search exercises" />
         <div {...stylex.props(styles.filters)}>
-          <Select value={filter.muscle ?? "all"} onValueChange={(next) => { const muscle = selectValue(muscleOptions, next, "all"); onFilterChange({ ...filter, muscle: muscle === "all" ? null : muscle }); }}>
+          <Select value={filter.muscle ?? "all"} onValueChange={(next) => { const muscle = selectValue(muscleOptions, next, "all"); changeFilter({ ...filter, muscle: muscle === "all" ? null : muscle }); }}>
             <SelectTrigger aria-label="Muscle" {...stylex.props(formStyles.selectTrigger)}>
               <SelectValue />
             </SelectTrigger>
@@ -97,7 +114,7 @@ function ExerciseList({ date, filter, onFilterChange, onPick, onCreate }: { date
               {muscleOptions.map((option) => <SelectItem key={option} value={option}>{option === "all" ? "All muscles" : muscleLabels[option]}</SelectItem>)}
             </SelectContent>
           </Select>
-          <Select value={filter.equipment ?? "all"} onValueChange={(next) => { const chosen = selectValue(equipmentOptions, next, "all"); onFilterChange({ ...filter, equipment: chosen === "all" ? null : chosen }); }}>
+          <Select value={filter.equipment ?? "all"} onValueChange={(next) => { const chosen = selectValue(equipmentOptions, next, "all"); changeFilter({ ...filter, equipment: chosen === "all" ? null : chosen }); }}>
             <SelectTrigger aria-label="Equipment" {...stylex.props(formStyles.selectTrigger)}>
               <SelectValue />
             </SelectTrigger>
@@ -106,7 +123,7 @@ function ExerciseList({ date, filter, onFilterChange, onPick, onCreate }: { date
             </SelectContent>
           </Select>
         </div>
-        <CommandList {...stylex.props(styles.list)}>
+        <CommandList onScroll={showMoreNearEnd} {...stylex.props(styles.list)}>
           {library.isPending && <p {...stylex.props(styles.status)}>Loading exercises…</p>}
           {library.isError && (
             <div {...stylex.props(styles.status)}>
@@ -116,7 +133,7 @@ function ExerciseList({ date, filter, onFilterChange, onPick, onCreate }: { date
           )}
           {library.data && <CommandEmpty>No exercise matches.</CommandEmpty>}
           {recent.length > 0 && <CommandGroup heading="Recent">{recent.map((exercise) => row(exercise, "recent"))}</CommandGroup>}
-          {all.length > 0 && <CommandGroup heading={recent.length > 0 ? "All exercises" : undefined}>{all.map((exercise) => row(exercise, "all"))}</CommandGroup>}
+          {all.length > 0 && <CommandGroup heading={recent.length > 0 ? "All exercises" : undefined}>{all.slice(0, shown).map((exercise) => row(exercise, "all"))}</CommandGroup>}
         </CommandList>
       </Command>
       <div {...stylex.props(styles.footer)}>
