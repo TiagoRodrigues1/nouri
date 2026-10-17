@@ -721,7 +721,8 @@ function FoodItems({ foods, query, tray, pending, onPick, onToggle, onLogTray, o
               onToggle(food.row);
             }}
           >
-            {on && <Check size={11} strokeWidth={3} />}
+            {/* The size class opts out of the item's 16px icon size, and the colour holds on the highlighted row. */}
+            {on && <Check className="size-[11px] text-primary-foreground!" strokeWidth={3} />}
           </button>
         }
         name={<Highlighted name={food.row.food.name} query={query} />}
