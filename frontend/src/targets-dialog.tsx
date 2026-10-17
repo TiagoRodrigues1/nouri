@@ -187,11 +187,9 @@ function profileDraftFrom(profile: Profile | null, date: string): ProfileDraft {
   return { ...rest, age: String(Number(date.slice(0, 4)) - birthYear) };
 }
 
-const missingLabels: Record<ProfileView["missing"][number], string> = { profile: "profile", weight: "weight", height: "height" };
-
-// Names what is left to log, leaving out the profile, which this section saves itself.
+// Names the measurements left to log. The section saves the profile itself and checks the age before saving.
 function missingMeasurements(missing: ProfileView["missing"]): string | null {
-  const measurements = missing.filter((item) => item !== "profile").map((item) => missingLabels[item]);
+  const measurements = missing.filter((item) => item === "weight" || item === "height");
 
   return measurements.length > 0 ? `Log your ${measurements.join(" and ")} on Overview to get a suggestion.` : null;
 }

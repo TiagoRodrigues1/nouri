@@ -1,4 +1,5 @@
 import { targetLimits } from "../targets/contract.js";
+import { ageLimits } from "./contract.js";
 import type { Profile, Suggestion } from "./contract.js";
 
 // Standard multipliers from resting to daily energy.
@@ -30,6 +31,12 @@ function roundTo(value: number, step: number) {
 // Age on the day, from the year alone: at most a year off around birthdays, about 5 kcal of resting energy.
 export function ageOn(birthYear: number, date: string): number {
   return Number(date.slice(0, 4)) - birthYear;
+}
+
+export function isAdultOn(birthYear: number, date: string): boolean {
+  const age = ageOn(birthYear, date);
+
+  return age >= ageLimits.min && age <= ageLimits.max;
 }
 
 export function suggestTargets(profile: Profile, body: { weightKg: number; heightCm: number }, date: string): Suggestion {

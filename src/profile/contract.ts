@@ -34,8 +34,8 @@ export const suggestionSchema = z.object({
   targets: suggestedTargetsSchema,
 });
 
-// What a suggestion is made from.
-export const profileNeeds = ["profile", "weight", "height"] as const;
+// What a suggestion is made from. `age` is missing when the saved birth year gives an age outside `ageLimits` on the day.
+export const profileNeeds = ["profile", "age", "weight", "height"] as const;
 
 export const profileViewSchema = z.object({
   profile: profileSchema.nullable(),

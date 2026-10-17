@@ -4,7 +4,7 @@ import { userProfiles } from "../db/schema.js";
 import { getLatestMeasurements } from "../measurements/measurements.js";
 import { profileNeeds } from "./contract.js";
 import type { Profile, ProfileView } from "./contract.js";
-import { suggestTargets } from "./suggest.js";
+import { isAdultOn, suggestTargets } from "./suggest.js";
 
 // The saved profile and the targets it suggests on the day, from the weight and height in force then.
 export async function getProfileView(db: AppDatabase, userId: string, date: string): Promise<ProfileView> {
@@ -14,10 +14,12 @@ export async function getProfileView(db: AppDatabase, userId: string, date: stri
   ]);
 
   const profile: Profile | null = row ? { sex: row.sex, birthYear: row.birthYear, activity: row.activity, goal: row.goal } : null;
-  const found = { profile, weight: latest.weight, height: latest.height };
-  const missing = profileNeeds.filter((need) => found[need] === null);
+  const adult = profile !== null && isAdultOn(profile.birthYear, date);
+  // Without a profile there is no age to judge, so only the profile is reported missing.
+  const has = { profile: profile !== null, age: profile === null || adult, weight: latest.weight !== null, height: latest.height !== null };
+  const missing = profileNeeds.filter((need) => !has[need]);
 
-  const suggestion = profile && latest.weight && latest.height
+  const suggestion = profile && adult && latest.weight && latest.height
     ? suggestTargets(profile, { weightKg: latest.weight.value, heightCm: latest.height.value }, date)
     : null;
 

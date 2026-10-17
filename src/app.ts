@@ -39,6 +39,7 @@ import { maxPhotoBytes, maxThumbnailBytes, photoSchema, photoUploadSchema } from
 import { detectPhotoType, getPhotoByteSize, getPhotoImage, photoRecords } from "./photos/photos.js";
 import { profileSchema, profileViewSchema } from "./profile/contract.js";
 import { getProfileView, saveProfile } from "./profile/profile.js";
+import { isAdultOn } from "./profile/suggest.js";
 import { sleepInputSchema } from "./sleep/contract.js";
 import { sleepRecords } from "./sleep/sleep.js";
 import { intakeInputSchema } from "./supplements/contract.js";
@@ -507,13 +508,14 @@ export function createApp(db: AppDatabase, identity: Identity, packagedFoods: Pa
     const date = z.iso.date().safeParse(context.req.param("date"));
     const input = profileSchema.safeParse(await context.req.json().catch(() => null));
 
-    if (!date.success || !input.success) return error(400, "Invalid profile");
+    // The formula is for adults, so the birth year must give an age in range on the day it is saved from.
+    if (!date.success || !input.success || !isAdultOn(input.data.birthYear, date.data)) return error(400, "Invalid profile");
 
     return context.json(await saveProfile(db, context.get("userId"), date.data, input.data));
   });
   const profileParams = z.object({ date: z.iso.date() });
   app.openAPIRegistry.registerPath({ method: "get", path: "/v1/profile/{date}", request: { params: profileParams }, responses: { 200: { description: "The saved profile and the nutrition targets it suggests on the local day, from the latest weight and height; null with what is missing until there is enough", ...json(profileViewSchema) }, 400: failure("Invalid date") } });
-  app.openAPIRegistry.registerPath({ method: "put", path: "/v1/profile/{date}", request: { params: profileParams, body: json(profileSchema) }, responses: { 200: { description: "Saved profile, with the targets it suggests on the local day. Targets themselves are not changed", ...json(profileViewSchema) }, 400: failure("Invalid date or profile") } });
+  app.openAPIRegistry.registerPath({ method: "put", path: "/v1/profile/{date}", request: { params: profileParams, body: json(profileSchema) }, responses: { 200: { description: "Saved profile, with the targets it suggests on the local day. Targets themselves are not changed", ...json(profileViewSchema) }, 400: failure("Invalid date or profile, or an age outside 18–100 on the date") } });
 
 
   app.get("/v1/account/export", (context) => {

@@ -69,6 +69,19 @@ void test("a saved profile suggests nutrition targets from the latest weight and
     assert.deepEqual((await get("2026-10-17")).profile, gaining);
     assert.deepEqual(await get("2026-10-17", otherApp), { profile: null, suggestion: null, missing: ["profile", "weight", "height"] });
 
+    // The formula is for adults: the age on the day saved from must be 18–100.
+    for (const birthYear of [2009, 1925, 2100, 1900]) {
+      assert.equal((await put("2026-10-17", { ...profile, birthYear })).status, 400);
+    }
+
+    assert.equal((await put("2026-10-17", { ...profile, birthYear: 1926 })).status, 200);
+
+    // A later day where that birth year gives an age past the limit has no suggestion, only the missing age.
+    const older = await get("2027-01-01");
+    assert.equal(older.suggestion, null);
+    assert.deepEqual(older.missing, ["age"]);
+    assert.equal((await put("2026-10-17", gaining)).status, 200);
+
     for (const invalid of [{ ...profile, sex: "other" }, { ...profile, activity: "extreme" }, { ...profile, birthYear: 1992.5 }, { ...profile, extra: true }, { sex: "male" }]) {
       assert.equal((await put("2026-10-17", invalid)).status, 400);
     }

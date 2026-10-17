@@ -50,7 +50,7 @@ suggestedTargetsSchema = targetsSchema.pick({ kcal, proteinG, carbsG, fatG, wate
 profileViewSchema = z.object({
   profile: profileSchema | null,
   suggestion: { basis: { age, weightKg, heightCm, maintenanceKcal }, targets: SuggestedTargets } | null,
-  missing: ("profile" | "weight" | "height")[],   // empty exactly when there is a suggestion
+  missing: ("profile" | "age" | "weight" | "height")[],   // empty exactly when there is a suggestion
 })
 
 // src/profile/suggest.ts: pure, unit tested
@@ -93,7 +93,7 @@ B is the base. It keeps formulas on the server, as `targets-design.md` requires,
 - We accept a date in the path of a resource that is not effective-dated, in exchange for a single read that includes age and the weight in force that day.
 - We accept a one-year error in age around birthdays in exchange for never asking for a birth date. It changes resting energy by 5 kcal.
 - We accept that the profile records only `female` and `male`, because the formula has no other branch. The section says it uses these for the energy formula.
-- We accept formulas for adults only. The form limits age to 18–100.
+- We accept formulas for adults only. Saving a profile is refused unless the age on that day is 18–100. A later day past 100 reports `age` in `missing` and has no suggestion.
 
 ## Alternatives considered
 
