@@ -37,12 +37,21 @@ void test("a cut never goes below resting energy", () => {
   assert.equal(targets.kcal, 880);
 });
 
-void test("suggestions stay within the target limits for extreme bodies", () => {
+void test("protein is capped so the macros fit the energy target", () => {
+  const { targets } = suggestTargets({ sex: "female", birthYear: 1926, activity: "sedentary", goal: "lose" }, { weightKg: 100, heightCm: 100 }, "2026-10-17");
+
+  // 2 g per kilogram would be 200 g, 800 kcal of a 960 kcal target.
+  assert.deepEqual(targets, { kcal: 960, proteinG: 84, carbsG: 84, fatG: 32, waterMl: 3500 });
+});
+
+void test("suggestions stay within the target limits and the energy target for extreme bodies", () => {
   for (const body of [{ weightKg: 20, heightCm: 50 }, { weightKg: 500, heightCm: 272 }]) {
     for (const goal of ["lose", "maintain", "gain"] as const) {
       const { targets } = suggestTargets({ ...cutting, goal, activity: "very-active" }, body, "2026-10-17");
 
       assert.ok(targetsSchema.safeParse({ ...defaultTargets, ...targets }).success, `${goal} for ${body.weightKg} kg`);
+      // Rounding each macro to a gram moves the total by a few kcal at most.
+      assert.ok(Math.abs(targets.proteinG * 4 + targets.carbsG * 4 + targets.fatG * 9 - targets.kcal) <= 10, `${goal} for ${body.weightKg} kg adds up`);
     }
   }
 });

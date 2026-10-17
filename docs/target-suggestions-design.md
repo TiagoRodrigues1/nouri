@@ -77,7 +77,7 @@ Load-bearing decisions:
 - **Only nutrition targets are suggested.** Energy, protein, carbs, fat, and water follow from body size and goal. Sleep, fasting, steps, and the activity goals are preferences, and the weight goal is the person's choice, so those fields in the form stay as they are.
 - **A suggestion never saves targets.** It fills the form, and "Save targets" still applies from today, per `targets-design.md`.
 
-The formula is Mifflin–St Jeor resting energy multiplied by a standard activity factor (1.2 to 1.9). Lose takes 20% off maintenance but never goes below resting energy. Gain adds 10%. Protein is grams per kilogram by goal (2.0 lose, 1.6 maintain, 1.8 gain), fat is 30% of energy, carbs fill the rest, and water is 35 ml per kilogram. Every value is rounded and clamped to `targetLimits`, so a suggestion always passes `targetsSchema`.
+The formula is Mifflin–St Jeor resting energy multiplied by a standard activity factor (1.2 to 1.9). Lose takes 20% off maintenance but never goes below resting energy. Gain adds 10%. Protein is grams per kilogram by goal (2.0 lose, 1.6 maintain, 1.8 gain), capped at 35% of energy so a short, heavy person on a cut still has room for carbs. Fat is 30% of energy, carbs fill the rest, and water is 35 ml per kilogram. Every value is rounded and clamped to `targetLimits`, so a suggestion always passes `targetsSchema`.
 
 ## Synthesis decision
 

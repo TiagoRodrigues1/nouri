@@ -18,6 +18,10 @@ const energyChange: Record<Profile["goal"], number> = { lose: -0.2, maintain: 0,
 
 const fatShare = 0.3;
 
+// The top of the usual protein range. Grams per kilogram alone could leave a short, heavy person on a cut with protein
+// and fat over the energy target, so this keeps room for carbs.
+const maxProteinShare = 0.35;
+
 const waterPerKg = 35;
 
 function clamp(value: number, { min, max }: { min: number; max: number }) {
@@ -49,7 +53,7 @@ export function suggestTargets(profile: Profile, body: { weightKg: number; heigh
 
   // A cut never goes below resting energy.
   const kcal = clamp(roundTo(Math.max(resting, maintenance * (1 + energyChange[profile.goal])), 10), targetLimits.kcal);
-  const proteinG = clamp(Math.round(weightKg * proteinPerKg[profile.goal]), targetLimits.proteinG);
+  const proteinG = clamp(Math.round(Math.min(weightKg * proteinPerKg[profile.goal], (kcal * maxProteinShare) / 4)), targetLimits.proteinG);
   const fatG = clamp(Math.round((kcal * fatShare) / 9), targetLimits.fatG);
   const carbsG = clamp(Math.round((kcal - proteinG * 4 - fatG * 9) / 4), targetLimits.carbsG);
   const waterMl = clamp(roundTo(weightKg * waterPerKg, 50), targetLimits.waterMl);
