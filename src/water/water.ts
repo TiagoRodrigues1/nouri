@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, between, count, eq, isNull, sum } from "drizzle-orm";
 import { waterEntries } from "../db/schema.js";
 import type { AppDatabase } from "../db/database.js";
 import type { RecordKind } from "../journal/records.js";
@@ -49,4 +49,15 @@ export async function getWaterDay(db: AppDatabase, userId: string, date: string)
     // An empty day is unrecorded intake, not zero millilitres.
     totalMl: rows.length === 0 ? null : rows.reduce((sum, row) => sum + row.volumeMl, 0),
   };
+}
+
+export type WaterRangeDay = { entryCount: number; totalMl: number };
+
+// Days from `from` to `to` that have water, by local date.
+export async function getWaterRange(db: AppDatabase, userId: string, from: string, to: string): Promise<Map<string, WaterRangeDay>> {
+  const rows = await db.select({ localDate: waterEntries.localDate, entryCount: count(), totalMl: sum(waterEntries.volumeMl) }).from(waterEntries).where(and(
+    eq(waterEntries.userId, userId), between(waterEntries.localDate, from, to), isNull(waterEntries.deletedAt),
+  )).groupBy(waterEntries.localDate);
+
+  return new Map(rows.map((row) => [row.localDate, { entryCount: row.entryCount, totalMl: Number(row.totalMl) }]));
 }

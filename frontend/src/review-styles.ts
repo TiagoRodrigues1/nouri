@@ -23,6 +23,8 @@ export const styles = stylex.create({
   trendHeader: { display: "flex", flexWrap: "wrap", alignItems: "baseline", justifyContent: "space-between", gap: 8, paddingTop: 14, paddingRight: 16, paddingBottom: 4, paddingLeft: 16 },
   trendChange: { color: colors.foreground, fontWeight: 600, fontVariantNumeric: "tabular-nums" },
   trendContent: { paddingTop: 0, paddingRight: 16, paddingBottom: 12, paddingLeft: 16 },
+  suggestions: { display: "grid", gap: 10, margin: 0, padding: 0, listStyle: "none" },
+  suggestion: { display: "grid", gap: 2, fontSize: 13 },
   links: { display: "inline-flex", gap: 2 },
   hidden: {
     position: "absolute",

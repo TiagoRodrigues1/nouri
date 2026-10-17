@@ -44,7 +44,7 @@ export type { Measurement, MeasurementKind } from "../../../src/measurements/con
 
 export type { Overview } from "../../../src/overview/contract";
 
-export type { Review, ReviewDay } from "../../../src/review/contract";
+export type { Review, ReviewDay, ReviewPeriod } from "../../../src/review/contract";
 
 export type { Photo } from "../../../src/photos/contract";
 
