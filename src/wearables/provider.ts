@@ -89,8 +89,9 @@ export const reauthorizeMessage = "Access expired or was revoked. Choose Connect
 // The messages reach the person, so they say what to do next, and none may carry a token.
 // "unauthorized" means the provider refused the access token; a refreshed one may still work.
 // "reauthorize" means the grant itself is gone and only a new sign-in helps.
+// "not-linked" means the account has no profile with the provider, so a sign-in helps only once the person sets one up.
 export class ProviderFailure extends Error {
-  constructor(readonly reason: "reauthorize" | "unauthorized" | "unavailable", message: string) { super(message); }
+  constructor(readonly reason: "reauthorize" | "unauthorized" | "unavailable" | "not-linked", message: string) { super(message); }
 }
 
 // A service Nouri's server signs in to with OAuth and pulls records from. Nouri owns the state, PKCE,

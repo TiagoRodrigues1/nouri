@@ -75,7 +75,7 @@ export const disconnectResultSchema = z.object({ revoked: z.boolean(), removed: 
 export const authorizationSchema = z.object({ authorizationUrl: z.url() });
 
 // The OAuth callback reports its outcome to the page through the `connect` query parameter.
-export const callbackResults = ["connected", "denied", "expired-link", "missing-scope", "token-failed"] as const;
+export const callbackResults = ["connected", "denied", "expired-link", "missing-scope", "not-linked", "token-failed"] as const;
 
 export type CallbackResult = (typeof callbackResults)[number];
 

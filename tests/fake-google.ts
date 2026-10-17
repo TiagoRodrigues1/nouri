@@ -97,6 +97,13 @@ function json(status: number, body: Json | { dataPoints: Fixture[]; nextPageToke
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 }
 
+// Google's answer for an account without a Google Health profile, from https://developers.google.com/health/troubleshooting.
+function notLinked(): Response {
+  return json(400, { error: { code: 400, status: "FAILED_PRECONDITION", message: "The account is not linked to Google Health.", details: [
+    { "@type": "type.googleapis.com/google.rpc.ErrorInfo", reason: "ACCOUNT_NOT_LINKED", domain: "health.googleapis.com", metadata: { redirect_uri: "https://fitbit.google.com/auth/signup" } },
+  ] } });
+}
+
 // Stands in for Google's OAuth and Health endpoints with the documented request and response shapes.
 // It checks PKCE, the redirect URI, and client credentials the way Google does.
 const codePrefix = "4/fake-approved-";
@@ -123,6 +130,8 @@ export class FakeGoogle {
   grantedScope = allScopes;
   // The person's ID in webhook notifications, from users/me/identity.
   healthUserId = "fake-health-user-1";
+  // False for a Google account without a Google Health profile: identity and data requests answer ACCOUNT_NOT_LINKED.
+  linked = true;
   readonly requests: URL[] = [];
   // The data type and date range of each dailyRollUp, once per range however many pages it takes.
   readonly rollups: { dataType: string; from: string; until: string }[] = [];
@@ -181,9 +190,9 @@ export class FakeGoogle {
     if (url.href === googleEndpoints.identity) {
       const authorization = headers.get("Authorization") ?? "";
 
-      return authorization.startsWith("Bearer ") && this.accessTokens.has(authorization.slice(7))
-        ? json(200, { name: "users/me/identity", legacyUserId: "FAKE01", healthUserId: this.healthUserId })
-        : json(401, { error: "UNAUTHENTICATED" });
+      if (!authorization.startsWith("Bearer ") || !this.accessTokens.has(authorization.slice(7))) return json(401, { error: "UNAUTHENTICATED" });
+
+      return this.linked ? json(200, { name: "users/me/identity", legacyUserId: "FAKE01", healthUserId: this.healthUserId }) : notLinked();
     }
 
     const dataPoints = new RegExp(`^${googleEndpoints.dataTypes}/([a-z-]+)/dataPoints(:dailyRollUp)?$`).exec(url.origin + url.pathname);
@@ -194,6 +203,8 @@ export class FakeGoogle {
     if (!headers.get("Authorization")?.startsWith("Bearer ") || !this.accessTokens.has(headers.get("Authorization")?.slice(7) ?? "")) return json(401, { error: "UNAUTHENTICATED" });
 
     if (this.outage) return json(503, { error: "UNAVAILABLE" });
+
+    if (!this.linked) return notLinked();
 
     // Like Google, a data type answers only with the scope that covers it.
     if (!this.grantedScope.split(" ").includes(scopeOf.get(dataType) ?? "")) return json(403, { error: "PERMISSION_DENIED" });

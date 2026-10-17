@@ -91,12 +91,16 @@ export function connectionFor(db: AppDatabase, runtime: WearableRuntime, provide
     return null;
   }
 
+  // While a sync runs, only it may write to the connection: the lease it took at `started` must still be its own.
+  // A newer sync, or a new sign-in, replaces the lease, and the older run's tokens, errors, and records stay out.
+  const holding = (started: Date) => and(key, eq(wearableConnections.syncStartedAt, started));
+
   // Returns the refresh token to use next time, which is the new one when the provider rotated it.
-  async function refreshed(refreshToken: string): Promise<{ accessToken: string; refreshToken: string }> {
+  async function refreshed(refreshToken: string, started: Date): Promise<{ accessToken: string; refreshToken: string }> {
     const grant = await provider.refresh(refreshToken);
     const now = runtime.now();
 
-    await db.update(wearableConnections).set({ ...grantColumns(grant, now), updatedAt: now }).where(and(key, live));
+    await db.update(wearableConnections).set({ ...grantColumns(grant, now), updatedAt: now }).where(and(holding(started), live));
 
     return { accessToken: grant.accessToken, refreshToken: grant.refreshToken ?? refreshToken };
   }
@@ -113,11 +117,11 @@ export function connectionFor(db: AppDatabase, runtime: WearableRuntime, provide
   // The provider's ID for the person, or null when it cannot say right now; the next sync asks again.
   const accountId = (accessToken: string) => provider.accountId(accessToken).catch(() => null);
 
-  async function withAccessToken<T>(row: LiveRow, use: (accessToken: string) => Promise<T>): Promise<T> {
+  async function withAccessToken<T>(row: LiveRow, started: Date, use: (accessToken: string) => Promise<T>): Promise<T> {
     let refreshToken = tokens.open("refresh-token", row.refreshToken);
     let accessToken = cachedToken(row);
 
-    if (!accessToken) ({ accessToken, refreshToken } = await refreshed(refreshToken));
+    if (!accessToken) ({ accessToken, refreshToken } = await refreshed(refreshToken, started));
 
     try {
       return await use(accessToken);
@@ -126,7 +130,7 @@ export function connectionFor(db: AppDatabase, runtime: WearableRuntime, provide
     }
 
     // A refused access token gets one refresh before the grant needs a new sign-in.
-    return use((await refreshed(refreshToken)).accessToken);
+    return use((await refreshed(refreshToken, started)).accessToken);
   }
 
   // The full window ends `windowDays` before the sync started. A scope with a later `since` reads from that UTC date.
@@ -149,7 +153,7 @@ export function connectionFor(db: AppDatabase, runtime: WearableRuntime, provide
     let providerUserId: string | null;
 
     try {
-      [pulled, providerUserId] = await withAccessToken(row, (accessToken) => Promise.all([pullAll(accessToken, kinds, window), row.providerUserId ?? accountId(accessToken)]));
+      [pulled, providerUserId] = await withAccessToken(row, started, (accessToken) => Promise.all([pullAll(accessToken, kinds, window), row.providerUserId ?? accountId(accessToken)]));
     } catch (failure) {
       if (!(failure instanceof ProviderFailure)) throw failure;
 
@@ -162,7 +166,10 @@ export function connectionFor(db: AppDatabase, runtime: WearableRuntime, provide
         ? { ...common, refreshToken: null, accessToken: null, accessTokenExpiresAt: null }
         : common;
 
-      await db.update(wearableConnections).set(update).where(key);
+      const [recorded] = await db.update(wearableConnections).set(update).where(holding(started)).returning({ userId: wearableConnections.userId });
+
+      // A run that lost its lease leaves the failure unrecorded, so it cannot clear a newer grant or its error.
+      if (!recorded) return superseded();
 
       return { outcome: "failed", reason, message: failure.message };
     }
@@ -176,7 +183,7 @@ export function connectionFor(db: AppDatabase, runtime: WearableRuntime, provide
       // this sync's lease: one that outlived its lease lost it to a newer sync, whose fresher read is the one to keep.
       // Drizzle leaves a column it is given undefined for unchanged.
       const columns = { lastSyncedAt: started, lastError, providerUserId, updatedAt: started, reconciledAt: reconciled ? started : undefined };
-      const [held] = await tx.update(wearableConnections).set(columns).where(and(key, live, eq(wearableConnections.syncStartedAt, started))).returning({ userId: wearableConnections.userId });
+      const [held] = await tx.update(wearableConnections).set(columns).where(and(holding(started), live)).returning({ userId: wearableConnections.userId });
 
       if (!held) return null;
 
@@ -184,8 +191,7 @@ export function connectionFor(db: AppDatabase, runtime: WearableRuntime, provide
       return eachKind(async (kind) => byKind.get(kind)?.apply(tx) ?? nothing);
     });
 
-    // Nothing was saved: say why, as when the lease was refused at the start.
-    if (!result) return refused(started);
+    if (!result) return superseded();
 
     return { outcome: "synced", result };
   }
@@ -202,6 +208,17 @@ export function connectionFor(db: AppDatabase, runtime: WearableRuntime, provide
   const cooled = (started: Date) =>
     or(isNull(table.lastSyncedAt), lte(table.lastSyncedAt, new Date(started.getTime() - syncTiming.manualCooldownMs)), isNull(table.reconciledAt));
 
+  const busyRunning: SyncOutcome = { outcome: "busy", reason: "running", retryAfterMs: syncTiming.busyRetryMs };
+
+  // Why a run that lost its lease saved nothing: the connection is gone, its grant was lost, or a newer sync or sign-in took over.
+  async function superseded(): Promise<SyncOutcome> {
+    const current = await stored();
+
+    if (!current) return { outcome: "not-connected" };
+
+    return isLive(current) ? busyRunning : lostGrant(current);
+  }
+
   // Why the lease was refused: the connection changed, another sync holds it, or the cooldown has not passed.
   async function refused(started: Date): Promise<SyncOutcome> {
     const current = await stored();
@@ -211,7 +228,7 @@ export function connectionFor(db: AppDatabase, runtime: WearableRuntime, provide
     if (!isLive(current)) return lostGrant(current);
     const running = current.syncStartedAt && current.syncStartedAt.getTime() > started.getTime() - syncTiming.leaseMs;
 
-    if (running || !current.lastSyncedAt) return { outcome: "busy", reason: "running", retryAfterMs: syncTiming.busyRetryMs };
+    if (running || !current.lastSyncedAt) return busyRunning;
 
     return { outcome: "busy", reason: "cooldown", retryAfterMs: Math.max(current.lastSyncedAt.getTime() + syncTiming.manualCooldownMs - started.getTime(), 1000) };
   }
@@ -302,11 +319,24 @@ export function connectionFor(db: AppDatabase, runtime: WearableRuntime, provide
       }
 
       if (!grant.refreshToken) return "token-failed";
-      // A sign-in may switch Google accounts, so the ID is read again, and left for the next sync to fill when that fails.
-      const providerUserId = await accountId(grant.accessToken);
+      let providerUserId: string | null = null;
+
+      // A sign-in may switch Google accounts, so the ID is read again. Google asks apps to confirm the account has a
+      // Google Health profile before calling it connected. Any other failure leaves the ID for the next sync to fill.
+      try {
+        providerUserId = await provider.accountId(grant.accessToken);
+      } catch (failure) {
+        if (failure instanceof ProviderFailure && failure.reason === "not-linked") {
+          await provider.revoke(grant.refreshToken);
+
+          return "not-linked";
+        }
+      }
+
       const now = runtime.now();
       // A new grant may cover kinds never read, so it is not reconciled yet, and its first Sync now skips the cooldown.
-      const columns = { scope: grant.scope, ...grantColumns(grant, now), providerUserId, reconciledAt: null, lastError: null, updatedAt: now };
+      // Clearing the lease takes it from any sync still running on the old grant, so that run cannot save.
+      const columns = { scope: grant.scope, ...grantColumns(grant, now), providerUserId, reconciledAt: null, syncStartedAt: null, lastError: null, updatedAt: now };
 
       await db.insert(wearableConnections).values({ userId, provider: provider.id, ...columns })
         .onConflictDoUpdate({ target: [wearableConnections.userId, wearableConnections.provider], set: columns });

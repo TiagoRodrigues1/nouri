@@ -328,6 +328,31 @@ void test("Google Health imports in the background", async (t) => {
       google.put(night);
     });
 
+    await t.test("signing in again stops a sync still running on the old grant", async () => {
+      const lastSync = (await nouri.connection()).lastSyncedAt;
+
+      // While this sync reads, the person signs in again, and the old access token stops working.
+      nouri.hooks.push(async () => {
+        assert.equal(await nouri.connect(), "connected");
+        google.expireAccessTokens();
+      });
+
+      nouri.advance(syncTiming.manualCooldownMs);
+      const old = await nouri.syncNow();
+      assert.equal(old.status, 429);
+      assert.match((await old.json()).error, /already running/);
+
+      // The old run's refresh token is no longer valid, but that failure is not recorded against the new grant,
+      // and the old run saved nothing.
+      const after = await nouri.connection();
+      assert.deepEqual(after.lastSyncedAt, lastSync);
+      const status = await (await nouri.app.request(base, { headers: nouri.auth })).json();
+      assert.deepEqual([status.connection, status.lastError], ["connected", null]);
+
+      // The new grant's first Sync now skips the cooldown and imports.
+      assert.equal((await nouri.syncNow()).status, 200);
+    });
+
     await t.test("daily reconciliation covers people who use Nouri", async () => {
       await nouri.setConnection("reconciled_at", new Date(clock.now.getTime() - syncTiming.reconcileEveryMs));
       await nouri.setConnection("opened_at", null);
@@ -441,6 +466,32 @@ void test("an idle worker leaves the database alone", async () => {
     assert.equal(await settlesAt(before + 1), before + 1);
   } finally {
     worker.stop();
+    await nouri.cleanup();
+  }
+});
+
+void test("a Google account without a Google Health profile does not connect", async () => {
+  const nouri = server(false);
+
+  await nouri.setup();
+
+  try {
+    // Google asks apps to check the identity after sign-in, and to not call an unlinked account connected.
+    nouri.google.linked = false;
+    assert.equal(await nouri.connect(), "not-linked");
+    const status = await (await nouri.app.request(base, { headers: nouri.auth })).json();
+    assert.equal(status.connection, "not-connected");
+    assert.deepEqual(nouri.google.revoked.length, 1);
+
+    // An account that loses its profile after connecting asks for a new sign-in, with what to do, instead of retrying.
+    nouri.google.linked = true;
+    assert.equal(await nouri.connect(), "connected");
+    nouri.google.linked = false;
+    const failed = await nouri.syncNow();
+    assert.equal(failed.status, 409);
+    assert.match((await failed.json()).error, /isn't linked to Google Health/);
+    assert.equal((await (await nouri.app.request(base, { headers: nouri.auth })).json()).connection, "reauthorize");
+  } finally {
     await nouri.cleanup();
   }
 });

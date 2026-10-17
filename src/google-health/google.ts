@@ -1,5 +1,5 @@
 import type { z } from "zod";
-import { activeEnergyRollupSchema, dataPageSchema, exerciseDataPointSchema, heartRateRollupSchema, identitySchema, restingHeartRatePointSchema, rollupPageSchema, scopes, sleepDataPointSchema, stepsRollupSchema, syncWindowDays, tokenErrorSchema, tokenResponseSchema } from "./contract.js";
+import { activeEnergyRollupSchema, apiErrorSchema, dataPageSchema, exerciseDataPointSchema, heartRateRollupSchema, identitySchema, restingHeartRatePointSchema, rollupPageSchema, scopes, sleepDataPointSchema, stepsRollupSchema, syncWindowDays, tokenErrorSchema, tokenResponseSchema } from "./contract.js";
 import type { GoogleHealthConfig, RestingHeartRatePoint } from "./contract.js";
 import type { BpmRange } from "../daily-totals/contract.js";
 import { activityRecords, heartRateRecords, type DaySeries, type DayValue } from "./daily-import.js";
@@ -92,6 +92,15 @@ async function tokenRequest(config: GoogleHealthConfig, body: Record<string, str
   throw new ProviderFailure("unavailable", `Google sign-in failed (${response.status}). Try again in a few minutes.`);
 }
 
+export const notLinkedMessage = "Your Google account isn't linked to Google Health yet. Set it up in the Google Health app or at https://fitbit.google.com/auth/signup, then choose Connect again.";
+
+// Whether a 400 says the account has no Google Health profile, which identity and data requests both report.
+async function notLinked(response: Response): Promise<boolean> {
+  const body = apiErrorSchema.safeParse(await response.clone().json().catch(() => null));
+
+  return body.success && body.data.error.details.some((detail) => detail.reason === "ACCOUNT_NOT_LINKED");
+}
+
 // Reads one page of a data type, turning Google's refusals into messages for the person.
 async function readPage<Body>(config: GoogleHealthConfig, accessToken: string, noun: string, request: { url: string; body?: string }, schema: z.ZodType<Body>): Promise<Body> {
   const headers = { Authorization: `Bearer ${accessToken}`, Accept: "application/json" };
@@ -101,6 +110,8 @@ async function readPage<Body>(config: GoogleHealthConfig, accessToken: string, n
     : { method: "POST", headers: { ...headers, "Content-Type": "application/json" }, body: request.body });
 
   if (response.status === 401) throw new ProviderFailure("unauthorized", reauthorizeMessage);
+
+  if (response.status === 400 && await notLinked(response)) throw new ProviderFailure("not-linked", notLinkedMessage);
 
   if (response.status === 403) throw new ProviderFailure("reauthorize", `Google Health did not allow Nouri to read ${noun}. Choose Connect and allow ${noun} access.`);
 

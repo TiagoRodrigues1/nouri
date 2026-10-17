@@ -37,6 +37,10 @@ export const tokenResponseSchema = z.object({
 // From users/me/identity. healthUserId is the ID webhook notifications name the person by.
 export const identitySchema = z.object({ healthUserId: z.string().min(1) });
 
+// Google's error body. ACCOUNT_NOT_LINKED in the details means the Google account has no Google Health profile:
+// https://developers.google.com/health/troubleshooting
+export const apiErrorSchema = z.object({ error: z.object({ details: z.array(z.object({ reason: z.string().optional() })).default([]) }) });
+
 export const tokenErrorSchema = z.object({ error: z.string() });
 
 // Google Duration strings, used for UTC offsets and lengths alike, like "-14400s".
