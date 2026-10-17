@@ -36,6 +36,7 @@ function entry(row: FoodRow) {
       nutrients: nutrientsOf(row),
       catalogRef: row.catalogRef,
     },
+    mealLogId: row.mealLogId,
   };
 }
 
@@ -88,9 +89,10 @@ async function missingOrStale(tx: Transaction, userId: string, id: string): Prom
 }
 
 // Logs recorded foods at one time, in the order given. Copies the saved name, amount, nutrients and
-// catalog reference, never the catalog's current values, so it keeps working after the catalog changes.
-export async function insertFoods(tx: Transaction, userId: string, when: Pick<RepeatInput, "occurredAt" | "timeZone">, foods: RecordedFood[]): Promise<FoodEntry[]> {
-  const rows = foods.map((food) => ({ id: randomUUID(), userId, ...values({ ...when, food: manualFood(food) }) }));
+// catalog reference, never the catalog's current values, so it keeps working after the catalog changes. A saved
+// meal passes its log, so the foods can later be removed together.
+export async function insertFoods(tx: Transaction, userId: string, when: Pick<RepeatInput, "occurredAt" | "timeZone">, foods: RecordedFood[], mealLogId: string | null = null): Promise<FoodEntry[]> {
+  const rows = foods.map((food) => ({ id: randomUUID(), userId, mealLogId, ...values({ ...when, food: manualFood(food) }) }));
   const inserted = await tx.insert(foodEntries).values(rows).returning();
   const byId = new Map(inserted.map((row) => [row.id, entry(row)]));
 
@@ -101,6 +103,13 @@ export async function insertFoods(tx: Transaction, userId: string, when: Pick<Re
 
     return created;
   });
+}
+
+// Removes every food a meal log added that is still logged, edited or not.
+export async function deleteMealFoods(tx: Transaction, userId: string, mealLogId: string): Promise<void> {
+  await tx.update(foodEntries)
+    .set({ revision: sql`${foodEntries.revision} + 1`, deletedAt: new Date(), updatedAt: new Date() })
+    .where(and(eq(foodEntries.userId, userId), eq(foodEntries.mealLogId, mealLogId), isNull(foodEntries.deletedAt)));
 }
 
 // The person's current foods among these entries, by entry id. Deleted and unknown ids are absent.

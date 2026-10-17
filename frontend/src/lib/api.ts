@@ -211,6 +211,11 @@ export async function logSavedMeal(key: string, meal: SavedMeal, input: MealLogI
   return entries;
 }
 
+// Removes every food a meal log added. A log never changes, so it takes no revision.
+export async function undoMealLog(key: string, id: string): Promise<void> {
+  await write(`/v1/meal-logs/${encodeURIComponent(id)}`, z.null(), { method: "DELETE", key });
+}
+
 export async function deleteSavedMeal(meal: SavedMeal, key: string): Promise<void> {
   await write(`/v1/saved-meals/${encodeURIComponent(meal.id)}`, z.null(), { method: "DELETE", key, revision: meal.revision });
 }

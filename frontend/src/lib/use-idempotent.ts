@@ -8,13 +8,13 @@ type Refresh<Input> =
   | { refresh: readonly string[] }
   | { refreshFor: (input: Input) => readonly string[] };
 
-// What a saved write tells the person and the page.
-type Feedback<Input> = { success?: (input: Input) => string; onSuccess?: (input: Input) => void };
+// What a saved write tells the person and the page. onSuccess also gets what the server answered.
+type Feedback<Input, Result = unknown> = { success?: (input: Input) => string; onSuccess?: (input: Input, result: Result) => void };
 
 // One key per distinct request, reused while it is retried. Serves creates and edits alike.
 export function useIdempotentWrite<Input, Result extends object | void = object | void>(
   send: (input: Input, key: string) => Promise<Result>,
-  options: Refresh<Input> & Feedback<Input> & { signature?: (input: Input) => string },
+  options: Refresh<Input> & Feedback<Input, Result> & { signature?: (input: Input) => string },
 ) {
   const client = useQueryClient();
   const pending = useRef(new PendingWrites<Input, Result>());
@@ -31,7 +31,7 @@ export function useIdempotentWrite<Input, Result extends object | void = object 
 
       return pending.current.run(input, signature, send);
     },
-    onSuccess: async ({ key }, input) => {
+    onSuccess: async ({ key, result }, input) => {
       const signature = options.signature?.(input) ?? JSON.stringify(input);
 
       pending.current.complete(signature, key);
@@ -39,7 +39,7 @@ export function useIdempotentWrite<Input, Result extends object | void = object 
       // The write is saved, so the dialog closes and says so now. The mutation stays pending until the
       // reads come back, which keeps buttons that act on the old revisions disabled meanwhile.
       if (options.success) toast.success(options.success(input));
-      options.onSuccess?.(input);
+      options.onSuccess?.(input, result);
 
       await refresh(input);
     },

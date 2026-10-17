@@ -84,7 +84,9 @@ export const repeatInputSchema = z.object({
 // A food as the journal recorded it. Repeats, recent foods and saved meals copy it rather than re-reading the catalog.
 export const recordedFoodSchema = manualFoodSchema.extend({ catalogRef: recordedRefSchema.nullable() });
 
-export const entrySchema = recordBaseSchema.extend({ food: recordedFoodSchema });
+// mealLogId names the saved meal log that added the entry, so the meal can be removed whole. Defaults to null so
+// receipts kept from before meal logs still replay.
+export const entrySchema = recordBaseSchema.extend({ food: recordedFoodSchema, mealLogId: z.uuid().nullable().default(null) });
 
 export const maxBatchFoods = 20;
 

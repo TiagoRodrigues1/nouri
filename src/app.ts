@@ -18,7 +18,7 @@ import { idempotencyKeySchema, mutationResponse, revisionHeader } from "./journa
 import type { AppDatabase } from "./db/database.js";
 import { getDated, saveDated, type DatedKind, type DatedTable } from "./effective-dated.js";
 import { mealInputSchema, mealLogInputSchema, mealLogSchema, savedMealListSchema, savedMealSchema } from "./meals/contract.js";
-import { fillDailyMeals, listMeals, logMeal, mutateMeal } from "./meals/meals.js";
+import { fillDailyMeals, listMeals, logMeal, mutateMeal, undoMealLog } from "./meals/meals.js";
 import { integrationRoutes } from "./wearables/routes.js";
 import { error, errorSchema } from "./http-error.js";
 import type { WearableRuntime } from "./wearables/provider.js";
@@ -203,7 +203,7 @@ export function createApp(db: AppDatabase, identity: Identity, packagedFoods: Pa
   app.route("/", foodRoutes(db, packagedFoods));
 
   app.get("/v1/saved-meals", async (context) => context.json(await listMeals(db, context.get("userId"))));
-  app.openAPIRegistry.registerPath({ method: "get", path: "/v1/saved-meals", responses: { 200: { description: "Saved meals, newest first", ...json(savedMealListSchema) } } });
+  app.openAPIRegistry.registerPath({ method: "get", path: "/v1/saved-meals", responses: { 200: { description: "Saved meals, most recently logged or saved first", ...json(savedMealListSchema) } } });
 
   // Saving a meal is missing a chosen food entry or catalog food; the other meal routes are missing the saved meal.
   app.post("/v1/saved-meals", async (context) => {
@@ -224,6 +224,15 @@ export function createApp(db: AppDatabase, identity: Identity, packagedFoods: Pa
     return mutationResponse(await logMeal(db, context.get("userId"), context.get("idempotencyKey"), id.data, input.data), "Saved meal not found");
   });
   app.openAPIRegistry.registerPath({ method: "post", path: "/v1/saved-meals/{id}/logs", request: { params: z.object({ id: z.uuid() }), headers: mutationHeaders, body: json(mealLogInputSchema) }, responses: { 201: { description: "One food entry per chosen item, scaled to its amount, all logged at one time", ...json(mealLogSchema) }, 400: failure("Invalid request, an item the meal lacks, or an amount outside the journal's limits"), 404: failure("Saved meal not found"), 409: failure("Idempotency conflict") } });
+
+  app.delete("/v1/meal-logs/:id", async (context) => {
+    const id = z.uuid().safeParse(context.req.param("id"));
+
+    if (!id.success) return error(400, "Invalid meal log removal");
+
+    return mutationResponse(await undoMealLog(db, context.get("userId"), context.get("idempotencyKey"), id.data), "Meal log not found");
+  });
+  app.openAPIRegistry.registerPath({ method: "delete", path: "/v1/meal-logs/{id}", request: { params: z.object({ id: z.uuid() }), headers: mutationHeaders }, responses: { 204: { description: "Removed every food the meal log added that is still logged, edited or not" }, 404: failure("Meal log not found or already removed"), 409: failure("Idempotency conflict") } });
 
   app.patch("/v1/saved-meals/:id", async (context) => {
     const id = z.uuid().safeParse(context.req.param("id"));

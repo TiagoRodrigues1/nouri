@@ -134,6 +134,21 @@ export const styles = stylex.create({
   entryName: { fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   entryKcal: { color: colors.mutedForeground, fontSize: 11, whiteSpace: "nowrap" },
   entryTime: { color: colors.mutedForeground, fontSize: 11, fontVariantNumeric: "tabular-nums" },
+  // Names a saved meal above the foods it logged, in the meals colour.
+  mealRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    minHeight: 26,
+    paddingLeft: gutter + 20,
+    paddingTop: 4,
+    color: colors.meals,
+    fontSize: 11,
+    fontWeight: 600,
+    letterSpacing: "0.04em",
+    textTransform: "uppercase",
+  },
+  mealLogName: { flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   entryAction: {
     width: 26,
     height: 26,

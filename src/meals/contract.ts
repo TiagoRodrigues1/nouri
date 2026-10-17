@@ -56,6 +56,9 @@ export const mealLogInputSchema = z.object({
 
 export const mealLogSchema = z.object({ entries: z.array(entrySchema) });
 
+// One logging of a saved meal, named as the meal was then. Its entries carry its id.
+export const mealLogRefSchema = z.object({ id: z.uuid(), name: z.string() });
+
 export type SavedMeal = z.infer<typeof savedMealSchema>;
 
 export type SavedMealItem = SavedMeal["items"][number];
@@ -75,3 +78,5 @@ export type MealDaily = z.infer<typeof mealDailySchema>;
 export type StoredMealItem = SavedMealItem & { basis?: RecordedFood | undefined };
 
 export type MealLog = z.infer<typeof mealLogSchema>;
+
+export type MealLogRef = z.infer<typeof mealLogRefSchema>;
