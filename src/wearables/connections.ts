@@ -236,27 +236,23 @@ export function connectionFor(db: AppDatabase, runtime: WearableRuntime, provide
   // Reads the granted kinds the scope names while holding the connection's lease. `gate` is a further condition the
   // lease must meet; taking the lease and checking it in one statement means two requests cannot both pass.
   async function leasedSync(scope: SyncScope, gate: (started: Date) => SQL | undefined): Promise<SyncOutcome> {
-    const row = await stored();
-
-    if (!row) return { outcome: "not-connected" };
-
-    if (!isLive(row)) return lostGrant(row);
-
     const started = runtime.now();
-    const { window, whole } = windowFor(started, scope.since);
-    const granted = provider.grantedKinds(row.scope);
-    const kinds = granted.filter((kind) => scope.kinds.includes(kind));
-    // Only a full re-read can see every deletion inside the window, so only it counts as reconciliation.
-    const reconciled = whole && kinds.length === granted.length;
+    // Taking the lease returns the row as it is at that moment, so the run reads with the grant it holds the lease on.
+    // A sign-in after this replaces the lease, and the run then saves nothing.
+    const [row] = await db.update(table).set({ syncStartedAt: started }).where(and(key, live, idle(started), gate(started))).returning();
 
-    // Nothing this grant covers changed, so Google is not asked.
-    if (kinds.length === 0) return { outcome: "synced", result: await eachKind(async () => nothing) };
-
-    const [leased] = await db.update(table).set({ syncStartedAt: started }).where(and(key, live, idle(started), gate(started))).returning({ userId: table.userId });
-
-    if (!leased) return refused(started);
+    if (!row || !isLive(row)) return refused(started);
 
     try {
+      const { window, whole } = windowFor(started, scope.since);
+      const granted = provider.grantedKinds(row.scope);
+      const kinds = granted.filter((kind) => scope.kinds.includes(kind));
+      // Only a full re-read can see every deletion inside the window, so only it counts as reconciliation.
+      const reconciled = whole && kinds.length === granted.length;
+
+      // Nothing this grant covers changed, so Google is not asked.
+      if (kinds.length === 0) return { outcome: "synced", result: await eachKind(async () => nothing) };
+
       return await pullAndApply(row, started, window, kinds, reconciled);
     } finally {
       await db.update(table).set({ syncStartedAt: null }).where(and(key, eq(table.syncStartedAt, started)));
