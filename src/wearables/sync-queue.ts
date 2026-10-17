@@ -82,16 +82,23 @@ export function syncQueue(db: AppDatabase, runtime: WearableRuntime) {
   }
 
   async function tick() {
-    do {
+    for (;;) {
       again = false;
       await runDueJobs().catch(report("import"));
-    } while (again && !stopped);
 
-    // A failed read cannot say when to wake, so the worker looks again a little later.
-    const next = await nextDue().catch(() => later(syncTiming.rescanAfterErrorMs));
+      // A failed read cannot say when to wake, so the worker looks again a little later.
+      const next = await nextDue().catch(() => later(syncTiming.rescanAfterErrorMs));
 
-    // At least a second apart, so a job the clock disagrees about cannot spin the loop.
-    if (next && !stopped) timer = setTimeout(wake, Math.max(next.getTime() - runtime.now().getTime(), 1000));
+      if (stopped) return;
+
+      // A job queued during either step may be missing from that read, so its wake runs the loop again instead.
+      if (again) continue;
+
+      // At least a second apart, so a job the clock disagrees about cannot spin the loop.
+      if (next) timer = setTimeout(wake, Math.max(next.getTime() - runtime.now().getTime(), 1000));
+
+      return;
+    }
   }
 
   const reconcile = () => void queueReconciliation().catch(report("reconciliation"));

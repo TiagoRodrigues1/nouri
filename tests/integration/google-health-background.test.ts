@@ -300,8 +300,32 @@ void test("Google Health imports in the background", async (t) => {
       await client`UPDATE wearable_connections SET sync_started_at = ${clock.now.toISOString()}`;
       nouri.advance(syncTiming.manualCooldownMs);
       assert.equal((await nouri.syncNow()).status, 429);
-      nouri.advance(5 * 60_000);
+      nouri.advance(syncTiming.leaseMs);
       assert.equal((await nouri.syncNow()).status, 200);
+    });
+
+    await t.test("a sync that outlived its lease saves nothing", async () => {
+      google.put(fixture("sleep-night-corrected"));
+      const [before] = await client`SELECT revision FROM sleep_sessions WHERE source_id = ${night.name}`;
+
+      // While this sync reads, its lease lapses and a newer sync takes it.
+      nouri.hooks.push(async () => {
+        nouri.advance(syncTiming.leaseMs);
+        await client`UPDATE wearable_connections SET sync_started_at = ${clock.now.toISOString()}`;
+      });
+
+      nouri.advance(syncTiming.manualCooldownMs);
+      const stale = await nouri.syncNow();
+      assert.equal(stale.status, 429);
+      assert.match((await stale.json()).error, /already running/);
+
+      // The correction it read was not applied, and the newer sync's lease is untouched.
+      const [after] = await client`SELECT revision FROM sleep_sessions WHERE source_id = ${night.name}`;
+      assert.equal(after?.revision, before?.revision);
+      const [lease] = await client`SELECT sync_started_at FROM wearable_connections`;
+      assert.notEqual(lease?.sync_started_at, null);
+      await client`UPDATE wearable_connections SET sync_started_at = NULL`;
+      google.put(night);
     });
 
     await t.test("daily reconciliation covers people who use Nouri", async () => {

@@ -172,10 +172,11 @@ export function connectionFor(db: AppDatabase, runtime: WearableRuntime, provide
     const byKind = new Map(pulled.map((pull) => [pull.kind, pull]));
 
     const result = await db.transaction(async (tx): Promise<SyncResult | null> => {
-      // Writing the row first locks it, which serializes syncs and stops one racing a disconnect.
+      // Writing the row first locks it, which serializes syncs and stops one racing a disconnect. It must still hold
+      // this sync's lease: one that outlived its lease lost it to a newer sync, whose fresher read is the one to keep.
       // Drizzle leaves a column it is given undefined for unchanged.
       const columns = { lastSyncedAt: started, lastError, providerUserId, updatedAt: started, reconciledAt: reconciled ? started : undefined };
-      const [held] = await tx.update(wearableConnections).set(columns).where(and(key, live)).returning({ userId: wearableConnections.userId });
+      const [held] = await tx.update(wearableConnections).set(columns).where(and(key, live, eq(wearableConnections.syncStartedAt, started))).returning({ userId: wearableConnections.userId });
 
       if (!held) return null;
 
@@ -183,7 +184,8 @@ export function connectionFor(db: AppDatabase, runtime: WearableRuntime, provide
       return eachKind(async (kind) => byKind.get(kind)?.apply(tx) ?? nothing);
     });
 
-    if (!result) return { outcome: "not-connected" };
+    // Nothing was saved: say why, as when the lease was refused at the start.
+    if (!result) return refused(started);
 
     return { outcome: "synced", result };
   }

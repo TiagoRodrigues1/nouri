@@ -4,8 +4,10 @@ const hour = 60 * minute;
 
 // Every delay that paces syncs with a provider, the sync runner's and the background queue's alike.
 export const syncTiming = {
-  // A sync holds its connection this long at most. One that runs longer, or whose process stopped, no longer blocks the next.
-  leaseMs: 5 * minute,
+  // A sync holds its connection this long at most, so a stopped process does not block the next one for long. A full
+  // read follows up to 40 pages per kind at 20 seconds a request, about 13 minutes at worst, so this covers it.
+  // A sync that does outlive its lease cannot save: only the current holder may apply what it read.
+  leaseMs: 15 * minute,
   // How long a sync that found another one running waits before trying again.
   busyRetryMs: 30_000,
   // Sync now runs at most once a minute per connection, so repeated clicks or scripts cannot multiply Google reads.
