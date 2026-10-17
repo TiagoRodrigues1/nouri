@@ -92,7 +92,7 @@ void test("ticking a set fills its empty fields from the fallback and keeps a do
   assert.equal(reduce(done, tick("id-3", { weightKg: 1, reps: 1 })), done, "ticking a done set changes nothing");
 });
 
-void test("sets and exercises are added, removed, and replaced within the routine limits", () => {
+void test("sets and exercises are added, removed, replaced, and moved within the routine limits", () => {
   const session = started();
   const added = apply(session, { type: "add-set", exerciseId: bench, setId: "new-set" });
 
@@ -125,6 +125,8 @@ void test("sets and exercises are added, removed, and replaced within the routin
 
   assert.deepEqual(apply(session, { type: "remove-exercise", exerciseId: bench }).exercises.map((exercise) => exercise.name), ["Dip"]);
   assert.equal(reduce(session, { type: "remove-exercise", exerciseId: "nope" }), session, "an unknown exercise changes nothing");
+  assert.deepEqual(apply(session, { type: "move-exercise", exerciseId: bench, offset: 1 }).exercises.map((exercise) => exercise.name), ["Dip", "Bench press"]);
+  assert.equal(reduce(session, { type: "move-exercise", exerciseId: bench, offset: -1 }), session, "the first exercise cannot move up");
   assert.equal(reduce(session, edit("nope", "reps", "5")), session, "an unknown set changes nothing");
 });
 
@@ -145,6 +147,7 @@ void test("a frozen session ignores every edit until it thaws, and keeps its fir
     { type: "add-exercise", exerciseId: "y", setId: "z", name: "Curl" },
     { type: "replace-exercise", exerciseId: bench, name: "Curl" },
     { type: "remove-exercise", exerciseId: bench },
+    { type: "move-exercise", exerciseId: bench, offset: 1 },
     { type: "freeze", finish: { key: "key-2", input: finish.input } },
   ];
 

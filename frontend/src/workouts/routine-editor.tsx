@@ -9,7 +9,7 @@ import { Label } from "../components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
 import type { Routine } from "../lib/api";
 import { maxRoutineExercises, maxRoutineSets, type RoutineExercise } from "../../../src/routines/contract";
-import { appendExercise, appendSet, changeById, changeSet } from "../lib/exercise-list";
+import { appendExercise, appendSet, changeById, changeSet, moveById } from "../lib/exercise-list";
 import { useDeleteRoutine, useRoutines, useSaveRoutine } from "../lib/routines";
 import { localDate } from "../lib/time";
 import { parseRepTarget, repTargetText } from "../lib/workout-session";
@@ -116,9 +116,15 @@ function RoutineEditor({ routine }: { routine: Routine | null }) {
           <Label {...stylex.props(formStyles.formLabel)} htmlFor="routine-name">Routine name</Label>
           <Input id="routine-name" {...stylex.props(pageStyles.nameInput)} maxLength={80} placeholder="e.g. Push day" value={name} onChange={(event) => setName(event.target.value)} required />
         </div>
-        {exercises.map((exercise) => (
+        {exercises.map((exercise, position) => (
           <Card key={exercise.id} {...stylex.props(styles.exerciseCard)}>
-            <ExerciseHeading name={exercise.name} onReplace={() => setPicking({ kind: "replace", exerciseId: exercise.id })} onRemove={() => setExercises((current) => changeById(current, exercise.id, () => null))} />
+            <ExerciseHeading
+              name={exercise.name}
+              onReplace={() => setPicking({ kind: "replace", exerciseId: exercise.id })}
+              onRemove={() => setExercises((current) => changeById(current, exercise.id, () => null))}
+              onMoveUp={position > 0 ? () => setExercises((current) => moveById(current, exercise.id, -1)) : null}
+              onMoveDown={position < exercises.length - 1 ? () => setExercises((current) => moveById(current, exercise.id, 1)) : null}
+            />
             <Table aria-label={`${exercise.name} sets`}>
               <TableHeader>
                 <TableRow>

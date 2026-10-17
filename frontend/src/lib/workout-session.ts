@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { repTargetSchema, type RepTarget, type Routine } from "../../../src/routines/contract.js";
 import { localDate } from "../../../src/time.js";
-import { appendExercise, appendSet, changeById, changeSet } from "./exercise-list.js";
+import { appendExercise, appendSet, changeById, changeSet, moveById } from "./exercise-list.js";
 import { exerciseKey, workoutInputSchema, type ExerciseHistory, type ExerciseSession, type WorkoutInput } from "../../../src/workouts/contract.js";
 
 // What a done set is worth. A null weight is bodyweight.
@@ -55,6 +55,7 @@ export type SessionAction =
   | { type: "add-exercise"; exerciseId: string; setId: string; name: string }
   | { type: "replace-exercise"; exerciseId: string; name: string }
   | { type: "remove-exercise"; exerciseId: string }
+  | { type: "move-exercise"; exerciseId: string; offset: -1 | 1 }
   | { type: "freeze"; finish: FrozenFinish }
   | { type: "thaw" };
 
@@ -190,6 +191,8 @@ export function reduce(session: Session, action: SessionAction): Session {
       return withExercises(session, changeById(exercises, action.exerciseId, (exercise) => ({ ...exercise, name: action.name, sets: exercise.sets.map((set) => emptySet(set.id, set.target)) })));
     case "remove-exercise":
       return withExercises(session, changeById(exercises, action.exerciseId, () => null));
+    case "move-exercise":
+      return withExercises(session, moveById(exercises, action.exerciseId, action.offset));
   }
 }
 

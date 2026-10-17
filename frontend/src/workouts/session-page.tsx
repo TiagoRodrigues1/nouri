@@ -77,10 +77,12 @@ function LiveLog({ session, workout }: { session: Session; workout: WorkoutSessi
         <Stat label="Volume" value={`${format(stats.volumeKg)} kg`} />
         <Stat label="Sets" value={String(stats.doneSets)} />
       </div>
-      {session.exercises.map((exercise) => (
+      {session.exercises.map((exercise, position) => (
         <ExerciseLog
           key={exercise.id}
           exercise={exercise}
+          first={position === 0}
+          last={position === session.exercises.length - 1}
           previous={history.data ? previousSets(history.data.exercises, exercise.name, date) : []}
           frozen={frozen}
           workout={workout}
@@ -129,15 +131,21 @@ function Stat({ label, value, clock = false }: { label: string; value: string; c
   );
 }
 
-type ExerciseLogProps = { exercise: SessionExercise; previous: SetValues[]; frozen: boolean; workout: WorkoutSessionHandle; onReplace: () => void };
+type ExerciseLogProps = { exercise: SessionExercise; first: boolean; last: boolean; previous: SetValues[]; frozen: boolean; workout: WorkoutSessionHandle; onReplace: () => void };
 
-function ExerciseLog({ exercise, previous, frozen, workout, onReplace }: ExerciseLogProps) {
+function ExerciseLog({ exercise, first, last, previous, frozen, workout, onReplace }: ExerciseLogProps) {
   const { dispatch } = workout;
   const exerciseId = exercise.id;
 
   return (
     <Card {...stylex.props(styles.exerciseCard)}>
-      <ExerciseHeading name={exercise.name} onReplace={onReplace} onRemove={() => dispatch({ type: "remove-exercise", exerciseId })} />
+      <ExerciseHeading
+        name={exercise.name}
+        onReplace={onReplace}
+        onRemove={() => dispatch({ type: "remove-exercise", exerciseId })}
+        onMoveUp={first ? null : () => dispatch({ type: "move-exercise", exerciseId, offset: -1 })}
+        onMoveDown={last ? null : () => dispatch({ type: "move-exercise", exerciseId, offset: 1 })}
+      />
       <Table aria-label={`${exercise.name} sets`} {...stylex.props(styles.table)}>
         <TableHeader>
           <TableRow>
