@@ -240,12 +240,20 @@ void test("Google Health imports in the background", async (t) => {
       google.outage = true;
       await nouri.notify(notification("sleep", "2026-09-26T23:00:00"));
 
+      const waits: number[] = [];
+
       for (let attempt = 0; attempt < syncTiming.retry.attempts; attempt += 1) {
         nouri.advance(syncTiming.retry.maxMs);
         assert.equal(await nouri.runJobs(), 1);
+        const job = await nouri.job();
+
+        if (job) waits.push(job.dueAt.getTime() - clock.now.getTime());
       }
 
       assert.equal(await nouri.job(), null);
+      // Every failure but the last schedules a wait, and the waits grow until they reach the six-hour cap.
+      assert.equal(waits.length, syncTiming.retry.attempts - 1);
+      assert.ok((waits.at(-1) ?? 0) >= syncTiming.retry.maxMs / 2, `${waits.at(-1)}`);
       google.outage = false;
     });
 

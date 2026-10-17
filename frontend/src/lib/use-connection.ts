@@ -16,8 +16,9 @@ function useConnectionStatus(provider: WearableProvider, enabled: boolean) {
 // Keeps imports current without a Sync button. The page shows what is stored at once; this asks the server to
 // import in the background when that is stale, on load, on focus, and every five minutes while the page is visible.
 // The server decides whether anything is stale, so the calls are cheap. While an import runs it checks every few
-// seconds, and when the last sync time moves the imported records are read again.
-function useBackgroundImports(provider: WearableProvider, reload: () => Promise<void>, enabled: boolean) {
+// seconds. When the last sync time moves, the imported records are read again; when only the error changes, as when
+// a background import fails, only the connection status is, so the Wearables dialog shows it.
+function useBackgroundImports(provider: WearableProvider, on: { imported: () => Promise<void>; failed: () => Promise<void> }, enabled: boolean) {
   const freshness = useQuery({
     queryKey: ["sync-state", provider],
     enabled,
@@ -27,15 +28,21 @@ function useBackgroundImports(provider: WearableProvider, reload: () => Promise<
     refetchInterval: (query) => query.state.data?.pending ? 3000 : 5 * 60_000,
   });
 
-  const lastSyncedAt = freshness.data?.lastSyncedAt;
-  const seen = useRef(lastSyncedAt);
+  // TanStack Query keeps the same object while the answer is unchanged, so this runs only when it changes.
+  const state = freshness.data;
+  const seen = useRef(state);
+  const { imported, failed } = on;
 
   useEffect(() => {
-    if (lastSyncedAt === undefined) return;
+    const before = seen.current;
 
-    if (seen.current !== undefined && seen.current !== lastSyncedAt) void reload();
-    seen.current = lastSyncedAt;
-  }, [lastSyncedAt, reload]);
+    seen.current = state;
+
+    if (!state || !before) return;
+
+    if (before.lastSyncedAt !== state.lastSyncedAt) void imported();
+    else if (before.lastError !== state.lastError) void failed();
+  }, [state, imported, failed]);
 
   return freshness.data?.pending ?? false;
 }
@@ -52,6 +59,7 @@ export function useConnection(provider: WearableProvider, showing: boolean) {
   }, [client]);
 
   const status = useConnectionStatus(provider, showing);
+  const refreshStatus = useCallback(() => client.invalidateQueries({ queryKey: ["connection", provider] }), [client, provider]);
 
   const connect = useMutation({
     mutationFn: () => startConnection(provider),
@@ -98,7 +106,7 @@ export function useConnection(provider: WearableProvider, showing: boolean) {
 
   // Right after signing in, the page runs the first sync itself and reports its counts, so the background check
   // waits for it instead of queueing a second one.
-  const importing = useBackgroundImports(provider, refresh, callback !== "connected" || sync.isSuccess || sync.isError);
+  const importing = useBackgroundImports(provider, { imported: refresh, failed: refreshStatus }, callback !== "connected" || sync.isSuccess || sync.isError);
 
   // Report the callback once and clean the URL.
   const handled = useRef(false);

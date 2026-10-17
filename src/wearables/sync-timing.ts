@@ -26,7 +26,9 @@ export const syncTiming = {
   reconcileScanMs: 6 * hour,
   // How long the worker waits to look for due jobs again after it could not read when the next one is due.
   rescanAfterErrorMs: minute,
-  retry: { firstMs: minute, maxMs: 6 * hour, attempts: 8 },
+  // Waits double from a minute and stop growing at six hours: 1, 2, 4, … 256, then 360 minutes, about 14 hours in all
+  // before the 11th failure drops the job. Each wait is jittered down to half.
+  retry: { firstMs: minute, maxMs: 6 * hour, attempts: 11 },
   // Jobs run one at a time, at most this many per read, so Google sees a steady trickle.
   batch: 5,
 } as const;
