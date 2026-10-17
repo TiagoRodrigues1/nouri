@@ -808,9 +808,10 @@ function FoodItems({ foods, query, tray, phone, pending, onPick, onToggle, onLog
   const recent = phone && !query ? foods.recent.filter((food) => !ticked(food.row)) : foods.recent;
 
   const option = (food: FoodOption) => {
-    const on = ticked(food.row);
-    // At its ticked amount, if it has been changed.
-    const { quantity, nutrients } = rowFood(food.row);
+    // A ticked food shows the amount it will log, which a search's result for it does not know.
+    const row = tray.find((other) => other.key === food.row.key) ?? food.row;
+    const on = ticked(row);
+    const { quantity, nutrients } = rowFood(row);
 
     return (
       <PaletteItem
@@ -821,34 +822,34 @@ function FoodItems({ foods, query, tray, phone, pending, onPick, onToggle, onLog
             type="button"
             role="checkbox"
             aria-checked={on}
-            aria-label={`Tick ${food.row.food.name}`}
+            aria-label={`Tick ${row.food.name}`}
             {...stylex.props(styles.box, on && styles.boxOn)}
             onPointerDown={(event) => event.preventDefault()}
             onClick={(event) => {
               event.stopPropagation();
-              onToggle(food.row);
+              onToggle(row);
             }}
           >
             {/* The size class opts out of the item's 16px icon size, and the colour holds on the highlighted row. */}
             {on && <Check className="size-[11px] text-primary-foreground!" strokeWidth={3} />}
           </button>
         }
-        name={<Highlighted name={food.row.food.name} query={query} />}
+        name={<Highlighted name={row.food.name} query={query} />}
         meta={phone ? [food.meta, `${format(nutrients.kcal)} kcal`].filter(Boolean).join(" · ") : food.meta}
         aside={phone ? (
           <button
             type="button"
             {...stylex.props(styles.amountButton)}
-            aria-label={`Change the amount of ${food.row.food.name}`}
+            aria-label={`Change the amount of ${row.food.name}`}
             onClick={(event) => {
               event.stopPropagation();
-              onPick(food.row);
+              onPick(row);
             }}
           >
             {format(quantity.amount)} {unitLabels[quantity.unit]} <ChevronRight size={14} />
           </button>
         ) : `${format(quantity.amount)} ${unitLabels[quantity.unit]} · ${format(nutrients.kcal)} kcal`}
-        onSelect={() => (phone ? onToggle(food.row) : onPick(food.row))}
+        onSelect={() => (phone ? onToggle(row) : onPick(row))}
       />
     );
   };
