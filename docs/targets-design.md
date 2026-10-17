@@ -84,8 +84,7 @@ B is the base. Its public surface is the same size as A's: the date only moves i
 
 ## Open questions and risks
 
-- Should the app later suggest targets from a profile (age, sex, activity level)? That would add a `profile` beside `targets`. This shape leaves room for it without depending on it.
-- Is "no weight goal" enough, or does the person want a goal direction (lose or gain) independent of the current weight?
+- Suggesting targets from a profile and a goal direction (lose, maintain, or gain) is designed in `target-suggestions-design.md`. The profile sits beside `targets` and never saves targets itself.
 - Steps have no data source yet. Should the target stay hidden until wearable import lands?
 
 ## Next implementation step

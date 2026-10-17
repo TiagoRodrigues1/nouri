@@ -4,10 +4,15 @@ import { Button } from "./components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "./components/ui/dialog";
 import { Input } from "./components/ui/input";
 import { Label } from "./components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
 import { styles as formStyles } from "./form-styles";
+import { activityLevels, ageLimits, goalDirections, sexes } from "../../src/profile/contract";
 import { defaultTargets, targetLimits, targetsSchema } from "../../src/targets/contract";
 import { useSaveTargets, useTargetsQuery } from "./lib/use-targets";
-import type { Targets } from "./lib/api";
+import { useProfileQuery, useSaveProfile } from "./lib/use-profile";
+import { format } from "./lib/api";
+import type { Profile, ProfileView, SuggestedTargets, Targets } from "./lib/api";
+import { selectValue } from "./lib/select-value";
 import { localDate } from "./lib/time";
 import { queryStatus } from "./query-status";
 
@@ -49,15 +54,14 @@ const fieldList = (Object.entries(fields) as Array<[TargetKey, Field]>).map(([ke
 
 const groups = groupTitles.map((title) => ({ title, fields: fieldList.filter((field) => field.group === title) }));
 
-type Draft = Record<TargetKey, string>;
-
-function draftFrom(targets: Targets): Draft {
-  // SAFETY: `fieldList` holds every target key once, so the entries cover the whole record.
-  return Object.fromEntries(fieldList.map(({ key, scale = 1 }) => {
+// Partial so a suggestion fills only the targets it covers.
+function draftFrom<T extends Partial<Targets>>(targets: T): { [K in keyof T]: string } {
+  // SAFETY: the entries are exactly the keys of `targets`, each mapped to a string.
+  return Object.fromEntries(fieldList.filter(({ key }) => key in targets).map(({ key, scale = 1 }) => {
     const value = targets[key];
 
-    return [key, value === null ? "" : String(value / scale)];
-  })) as Draft;
+    return [key, value == null ? "" : String(value / scale)];
+  })) as { [K in keyof T]: string };
 }
 
 function stored({ scale = 1, precision = 0, optional }: Field, input: string): number | null {
@@ -122,6 +126,7 @@ function TargetsForm({ date, targets, onSaved }: { date: string; targets: Target
 
   return (
     <form {...stylex.props(formStyles.formStack)} onSubmit={submit}>
+      <ProfileSuggestion date={date} onSuggest={(suggested) => setDraft((current) => ({ ...current, ...draftFrom(suggested) }))} />
       {groups.map((group) => (
         <fieldset key={group.title} {...stylex.props(styles.group)}>
           <legend {...stylex.props(formStyles.formSubhead)}>{group.title}</legend>
@@ -156,6 +161,156 @@ function TargetsForm({ date, targets, onSaved }: { date: string; targets: Target
         <Button type="submit" disabled={save.isPending}>{save.isPending ? "Saving…" : "Save targets"}</Button>
       </div>
     </form>
+  );
+}
+
+const sexLabels: Record<Profile["sex"], string> = { female: "Female", male: "Male" };
+
+const activityLabels: Record<Profile["activity"], string> = {
+  sedentary: "Sedentary: little exercise",
+  light: "Light: exercise 1–3 days a week",
+  moderate: "Moderate: exercise 3–5 days a week",
+  active: "Active: exercise 6–7 days a week",
+  "very-active": "Very active: hard daily training or physical work",
+};
+
+const goalLabels: Record<Profile["goal"], string> = { lose: "Lose weight", maintain: "Maintain weight", gain: "Gain weight" };
+
+// The profile form keeps age as text while typing and stores a birth year, which does not go stale.
+type ProfileDraft = Omit<Profile, "birthYear"> & { age: string };
+
+function profileDraftFrom(profile: Profile | null, date: string): ProfileDraft {
+  if (!profile) return { sex: "female", age: "", activity: "moderate", goal: "maintain" };
+
+  const { birthYear, ...rest } = profile;
+
+  return { ...rest, age: String(Number(date.slice(0, 4)) - birthYear) };
+}
+
+// Names the measurements left to log. The section saves the profile itself and checks the age before saving.
+function missingMeasurements(missing: ProfileView["missing"]): string | null {
+  const measurements = missing.filter((item) => item === "weight" || item === "height");
+
+  return measurements.length > 0 ? `Log your ${measurements.join(" and ")} on Overview to get a suggestion.` : null;
+}
+
+type ProfileSuggestionProps = { date: string; onSuggest: (targets: SuggestedTargets) => void };
+
+// Suggests nutrition targets without saving them: they fill the form, and the person saves the targets as usual.
+function ProfileSuggestion({ date, onSuggest }: ProfileSuggestionProps) {
+  const query = useProfileQuery(date);
+  const status = query.data ? null : queryStatus(query, "Loading your profile…");
+
+  return (
+    <fieldset {...stylex.props(styles.group)}>
+      <legend {...stylex.props(formStyles.formSubhead)}>SUGGEST FROM PROFILE</legend>
+      {status && (
+        <p {...stylex.props(query.isError ? formStyles.connectionError : formStyles.dialogDescription)} role={query.isError ? "alert" : undefined}>{status}</p>
+      )}
+      {query.data && <ProfileFields date={date} view={query.data} onSuggest={onSuggest} />}
+    </fieldset>
+  );
+}
+
+function ProfileFields({ date, view, onSuggest }: { date: string; view: ProfileView; onSuggest: ProfileSuggestionProps["onSuggest"] }) {
+  const [draft, setDraft] = useState(() => profileDraftFrom(view.profile, date));
+  const [invalid, setInvalid] = useState("");
+  const [suggested, setSuggested] = useState<ProfileView["suggestion"]>(null);
+  const save = useSaveProfile(date);
+  const age = Number(draft.age);
+
+  function suggest() {
+    if (draft.age.trim() === "" || !Number.isInteger(age) || age < ageLimits.min || age > ageLimits.max) {
+      setInvalid(`Enter an age from ${ageLimits.min} to ${ageLimits.max}.`);
+
+      return;
+    }
+
+    setInvalid("");
+
+    const { age: _age, ...rest } = draft;
+
+    save.mutate({ ...rest, birthYear: Number(date.slice(0, 4)) - age }, {
+      onSuccess: ({ suggestion }) => {
+        setSuggested(suggestion);
+
+        if (suggestion) onSuggest(suggestion.targets);
+      },
+    });
+  }
+
+  const missing = missingMeasurements(view.missing);
+
+  return (
+    <>
+      <p {...stylex.props(formStyles.dialogDescription)}>
+        Uses your latest weight and height from Overview. Sex and age are only used in the energy formula.
+      </p>
+      <div {...stylex.props(formStyles.manualGrid)}>
+        <div>
+          <Label htmlFor="profile-sex" {...stylex.props(formStyles.formLabel)}>Sex</Label>
+          <Select value={draft.sex} onValueChange={(next) => setDraft({ ...draft, sex: selectValue(sexes, next, "female") })}>
+            <SelectTrigger id="profile-sex" {...stylex.props(formStyles.selectTrigger)}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {sexes.map((sex) => <SelectItem key={sex} value={sex}>{sexLabels[sex]}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label htmlFor="profile-age" {...stylex.props(formStyles.formLabel)}>Age (years)</Label>
+          <Input
+            id="profile-age"
+            type="number"
+            inputMode="numeric"
+            min={ageLimits.min}
+            max={ageLimits.max}
+            step={1}
+            value={draft.age}
+            onChange={(event) => setDraft({ ...draft, age: event.target.value })}
+          />
+        </div>
+        <div>
+          <Label htmlFor="profile-activity" {...stylex.props(formStyles.formLabel)}>Activity</Label>
+          <Select value={draft.activity} onValueChange={(next) => setDraft({ ...draft, activity: selectValue(activityLevels, next, "moderate") })}>
+            <SelectTrigger id="profile-activity" {...stylex.props(formStyles.selectTrigger)}>
+              <SelectValue>{activityLabels[draft.activity].split(":")[0]}</SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {activityLevels.map((level) => <SelectItem key={level} value={level}>{activityLabels[level]}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label htmlFor="profile-goal" {...stylex.props(formStyles.formLabel)}>Goal</Label>
+          <Select value={draft.goal} onValueChange={(next) => setDraft({ ...draft, goal: selectValue(goalDirections, next, "maintain") })}>
+            <SelectTrigger id="profile-goal" {...stylex.props(formStyles.selectTrigger)}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {goalDirections.map((goal) => <SelectItem key={goal} value={goal}>{goalLabels[goal]}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      {(invalid || save.error) && (
+        <p {...stylex.props(formStyles.connectionError)} role="alert">{invalid || save.error?.message}</p>
+      )}
+      {suggested ? (
+        <p {...stylex.props(formStyles.dialogDescription)} role="status">
+          Filled in energy, macros, and water for {format(suggested.basis.weightKg, 1)} kg, {format(suggested.basis.heightCm)} cm, age {suggested.basis.age}.
+          Maintenance is about {format(suggested.basis.maintenanceKcal)} kcal. Check them, then save.
+        </p>
+      ) : missing && (
+        <p {...stylex.props(formStyles.dialogDescription)} role="status">{missing}</p>
+      )}
+      <div>
+        <Button type="button" variant="outline" disabled={save.isPending} onClick={suggest}>
+          {save.isPending ? "Suggesting…" : "Suggest targets"}
+        </Button>
+      </div>
+    </>
   );
 }
 

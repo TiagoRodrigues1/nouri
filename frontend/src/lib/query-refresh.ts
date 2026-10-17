@@ -8,7 +8,7 @@ export const queryRefresh = {
   exercises: ["exercise-library"],
   routines: ["routines"],
   sleep: ["overview", "review"],
-  measurement: ["overview", "review"],
+  measurement: ["overview", "review", "profile"],
   photo: ["overview"],
   supplements: ["day", "overview", "review"],
 } as const;
