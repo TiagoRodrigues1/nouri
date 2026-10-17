@@ -4,7 +4,7 @@ Entry points: `Add this product from its label` under a barcode miss in the pale
 
 Barcode miss: type `96385074` in the palette's food search. The `Foods` group reads `No product with this barcode yet.` and `More` offers `Add this product from its label`; choose it. (In the meal editor, fill `#search-query`, press Enter, and choose `Add this product`.) The form shows `Barcode 96385074. Type its label below.` Fill `#food-name` `Bolo de arroz`, `#food-brand` `Pastelaria Aurora`, `#manual-kcal` `410`, `#manual-protein` `6`, `#manual-carbs` `55`, `#manual-fat` `18`, `#manual-serving` `80`, `#manual-amount` `80`, and choose `Add to selection`. The food search shows `Log 1 food` first; press Enter. The timeline shows `Bolo de arroz` at 80 g, 328 kcal; `GET /v1/days/<date>` has `catalogRef` `{"provider":"nouri","id":"<uuid>"}`.
 
-Found again: searching `bolo`, or `96385074` again, lists `Bolo de arroz` first with `User-added · Pastelaria Aurora · per 100 g · 410 kcal`. Ticking the barcode result adds it at the serving, `80` g.
+Found again: searching `bolo`, or `96385074` again, lists `Bolo de arroz` in `Foods` with `User-added · Pastelaria Aurora` and `80 g · 328 kcal`. A matching `Recent` row may appear above it. The meal editor's search shows the per-100 label as `User-added · Pastelaria Aurora · per 100 g · 410 kcal`. Ticking the barcode result adds it at the serving, `80` g.
 
 Manual sharing: in `Add a food manually`, choose `100 ml` in `Label is per`, tick `Share with other Nouri users`, and log. The hint reads `It joins Nouri's foods. Others find it once it's reviewed.` The entry carries a `nouri` reference. Unticked, the entry has `catalogRef: null` and no community food is stored.
 
