@@ -60,6 +60,7 @@ export const styles = stylex.create({
   carbs: { backgroundColor: colors.carbs },
   fat: { backgroundColor: colors.fat },
   foods: { margin: 0, color: colors.mutedForeground, fontSize: 12, lineHeight: 1.5 },
+  lastLogged: { margin: 0, color: colors.mutedForeground, fontSize: 11 },
   cardFooter: {
     display: "flex",
     alignItems: "center",

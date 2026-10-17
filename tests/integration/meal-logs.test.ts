@@ -27,8 +27,16 @@ async function day(date: string): Promise<{ food: { entries: Entry[] }; mealLogs
   return (await app.request(`/v1/days/${date}`, { headers })).json();
 }
 
+async function listed(): Promise<Array<Meal & { lastLogged: string | null }>> {
+  return (await (await app.request("/v1/saved-meals", { headers })).json()).meals;
+}
+
 async function names(): Promise<string[]> {
-  return (await (await app.request("/v1/saved-meals", { headers })).json()).meals.map((meal: Meal) => meal.name);
+  return (await listed()).map((meal) => meal.name);
+}
+
+async function lastLogged(): Promise<Record<string, string | null>> {
+  return Object.fromEntries((await listed()).map((meal) => [meal.name, meal.lastLogged]));
 }
 
 function food(name: string): FoodInput["food"] {
@@ -39,8 +47,8 @@ async function saveMeal(name: string, foods: string[]): Promise<Meal> {
   return (await post(app, "/v1/saved-meals", `meal-${name}`, { name, items: foods.map((item) => ({ food: food(item) })), daily: null })).json();
 }
 
-async function logMeal(meal: Meal, key: string): Promise<Entry[]> {
-  const response = await post(app, `/v1/saved-meals/${meal.id}/logs`, key, { ...at, items: meal.items.map((item) => ({ id: item.id, amount: item.food.quantity.amount })) });
+async function logMeal(meal: Meal, key: string, when = at): Promise<Entry[]> {
+  const response = await post(app, `/v1/saved-meals/${meal.id}/logs`, key, { ...when, items: meal.items.map((item) => ({ id: item.id, amount: item.food.quantity.amount })) });
 
   assert.equal(response.status, 201);
 
@@ -107,9 +115,16 @@ void test("meals are listed most recently logged first, and an undone log stops 
 
     // Never logged, a meal ranks by when it was saved.
     assert.deepEqual(await names(), ["Dinner", "Lunch"]);
+    assert.deepEqual(await lastLogged(), { Dinner: null, Lunch: null });
 
     const [rice] = await logMeal(lunch, "lunch-1");
     assert.deepEqual(await names(), ["Lunch", "Dinner"]);
+
+    // The last day is the day its foods are on, not the day it was logged.
+    const [earlier] = await logMeal(lunch, "lunch-0", { occurredAt: "2026-09-20T12:00:00Z", timeZone });
+    assert.deepEqual(await lastLogged(), { Lunch: "2026-09-26", Dinner: null });
+    assert.ok(earlier?.mealLogId);
+    assert.equal((await undo(app, earlier.mealLogId, "undo-earlier")).status, 204);
 
     // A meal saved after the last log is newer still.
     await saveMeal("Snack", ["Nuts"]);
@@ -118,6 +133,7 @@ void test("meals are listed most recently logged first, and an undone log stops 
     assert.ok(rice?.mealLogId);
     assert.equal((await undo(app, rice.mealLogId, "undo-lunch")).status, 204);
     assert.deepEqual(await names(), ["Snack", "Dinner", "Lunch"]);
+    assert.equal((await lastLogged()).Lunch, null);
   } finally {
     await cleanup();
   }
@@ -143,12 +159,15 @@ void test("each day a daily meal fills is a log of its own that never ranks the 
     assert.equal(filled.food.entries.length, 1);
     assert.deepEqual(filled.mealLogs.map((log) => log.name), ["Breakfast"]);
     assert.deepEqual(await names(), ["Dinner", "Breakfast"]);
+    // A fill does count as the last day the meal is on.
+    assert.equal((await lastLogged()).Breakfast, today);
 
     // Skipped today: the fill is removed whole and is not filled again.
     const [log] = filled.mealLogs;
     assert.ok(log);
     assert.equal((await undo(app, log.id, "skip")).status, 204);
     assert.deepEqual((await day(today)).food.entries, []);
+    assert.equal((await lastLogged()).Breakfast, null);
   } finally {
     await cleanup();
   }

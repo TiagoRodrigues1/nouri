@@ -21,7 +21,11 @@ export const savedMealSchema = z.object({
   daily: mealDailySchema.nullable().default(null),
 });
 
-export const savedMealListSchema = z.object({ meals: z.array(savedMealSchema) });
+// A meal as listed, with the latest day its kept logs are on, daily fills included. Null for a meal never logged, or
+// logged only before meal logs existed.
+export const listedMealSchema = savedMealSchema.extend({ lastLogged: z.iso.date().nullable() });
+
+export const savedMealListSchema = z.object({ meals: z.array(listedMealSchema) });
 
 const unique = (ids: string[]) => new Set(ids).size === ids.length;
 
@@ -62,6 +66,8 @@ export const mealLogRefSchema = z.object({ id: z.uuid(), name: z.string() });
 export type SavedMeal = z.infer<typeof savedMealSchema>;
 
 export type SavedMealItem = SavedMeal["items"][number];
+
+export type ListedMeal = z.infer<typeof listedMealSchema>;
 
 export type SavedMealList = z.infer<typeof savedMealListSchema>;
 

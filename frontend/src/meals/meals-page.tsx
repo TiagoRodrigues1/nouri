@@ -6,10 +6,10 @@ import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Checkbox } from "../components/ui/checkbox";
 import { TimePicker } from "../components/ui/time-picker";
-import { format, type SavedMeal } from "../lib/api";
+import { format, type ListedMeal, type SavedMeal } from "../lib/api";
 import { unitLabels } from "../lib/food-text";
 import { totalNutrients } from "../../../src/food/contract";
-import { currentTime, timeZone } from "../lib/time";
+import { currentTime, recentDayLabel, timeZone } from "../lib/time";
 import { useMealDaily, useSavedMeals } from "../lib/use-saved-meals";
 import { Bone, Loading } from "../loading";
 import { queryFallback } from "../query-status";
@@ -54,7 +54,7 @@ export function MealsPage() {
 const cardGap = 14;
 
 // Cards keep their own heights and pack into the shortest column, so a short card moves up under its neighbour.
-function MealGrid({ meals }: { meals: SavedMeal[] }) {
+function MealGrid({ meals }: { meals: ListedMeal[] }) {
   const list = useRef<HTMLUListElement>(null);
 
   useLayoutEffect(() => {
@@ -79,7 +79,7 @@ function MealGrid({ meals }: { meals: SavedMeal[] }) {
   );
 }
 
-function MealCard({ meal }: { meal: SavedMeal }) {
+function MealCard({ meal }: { meal: ListedMeal }) {
   const { kcal, proteinG, carbsG, fatG } = totalNutrients(meal.items.map(({ food }) => food.nutrients));
 
   return (
@@ -97,6 +97,7 @@ function MealCard({ meal }: { meal: SavedMeal }) {
         <p {...stylex.props(styles.foods)}>
           {meal.items.map(({ food }) => `${food.name} ${format(food.quantity.amount)} ${unitLabels[food.quantity.unit]}`).join(" · ")}
         </p>
+        {meal.lastLogged && <p {...stylex.props(styles.lastLogged)}>Last logged {recentDayLabel(meal.lastLogged)}</p>}
       </div>
       <div {...stylex.props(styles.cardFooter)}>
         <DailyToggle meal={meal} />
