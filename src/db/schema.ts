@@ -1,4 +1,4 @@
-import { bigint, customType, date, integer, jsonb, pgTable, primaryKey, text, timestamp, uuid, index, uniqueIndex } from "drizzle-orm/pg-core";
+import { bigint, boolean, customType, date, integer, jsonb, pgTable, primaryKey, text, timestamp, uuid, index, uniqueIndex } from "drizzle-orm/pg-core";
 import type { Equipment, Muscle } from "../exercises/contract.js";
 import type { FoodProvider, FoodQuantity } from "../food/contract.js";
 import type { StoredMealItem } from "../meals/contract.js";
@@ -41,7 +41,11 @@ export const foodEntries = pgTable("food_entries", {
   carbsMilli: bigint("carbs_milli", { mode: "number" }),
   fatMilli: bigint("fat_milli", { mode: "number" }),
   catalogRef: jsonb("catalog_ref").$type<{ provider: FoodProvider; id: string; version?: string | undefined } | null>(),
-}, (table) => [activeDayIndex("food_entries", table)]);
+  mealLogId: uuid("meal_log_id").references((): AnyPgColumn => mealLogs.id, { onDelete: "set null" }),
+}, (table) => [
+  activeDayIndex("food_entries", table),
+  index("food_entries_meal_log_idx").on(table.mealLogId).where(sql`meal_log_id IS NOT NULL`),
+]);
 
 // Foods added from a label, seen by everyone once reviewed and by the person who added them before. Nutrients and
 // the serving are thousandths of the label's values per 100 of `unit`. An erased account leaves its foods unowned.
@@ -81,6 +85,19 @@ export const savedMeals = pgTable("saved_meals", {
 }, (table) => [
   index("saved_meals_user_active_idx").on(table.userId, table.createdAt).where(sql`deleted_at IS NULL`),
   index("saved_meals_user_daily_idx").on(table.userId).where(sql`daily_time IS NOT NULL AND deleted_at IS NULL`),
+]);
+
+// One logging of a saved meal, by hand or as one day of a daily fill, named as the meal was then.
+export const mealLogs = pgTable("meal_logs", {
+  id: uuid("id").primaryKey(),
+  userId: ownerColumn(),
+  savedMealId: uuid("saved_meal_id").notNull().references((): AnyPgColumn => savedMeals.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  daily: boolean("daily").notNull(),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("meal_logs_user_recent_idx").on(table.userId, table.savedMealId, table.createdAt).where(sql`deleted_at IS NULL AND NOT daily`),
 ]);
 
 export const waterEntries = pgTable("water_entries", {

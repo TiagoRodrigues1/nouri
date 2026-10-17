@@ -12,6 +12,7 @@ const manual: FoodEntry = {
   timeZone: "Pacific/Kiritimati",
   localDate: "2026-09-25",
   food: { name: "Oats", quantity: { amount: 80, unit: "g" }, nutrients: { kcal: 311, proteinG: 13, carbsG: null, fatG: 5 }, catalogRef: null },
+  mealLogId: null,
 };
 
 const catalog: FoodEntry = {

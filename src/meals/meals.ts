@@ -1,15 +1,15 @@
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, max, sql } from "drizzle-orm";
 import type { AppDatabase, Transaction } from "../db/database.js";
-import { savedMeals } from "../db/schema.js";
-import { foodSources, insertFoods } from "../food/food.js";
+import { mealLogs, savedMeals } from "../db/schema.js";
+import { deleteMealFoods, foodSources, insertFoods } from "../food/food.js";
 import { softDelete } from "../journal/records.js";
 import { requestHash, withReceipt } from "../journal/receipt.js";
 import { scaledFood } from "../food/contract.js";
 import type { FoodItemInput } from "../food/contract.js";
 import { instantAt, localDate, shiftDate } from "../time.js";
 import { mealLogSchema, savedMealSchema } from "./contract.js";
-import type { MealDaily, MealInput, MealItemInput, MealLog, MealLogInput, SavedMeal, SavedMealList, StoredMealItem } from "./contract.js";
+import type { MealDaily, MealInput, MealItemInput, MealLog, MealLogInput, MealLogRef, SavedMeal, SavedMealList, StoredMealItem } from "./contract.js";
 
 export type MealCommand =
   | { kind: "create"; input: MealInput }
@@ -27,6 +27,8 @@ export type MealLogResult =
   | { outcome: "created"; entry: MealLog }
   | { outcome: "missing" | "key-reuse" | "invalid-item" };
 
+export type MealLogUndoResult = { outcome: "deleted" | "missing" | "key-reuse" };
+
 type MealRow = typeof savedMeals.$inferSelect;
 
 function meal(row: MealRow): SavedMeal {
@@ -40,7 +42,7 @@ function today(zone: string): string {
 }
 
 // Receipts share one key space, so the fingerprint names saved meals.
-function hash(request: MealCommand | { kind: "log"; id: string; input: MealLogInput }): string {
+function hash(request: MealCommand | { kind: "log"; id: string; input: MealLogInput } | { kind: "undo"; id: string }): string {
   return requestHash({ ...request, kind: `saved-meal-${request.kind}` });
 }
 
@@ -138,12 +140,20 @@ async function editMeal(tx: Transaction, userId: string, id: string, revision: n
   return { outcome: "updated", entry: meal(updated) };
 }
 
+// Meals most recently used first: logged by hand and not removed since, or else saved. Daily fills are logged for
+// the person, so they never move a meal up.
 export async function listMeals(db: AppDatabase, userId: string): Promise<SavedMealList> {
-  const rows = await db.select().from(savedMeals)
-    .where(and(eq(savedMeals.userId, userId), isNull(savedMeals.deletedAt)))
-    .orderBy(desc(savedMeals.createdAt), savedMeals.id);
+  const lastLogged = db.select({ mealId: mealLogs.savedMealId, at: max(mealLogs.createdAt).as("at") }).from(mealLogs)
+    .where(and(eq(mealLogs.userId, userId), isNull(mealLogs.deletedAt), eq(mealLogs.daily, false)))
+    .groupBy(mealLogs.savedMealId).as("last_logged");
 
-  return { meals: rows.map(meal) };
+  const rows = await db.select({ meal: savedMeals }).from(savedMeals)
+    .leftJoin(lastLogged, eq(lastLogged.mealId, savedMeals.id))
+    .where(and(eq(savedMeals.userId, userId), isNull(savedMeals.deletedAt)))
+    // greatest skips the null of a meal never logged.
+    .orderBy(desc(sql`greatest(${lastLogged.at}, ${savedMeals.createdAt})`), savedMeals.id);
+
+  return { meals: rows.map((row) => meal(row.meal)) };
 }
 
 // Saving copies each food, so later edits to a logged day or the catalog never change the meal.
@@ -195,10 +205,50 @@ export async function logMeal(db: AppDatabase, userId: string, key: string, id: 
       foods.push(logged.food);
     }
 
-    const entries = await insertFoods(tx, userId, { occurredAt: input.occurredAt, timeZone: input.timeZone }, foods);
+    const log = await startLog(tx, userId, row, false);
+    const entries = await insertFoods(tx, userId, { occurredAt: input.occurredAt, timeZone: input.timeZone }, foods, log);
 
     return { outcome: "created", entry: { entries } };
   });
+}
+
+// Records one logging of the meal under its current name, for its foods to point at.
+async function startLog(tx: Transaction, userId: string, row: MealRow, daily: boolean): Promise<string> {
+  const id = randomUUID();
+
+  await tx.insert(mealLogs).values({ id, userId, savedMealId: row.id, name: row.name, daily });
+
+  return id;
+}
+
+// Removes a logging of a meal and every food it added that is still logged, whether or not it was edited since. A
+// log never changes once written, so there is no revision to check.
+export async function undoMealLog(db: AppDatabase, userId: string, key: string, id: string): Promise<MealLogUndoResult> {
+  return withReceipt(db, userId, key, hash({ kind: "undo", id }), (receipt): MealLogUndoResult => {
+    const { outcome } = receipt;
+
+    if (outcome === "deleted" || outcome === "missing" || outcome === "key-reuse") return { outcome };
+
+    throw new Error("Meal log undo receipt cannot be replayed");
+  }, async (tx): Promise<MealLogUndoResult> => {
+    const [log] = await tx.update(mealLogs).set({ deletedAt: new Date() })
+      .where(and(eq(mealLogs.userId, userId), eq(mealLogs.id, id), isNull(mealLogs.deletedAt)))
+      .returning({ id: mealLogs.id });
+
+    if (!log) return { outcome: "missing" };
+    await deleteMealFoods(tx, userId, log.id);
+
+    return { outcome: "deleted" };
+  });
+}
+
+// The logs these entries came from that are still standing, named as each meal was when logged.
+export async function mealLogsFor(db: AppDatabase, userId: string, ids: string[]): Promise<MealLogRef[]> {
+  if (ids.length === 0) return [];
+
+  return db.select({ id: mealLogs.id, name: mealLogs.name }).from(mealLogs)
+    .where(and(eq(mealLogs.userId, userId), inArray(mealLogs.id, [...new Set(ids)]), isNull(mealLogs.deletedAt)))
+    .orderBy(mealLogs.createdAt, mealLogs.id);
 }
 
 // What a daily meal still has to log: each local day after its cursor through today in its zone, at its time.
@@ -235,8 +285,9 @@ export async function fillDailyMeals(db: AppDatabase, userId: string): Promise<v
       if (!fill) continue;
       const foods = row.items.map((item) => item.food);
 
+      // Each day is a log of its own, so a day the meal was skipped can be removed whole.
       for (const date of fill.days) {
-        await insertFoods(tx, userId, { occurredAt: instantAt(date, fill.time, fill.timeZone), timeZone: fill.timeZone }, foods);
+        await insertFoods(tx, userId, { occurredAt: instantAt(date, fill.time, fill.timeZone), timeZone: fill.timeZone }, foods, await startLog(tx, userId, row, true));
       }
 
       await tx.update(savedMeals).set({ dailyFilledThrough: fill.through }).where(eq(savedMeals.id, row.id));

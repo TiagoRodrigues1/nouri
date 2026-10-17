@@ -274,7 +274,7 @@ export function nouriMcpServer(db: AppDatabase, userId: string): McpServer {
 
   server.registerTool("list_saved_meals", {
     title: "List saved meals",
-    description: "The person's saved meals, newest first, each with its items and the amounts they were saved at.",
+    description: "The person's saved meals, most recently logged or saved first, each with its items and the amounts they were saved at.",
     inputSchema: {},
     annotations: { readOnlyHint: true },
   }, async () => text(await listMeals(db, userId)));

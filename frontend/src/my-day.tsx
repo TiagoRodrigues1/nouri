@@ -1,7 +1,7 @@
 import * as stylex from "@stylexjs/stylex";
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Beef, BookmarkPlus, Droplet, Flame, Pencil, RotateCcw, Trash2, Wheat } from "lucide-react";
+import { Beef, BookmarkPlus, Droplet, Flame, ListX, Pencil, RotateCcw, Trash2, Wheat } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { colors } from "./theme.stylex";
 import { styles } from "./my-day-styles";
@@ -11,6 +11,7 @@ import { clock, currentTime, entryHour, entryTime, occurredAt, timeZone } from "
 import { useTargetsQuery } from "./lib/use-targets";
 import { dayQueryOptions, workoutSummaryQueryOptions } from "./lib/day-query";
 import { useLogAgain } from "./lib/use-log-again";
+import { useUndoMealLog } from "./lib/use-saved-meals";
 import { queryError } from "./query-status";
 import { useSupplements } from "./lib/use-supplements";
 import { useDashboardPage } from "./dashboard-page-context";
@@ -18,6 +19,7 @@ import { SupplementsCard } from "./my-day/supplements-card";
 import { format, type CardId, type FoodEntry } from "./lib/api";
 import { recordPaths } from "../../src/journal/paths";
 import { defaultCards } from "../../src/dashboard/contract";
+import type { MealLogRef } from "../../src/meals/contract";
 import { Bone } from "./loading";
 import { CardSkeleton, CardsSkeleton, TimelineSkeleton } from "./my-day/skeletons";
 import { ActivityCard, FastingCard, Gauge, LargestCard, MealsCard, MixCard, WaterCard, WindowCard } from "./my-day/cards";
@@ -25,6 +27,8 @@ import { ActivityCard, FastingCard, Gauge, LargestCard, MealsCard, MixCard, Wate
 type Row =
   | { kind: "hour"; hour: number }
   | { kind: "entry"; entry: FoodEntry; at: Date }
+  // Heads the foods one logging of a saved meal added.
+  | { kind: "meal"; log: MealLogRef }
   | { kind: "now" };
 
 // The Today page: the day's timeline beside its cards.
@@ -32,7 +36,8 @@ export function MyDay() {
   const { date, isToday, onEditFood: onEdit, onSaveMeal, foodDelete, journal, onManageSupplements, customizingCards, onCustomizingCardsChange } = useDashboardPage();
   const supplements = useSupplements(date);
   const logAgain = useLogAgain(date);
-  const busy = foodDelete.isPending || logAgain.pending;
+  const removeMeal = useUndoMealLog();
+  const busy = foodDelete.isPending || logAgain.pending || removeMeal.isPending;
   const onDelete = (entry: FoodEntry) => foodDelete.mutate(entry);
   const now = useNow();
   const dayQuery = useQuery(dayQueryOptions(date));
@@ -111,6 +116,7 @@ export function MyDay() {
     <div {...stylex.props(styles.layout)}>
       <Timeline
         entries={entries}
+        mealLogs={day?.mealLogs ?? []}
         now={isToday ? now : null}
         logAgainWhen={isToday ? "now" : "today"}
         summary={`${entries.length} ${entries.length === 1 ? "food" : "foods"} · ${format(totals?.kcal)} kcal`}
@@ -120,6 +126,7 @@ export function MyDay() {
         onLogAgain={logAgain.logAgain}
         onEdit={onEdit}
         onDelete={onDelete}
+        onRemoveMeal={(log) => removeMeal.mutate(log)}
         onSaveMeal={onSaveMeal}
       />
       <div {...stylex.props(styles.side)}>
@@ -162,10 +169,15 @@ function useNow(): Date {
   return now;
 }
 
-function timelineRows(entries: FoodEntry[], now: Date | null): Row[] {
+// Latest first by hour. A meal log's foods share their time, and sit together under its row, which comes before the
+// first of them shown; one moved to another time stays in the log without a row of its own.
+function timelineRows(entries: FoodEntry[], mealLogs: MealLogRef[], now: Date | null): Row[] {
   const items = entries
     .map((entry) => ({ entry, at: new Date(entry.occurredAt) }))
-    .sort((a, b) => b.at.getTime() - a.at.getTime());
+    .sort((a, b) => b.at.getTime() - a.at.getTime() || (a.entry.mealLogId ?? "").localeCompare(b.entry.mealLogId ?? ""));
+
+  const logs = new Map(mealLogs.map((log) => [log.id, log]));
+  const headed = new Set<string>();
 
   const hours = items.map((item) => entryHour(item.entry));
   const start = Math.min(6, ...hours);
@@ -183,6 +195,13 @@ function timelineRows(entries: FoodEntry[], now: Date | null): Row[] {
         nowPlaced = true;
       }
 
+      const log = item.entry.mealLogId ? logs.get(item.entry.mealLogId) : undefined;
+
+      if (log && !headed.has(log.id)) {
+        rows.push({ kind: "meal", log });
+        headed.add(log.id);
+      }
+
       rows.push({ kind: "entry", ...item });
     }
 
@@ -195,6 +214,7 @@ function timelineRows(entries: FoodEntry[], now: Date | null): Row[] {
 
 type TimelineProps = {
   entries: FoodEntry[];
+  mealLogs: MealLogRef[];
   now: Date | null;
   // Logging again always lands today, so a past day says so rather than implying it adds to this one.
   logAgainWhen: "now" | "today";
@@ -206,10 +226,11 @@ type TimelineProps = {
   onLogAgain: (entry: FoodEntry) => void;
   onEdit: (entry: FoodEntry) => void;
   onDelete: (entry: FoodEntry) => void;
+  onRemoveMeal: (log: MealLogRef) => void;
   onSaveMeal: () => void;
 };
 
-function Timeline({ entries, now, logAgainWhen, summary, loading, status, busy, onLogAgain, onEdit, onDelete, onSaveMeal }: TimelineProps) {
+function Timeline({ entries, mealLogs, now, logAgainWhen, summary, loading, status, busy, onLogAgain, onEdit, onDelete, onRemoveMeal, onSaveMeal }: TimelineProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const focusRef = useRef<HTMLLIElement>(null);
   const hasNow = now !== null;
@@ -221,7 +242,7 @@ function Timeline({ entries, now, logAgainWhen, summary, loading, status, busy, 
     if (scroller && target) scroller.scrollTop = target.offsetTop - scroller.clientHeight / 2;
   }, [hasNow, entries.length]);
 
-  const rows = timelineRows(entries, now);
+  const rows = timelineRows(entries, mealLogs, now);
   const focusIndex = hasNow ? rows.findIndex((row) => row.kind === "now") : rows.findIndex((row) => row.kind === "entry");
 
   return (
@@ -257,6 +278,24 @@ function Timeline({ entries, now, logAgainWhen, summary, loading, status, busy, 
                 return (
                   <li key="now" ref={ref} aria-hidden {...stylex.props(styles.nowRow)}>
                     <span {...stylex.props(styles.nowPill)}>{now && clock.format(now)}</span>
+                  </li>
+                );
+
+              if (row.kind === "meal")
+                return (
+                  <li key={`meal-${row.log.id}`} ref={ref} {...stylex.props(styles.mealRow)}>
+                    <span {...stylex.props(styles.mealLogName)}>{row.log.name}</span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      {...stylex.props(styles.entryAction)}
+                      aria-label={`Remove ${row.log.name} and its foods`}
+                      title="Remove meal"
+                      disabled={busy}
+                      onClick={() => onRemoveMeal(row.log)}
+                    >
+                      <ListX size={14} />
+                    </Button>
                   </li>
                 );
 

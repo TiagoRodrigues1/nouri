@@ -1,14 +1,16 @@
 import { useQuery } from "@tanstack/react-query";
-import { createSavedMeal, deleteSavedMeal, getSavedMeals, logSavedMeal, updateSavedMeal, type SavedMeal } from "./api";
+import { toast } from "sonner";
+import { createSavedMeal, deleteSavedMeal, getSavedMeals, logSavedMeal, undoMealLog, updateSavedMeal, type FoodEntry, type SavedMeal } from "./api";
 import { useIdempotentDelete, useIdempotentWrite } from "./use-idempotent";
 import { queryRefresh } from "./query-refresh";
-import type { MealDaily, MealInput, MealLogInput } from "../../../src/meals/contract";
+import type { MealDaily, MealInput, MealLogInput, MealLogRef } from "../../../src/meals/contract";
 
 type PendingLog = { meal: SavedMeal; input: MealLogInput };
 
 type PendingSave = { meal: SavedMeal | null; input: MealInput };
 
-// A meal saved as daily may fill today, so the day's reads refresh with the list.
+// A meal saved as daily may fill today, and logging a meal or removing a log reorders the list, so the day's
+// reads and the list refresh together.
 const mealRefresh = ["saved-meals", ...queryRefresh.food];
 
 export function useSavedMeals() {
@@ -46,11 +48,27 @@ export function useMealDaily() {
   };
 }
 
-// A meal logs as one request, so a retry after a dropped response never adds its foods twice.
+// A meal logs as one request, so a retry after a dropped response never adds its foods twice. The toast offers to
+// undo the whole meal; a log replayed from before meal logs existed has none to undo.
 export function useLogMeal(onLogged: () => void) {
-  return useIdempotentWrite<PendingLog>((pending, key) => logSavedMeal(key, pending.meal, pending.input), {
-    refresh: queryRefresh.food, success: (pending) => `${pending.meal.name} added to your log.`, onSuccess: onLogged,
+  const undo = useUndoMealLog();
+
+  return useIdempotentWrite<PendingLog, FoodEntry[]>((pending, key) => logSavedMeal(key, pending.meal, pending.input), {
+    refresh: mealRefresh,
+    onSuccess: ({ meal }, entries) => {
+      const logId = entries[0]?.mealLogId;
+
+      toast.success(`${meal.name} added to your log.`, logId ? { action: { label: "Undo", onClick: () => undo.mutate({ id: logId, name: meal.name }) } } : undefined);
+      onLogged();
+    },
     signature: (pending) => JSON.stringify([pending.meal.id, pending.input]),
+  });
+}
+
+// Removes every food one logging of a meal added.
+export function useUndoMealLog() {
+  return useIdempotentWrite<MealLogRef>((log, key) => undoMealLog(key, log.id), {
+    refresh: mealRefresh, success: (log) => `${log.name} removed from your log.`, signature: (log) => log.id,
   });
 }
 

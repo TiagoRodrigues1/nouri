@@ -18,6 +18,10 @@ On Today with foods logged, choose `Save foods as a meal` in the Timeline header
 
 Press `Ctrl+K` and choose `Log food`. The `Saved meals` group lists meals, filtered as you type, each with its food count and kcal. Enter on a meal calls `POST /v1/saved-meals/<id>/logs` once at its saved amounts; the toast reads `<name> added to your log.` and `GET /v1/days/<date>` shows the foods at the palette's time. Change an amount afterwards with `Edit <name>` on the timeline.
 
+## Undo a logged meal, and recency
+
+The log toast has an `Undo` button; it calls `DELETE /v1/meal-logs/<id>` once, toasts `<name> removed from your log.`, and the foods leave the timeline. On the Timeline, a logged meal's foods sit under a purple row with the meal's name and a `Remove <name> and its foods` button (title `Remove meal`) that does the same, for daily fills too. `GET /v1/days/<date>` shows each such entry's `mealLogId` and the day's `mealLogs`. The palette's `Saved meals` group lists the most recently logged meal first; after its log is removed, it drops back to where its save date puts it.
+
 ## Daily meals
 
 Tick `Log every day at` in the editor before saving, or tick the `Log <name> every day` checkbox on a meal's card (which sends the meal back once as `PATCH /v1/saved-meals/<id>` with only `daily` changed; the toast reads `<name> will be logged every day at 08:00.`). Today's timeline then shows the meal's foods at that time, `GET /v1/days/<today>` returns them as ordinary entries in the totals, and `GET /v1/days/<tomorrow>` stays empty until it becomes today. The card's label turns `Every day at` purple, and the palette's `Saved meals` row adds `every day at 08:00`. Due days are filled when the day, Review, or recent-foods endpoints are read (including MCP `get_day`), not by `GET /v1/saved-meals`. Deleting a pre-filled food keeps it deleted; unticking toasts `<name> will no longer be logged every day.` and keeps the days already filled. `daily-meals.test.ts` covers missed days, which are filled on the next read.

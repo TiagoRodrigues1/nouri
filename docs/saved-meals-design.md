@@ -84,6 +84,6 @@ Two candidates were compared. The base is a server-owned saved-meal resource tha
 
 ## Open questions and risks
 
-- Should the Saved meals tab rank meals by how recently they were logged, or by the time of day in the picker? Today the newest saved meal comes first.
-- Is a whole-meal undo worth adding a nullable `meal_log_id` to `food_entries`?
+- Should the Saved meals tab rank meals by how recently they were logged, or by the time of day in the picker? Today the newest saved meal comes first. Answered in [meal-logs-design.md](meal-logs-design.md).
+- Is a whole-meal undo worth adding a nullable `meal_log_id` to `food_entries`? Answered in [meal-logs-design.md](meal-logs-design.md).
 - Should editing a meal in place come later, with `If-Match` on logging if it does? It came later without `If-Match`; see [saved-meal-editing-design.md](saved-meal-editing-design.md).
