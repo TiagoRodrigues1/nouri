@@ -103,6 +103,7 @@ const settings = [
 const waterPresets = [
   { volumeMl: 250, label: "Glass" },
   { volumeMl: 500, label: "Bottle" },
+  { volumeMl: 1000, label: "Carafe" },
 ] as const;
 
 const placeholders: Record<Step["kind"], string> = {
