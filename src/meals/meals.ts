@@ -8,7 +8,7 @@ import { requestHash, withReceipt } from "../journal/receipt.js";
 import { scaledFood } from "../food/contract.js";
 import type { FoodItemInput } from "../food/contract.js";
 import { instantAt, isoWeekday, localDate, shiftDate } from "../time.js";
-import { mealLogSchema, savedMealSchema } from "./contract.js";
+import { everyDay, mealLogSchema, savedMealSchema } from "./contract.js";
 import type { MealDaily, MealInput, MealItemInput, MealLog, MealLogInput, MealLogRef, SavedMeal, SavedMealList, StoredMealItem } from "./contract.js";
 
 export type MealCommand =
@@ -43,8 +43,17 @@ function today(zone: string): string {
 }
 
 // Receipts share one key space, so the fingerprint names saved meals.
-function hash(request: MealCommand | { kind: "log"; id: string; input: MealLogInput } | { kind: "undo"; id: string }): string {
+function hash<Request extends { kind: MealCommand["kind"] | "log" | "undo" }>(request: Request): string {
   return requestHash({ ...request, kind: `saved-meal-${request.kind}` });
+}
+
+// A daily meal saved for every day is fingerprinted without its weekdays, as it was before they existed, so a
+// write retried across that change still replays.
+function fingerprintInput(input: MealInput) {
+  if (!input.daily || input.daily.weekdays.length < everyDay.length) return input;
+  const { time, timeZone } = input.daily;
+
+  return { ...input, daily: { time, timeZone } };
 }
 
 // The item at another amount, scaled from its basis so a chain of edits matches a single one.
@@ -159,7 +168,9 @@ export async function listMeals(db: AppDatabase, userId: string): Promise<SavedM
 
 // Saving copies each food, so later edits to a logged day or the catalog never change the meal.
 export async function mutateMeal(db: AppDatabase, userId: string, key: string, command: MealCommand): Promise<MealMutationResult> {
-  return withReceipt(db, userId, key, hash(command), (receipt): MealMutationResult => {
+  const fingerprint = command.kind === "delete" ? command : { ...command, input: fingerprintInput(command.input) };
+
+  return withReceipt(db, userId, key, hash(fingerprint), (receipt): MealMutationResult => {
     const { outcome, body } = receipt;
 
     if (outcome === null) throw new Error("Saved meal receipt cannot be replayed");

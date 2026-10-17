@@ -72,6 +72,19 @@ void test("a daily meal fills only its weekdays, and new weekdays apply from the
       assert.equal((await setDaily(app, meal, { time: "08:00", timeZone, weekdays })).status, 400);
     }
 
+    // A save sent before weekdays existed and retried with its key still replays, and naming every day matches it.
+    const items = meal.items.map((item) => ({ id: item.id, amount: item.food.quantity.amount }));
+
+    const retry = (daily: { time: string; timeZone: string; weekdays?: number[] }) => app.request(`/v1/saved-meals/${meal.id}`, {
+      method: "PATCH", headers: { ...headers, "Idempotency-Key": "retried", "If-Match": `"${meal.revision}"` }, body: JSON.stringify({ name: meal.name, items, daily }),
+    });
+
+    const first = await retry({ time: "07:00", timeZone });
+    assert.equal(first.status, 200);
+    assert.equal((await retry({ time: "07:00", timeZone, weekdays: [7, 6, 5, 4, 3, 2, 1] })).status, 200);
+    assert.equal((await retry({ time: "07:00", timeZone, weekdays: [1, 2, 3] })).status, 409);
+    meal = await first.json();
+
     // Off clears the weekdays with the time.
     assert.equal((await save(await setDaily(app, meal, null))).daily, null);
     const [off] = await client<{ weekdays: number[] | null }[]>`SELECT daily_weekdays AS weekdays FROM saved_meals WHERE id = ${meal.id}`;
