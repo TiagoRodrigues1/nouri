@@ -37,6 +37,8 @@ import { listRoutines, mutateRoutine } from "./routines/routines.js";
 import { getReview } from "./review/review.js";
 import { maxPhotoBytes, maxThumbnailBytes, photoSchema, photoUploadSchema } from "./photos/contract.js";
 import { detectPhotoType, getPhotoByteSize, getPhotoImage, photoRecords } from "./photos/photos.js";
+import { profileSchema, profileViewSchema } from "./profile/contract.js";
+import { getProfileView, saveProfile } from "./profile/profile.js";
 import { sleepInputSchema } from "./sleep/contract.js";
 import { sleepRecords } from "./sleep/sleep.js";
 import { intakeInputSchema } from "./supplements/contract.js";
@@ -490,6 +492,28 @@ export function createApp(db: AppDatabase, identity: Identity, packagedFoods: Pa
 
   datedRoutes("/v1/targets", targetsKind, { label: "targets", read: "Targets in force on the local day; defaults until the user saves some", save: "Targets saved to take effect on the local day, until the next change", invalid: "Missing or out-of-range target" });
   datedRoutes(recordPaths.supplementStack, stackKind, { label: "supplement stack", read: "Supplements in force on the local day; empty until the user saves some", save: "Supplements saved to take effect on the local day, until the next change", invalid: "Invalid supplement or repeated id" });
+
+  // Dated because the suggestion depends on the day: the age then and the weight and height in force.
+  app.get("/v1/profile/:date", async (context) => {
+    const date = z.iso.date().safeParse(context.req.param("date"));
+
+    if (!date.success) return error(400, "Invalid profile request");
+
+    return context.json(await getProfileView(db, context.get("userId"), date.data));
+  });
+
+  // A full replacement of the profile, so repeating the request is safe without an idempotency key.
+  app.put("/v1/profile/:date", async (context) => {
+    const date = z.iso.date().safeParse(context.req.param("date"));
+    const input = profileSchema.safeParse(await context.req.json().catch(() => null));
+
+    if (!date.success || !input.success) return error(400, "Invalid profile");
+
+    return context.json(await saveProfile(db, context.get("userId"), date.data, input.data));
+  });
+  const profileParams = z.object({ date: z.iso.date() });
+  app.openAPIRegistry.registerPath({ method: "get", path: "/v1/profile/{date}", request: { params: profileParams }, responses: { 200: { description: "The saved profile and the nutrition targets it suggests on the local day, from the latest weight and height; null with what is missing until there is enough", ...json(profileViewSchema) }, 400: failure("Invalid date") } });
+  app.openAPIRegistry.registerPath({ method: "put", path: "/v1/profile/{date}", request: { params: profileParams, body: json(profileSchema) }, responses: { 200: { description: "Saved profile, with the targets it suggests on the local day. Targets themselves are not changed", ...json(profileViewSchema) }, 400: failure("Invalid date or profile") } });
 
 
   app.get("/v1/account/export", (context) => {

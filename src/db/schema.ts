@@ -4,6 +4,7 @@ import type { FoodProvider, FoodQuantity } from "../food/contract.js";
 import type { StoredMealItem } from "../meals/contract.js";
 import type { MeasurementKind } from "../measurements/contract.js";
 import type { PhotoType } from "../photos/contract.js";
+import type { Profile } from "../profile/contract.js";
 import type { RoutineExercise } from "../routines/contract.js";
 import type { Dose, Supplement, SupplementKind } from "../supplements/contract.js";
 import type { SourceColumn, WearableProvider } from "../wearables/contract.js";
@@ -243,6 +244,15 @@ export const userTargets = pgTable("user_targets", {
   weightG: integer("weight_g"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [primaryKey({ columns: [table.userId, table.effectiveFrom] })]);
+
+export const userProfiles = pgTable("user_profiles", {
+  userId: ownerColumn().primaryKey(),
+  sex: text("sex").$type<Profile["sex"]>().notNull(),
+  birthYear: integer("birth_year").notNull(),
+  activity: text("activity").$type<Profile["activity"]>().notNull(),
+  goal: text("goal").$type<Profile["goal"]>().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 export const supplementStacks = pgTable("supplement_stacks", {
   userId: ownerColumn(),

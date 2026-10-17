@@ -45,30 +45,38 @@ export const measurementRecords: RecordKind<MeasurementInput, Measurement> = {
   },
 };
 
+// The latest value of each kind recorded on or before the day, or null for a kind never recorded by then.
+export async function getLatestMeasurements(db: AppDatabase, userId: string, date: string): Promise<MeasurementSummary["latest"]> {
+  const rows = await db.selectDistinctOn([bodyMeasurements.kind]).from(bodyMeasurements)
+    .where(and(eq(bodyMeasurements.userId, userId), isNull(bodyMeasurements.deletedAt), lte(bodyMeasurements.localDate, date)))
+    .orderBy(bodyMeasurements.kind, desc(bodyMeasurements.occurredAt), desc(bodyMeasurements.id));
+
+  const latest: MeasurementSummary["latest"] = { weight: null, height: null, "body-fat": null, waist: null };
+
+  for (const kind of measurementKinds) {
+    const row = rows.find((candidate) => candidate.kind === kind);
+
+    latest[kind] = row ? { value: row.valueMilli / 1000, localDate: row.localDate } : null;
+  }
+
+  return latest;
+}
+
 // Measurements carry forward: the summary for a day shows the latest value recorded on or before it.
 export async function getMeasurementSummary(db: AppDatabase, userId: string, date: string): Promise<MeasurementSummary> {
   const active = and(eq(bodyMeasurements.userId, userId), isNull(bodyMeasurements.deletedAt));
   const newestFirst = [desc(bodyMeasurements.occurredAt), desc(bodyMeasurements.id)];
 
-  const [today, latestRows, recentWeights, historyRows] = await Promise.all([
+  const [today, latest, recentWeights, historyRows] = await Promise.all([
     db.select().from(bodyMeasurements).where(and(active, eq(bodyMeasurements.localDate, date)))
       .orderBy(bodyMeasurements.occurredAt, bodyMeasurements.id),
-    db.selectDistinctOn([bodyMeasurements.kind]).from(bodyMeasurements).where(and(active, lte(bodyMeasurements.localDate, date)))
-      .orderBy(bodyMeasurements.kind, ...newestFirst),
+    getLatestMeasurements(db, userId, date),
     db.select().from(bodyMeasurements).where(and(active, eq(bodyMeasurements.kind, "weight"), lte(bodyMeasurements.localDate, date)))
       .orderBy(...newestFirst).limit(2),
     db.select().from(bodyMeasurements).where(and(
       active, eq(bodyMeasurements.kind, "weight"), lte(bodyMeasurements.localDate, date), gte(bodyMeasurements.localDate, shiftDate(date, 1 - historyDays)),
     )).orderBy(bodyMeasurements.occurredAt, bodyMeasurements.id),
   ]);
-
-  const latest: MeasurementSummary["latest"] = { weight: null, height: null, "body-fat": null, waist: null };
-
-  for (const kind of measurementKinds) {
-    const row = latestRows.find((candidate) => candidate.kind === kind);
-
-    latest[kind] = row ? { value: row.valueMilli / 1000, localDate: row.localDate } : null;
-  }
 
   // One point per day: the last weight recorded that day.
   const history = new Map<string, number>();
