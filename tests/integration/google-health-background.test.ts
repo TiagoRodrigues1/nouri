@@ -353,6 +353,20 @@ void test("Google Health imports in the background", async (t) => {
       assert.equal((await nouri.syncNow()).status, 200);
     });
 
+    await t.test("a new sign-in's first sync reads everything", async () => {
+      // A job for one kind is waiting when the person signs in again.
+      await nouri.notify(notification("sleep", "2026-09-26T23:00:00"));
+      assert.equal(await nouri.connect(), "connected");
+      assert.equal((await nouri.connection()).reconciledAt, null);
+
+      // The job runs first, but the new grant has never had a full read, so it gets one.
+      nouri.advance(syncTiming.debounceMs);
+      const mark = google.requests.length;
+      assert.equal(await nouri.runJobs(), 1);
+      assert.deepEqual(new Set(nouri.readsSince(mark)), new Set(["sleep", "exercise", "steps:dailyRollUp", "active-energy-burned:dailyRollUp", "heart-rate:dailyRollUp", "daily-resting-heart-rate"]));
+      assert.deepEqual((await nouri.connection()).reconciledAt, clock.now);
+    });
+
     await t.test("daily reconciliation covers people who use Nouri", async () => {
       await nouri.setConnection("reconciled_at", new Date(clock.now.getTime() - syncTiming.reconcileEveryMs));
       await nouri.setConnection("opened_at", null);

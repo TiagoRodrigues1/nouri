@@ -244,9 +244,12 @@ export function connectionFor(db: AppDatabase, runtime: WearableRuntime, provide
     if (!row || !isLive(row)) return refused(started);
 
     try {
-      const { window, whole } = windowFor(started, scope.since);
+      // A grant that has never had a full read gets one first, whatever was asked. After a sign-in, which may have
+      // switched accounts or added kinds, what changed is unknown, so a narrow job queued before it would leave gaps.
+      const { since, kinds: wanted } = row.reconciledAt === null ? everything : scope;
+      const { window, whole } = windowFor(started, since);
       const granted = provider.grantedKinds(row.scope);
-      const kinds = granted.filter((kind) => scope.kinds.includes(kind));
+      const kinds = granted.filter((kind) => wanted.includes(kind));
       // Only a full re-read can see every deletion inside the window, so only it counts as reconciliation.
       const reconciled = whole && kinds.length === granted.length;
 
