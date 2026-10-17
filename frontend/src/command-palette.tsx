@@ -131,17 +131,21 @@ export function CommandPalette({ open, onOpenChange, ...props }: CommandPaletteP
   const back = useRef<(() => boolean) | null>(null);
   const phone = usePhone();
   const keyboard = useKeyboardInset();
+  const sheet = useRef<HTMLDivElement>(null);
 
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPortal>
         <DialogOverlay className="bg-transparent max-[680px]:bg-black/40 supports-backdrop-filter:backdrop-blur-none" />
         <DialogPrimitive.Content
+          ref={sheet}
           {...stylex.props(styles.palette, styles.keyboardInset(`${keyboard}px`))}
           aria-describedby={undefined}
-          // Focusing the search would raise a phone's keyboard over the buttons.
+          // Focusing the search would raise a phone's keyboard over the buttons, so the sheet itself takes focus.
           onOpenAutoFocus={(event) => {
-            if (phone) event.preventDefault();
+            if (!phone) return;
+            event.preventDefault();
+            sheet.current?.focus();
           }}
           onEscapeKeyDown={(event) => {
             if (back.current?.()) event.preventDefault();
