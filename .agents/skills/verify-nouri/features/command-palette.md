@@ -1,6 +1,6 @@
 # Command palette
 
-Entry points: `Ctrl+K` (or `Cmd+K`) on any page, and the sidebar's `+ Log` button (the phone top bar's `+ Log` below 680px). Pressing `Ctrl+K` again closes it. The palette floats near the top of the page without dimming it. Below 680px it fills the screen.
+Entry points: `Ctrl+K` (or `Cmd+K`) on any page, and the sidebar's `+ Log` button (the phone top bar's `+ Log` below 680px). Pressing `Ctrl+K` again closes it. The palette floats near the top of the page without dimming it. Below 680px it is a sheet from the bottom over a dimmed page; see Phone below.
 
 The search is a combobox whose accessible name is its placeholder, so reach it with `getByRole("combobox")`. Items are `option`s named by their text. Each step after the root shows a `Back` arrow and chips in the header (`Food`, then the chosen food's name); an earlier chip goes back to its step. `Backspace` in an empty search, or `Escape`, goes back one step. `Escape` at the root closes the palette. Form steps (amount, manual food, barcode scan, measurement value) show only the chips above the form.
 
@@ -24,3 +24,7 @@ Measurement: `Log measurement` lists Weight, Height, Body fat, Waist. `Enter` op
 Workout: `Start workout` lists the workout in progress (`Resume <title>`), the account's routines, `Start an empty workout`, and `Log a past activity` (opens the workout dialog, see [overview.md](overview.md)). Starting a routine opens `/workouts/session`. If a workout is already open, it is resumed with the toast `<title> is still open, so it was resumed.`
 
 Check: log two foods (one through the amount step with `Ctrl+Enter`, one ticked with `Shift+Enter`), then read `GET /v1/days/<date>` and confirm both entries, their amounts, and the chosen time.
+
+Phone (below 680px): opening the sheet focuses nothing, so no keyboard rises. The root shows six buttons (`Food`, `Water`, `Scan`, `Weight`, `Workout`, `Sleep`), a `Log again` row of recent foods, and the search at the bottom (placeholder `Search, or type “weight 82.4”`). Typing shows the same items and quick log as the desktop root. `Scan` opens the barcode scanner over the food step; `Weight` opens `#palette-measurement` directly; a `Log again` chip opens that food's amount step. In the food step, tapping a row ticks or unticks it, and its amount button (`Change the amount of <name>`) opens the amount step. Ticked foods are listed under `Selected` until a search, at their ticked amounts. The bar at the bottom holds `#palette-time` and `Log N foods · X kcal` (`Tap foods to tick them` while nothing is ticked). There are no key hints and no highlighted row. The sheet sits above the on-screen keyboard (`--keyboard-inset` on the dialog).
+
+Phone check: at 390×844, add two foods with `Add a food manually`, confirm both under `Selected`, and log them from the bar. Reopen, tap a `Log again` chip, set 40, `Add another`, tick the other recent food and change its amount, then log both. `GET /v1/days/<date>` shows all four entries at those amounts.

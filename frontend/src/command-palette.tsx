@@ -9,6 +9,7 @@ import {
   ArrowLeft,
   BookOpen,
   Check,
+  ChevronRight,
   CalendarRange,
   ChartColumn,
   Droplet,
@@ -27,6 +28,7 @@ import {
   TrendingUp,
   UtensilsCrossed,
   Watch,
+  Weight,
   X,
   Zap,
 } from "lucide-react";
@@ -54,6 +56,7 @@ import { useLogFoods, useRecentFoods } from "./lib/use-recent-foods";
 import { useLogMeal, useSavedMeals } from "./lib/use-saved-meals";
 import { useRoutines } from "./lib/routines";
 import { useWorkoutSession } from "./lib/use-workout-session";
+import { useKeyboardInset, usePhone } from "./lib/use-phone";
 import { useJournal } from "./overview/use-journal";
 import { recordPaths } from "../../src/journal/paths";
 import { isBarcode, isUserAdded, maxBatchFoods, recordedFood, totalNutrients, type FoodInput } from "../../src/food/contract";
@@ -121,23 +124,31 @@ const placeholders: Record<Step["kind"], string> = {
 const foodsLabel = (count: number) => `${count} ${count === 1 ? "food" : "foods"}`;
 
 // One keyboard entry point for logging and moving around: Ctrl+K, or the + Log button. It floats over the page
-// without dimming it, so the day stays in view while logging.
+// without dimming it, so the day stays in view while logging. On phones it is a sheet from the bottom, over a
+// dimmed page, that starts from big buttons rather than a search.
 export function CommandPalette({ open, onOpenChange, ...props }: CommandPaletteProps) {
   // The open step's way back, so Escape leaves a step before it closes the palette.
   const back = useRef<(() => boolean) | null>(null);
+  const phone = usePhone();
+  const keyboard = useKeyboardInset();
 
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPortal>
-        <DialogOverlay className="bg-transparent supports-backdrop-filter:backdrop-blur-none" />
+        <DialogOverlay className="bg-transparent max-[680px]:bg-black/40 supports-backdrop-filter:backdrop-blur-none" />
         <DialogPrimitive.Content
-          {...stylex.props(styles.palette)}
+          {...stylex.props(styles.palette, styles.keyboardInset(`${keyboard}px`))}
           aria-describedby={undefined}
+          // Focusing the search would raise a phone's keyboard over the buttons.
+          onOpenAutoFocus={(event) => {
+            if (phone) event.preventDefault();
+          }}
           onEscapeKeyDown={(event) => {
             if (back.current?.()) event.preventDefault();
           }}
         >
           <DialogPrimitive.Title className="sr-only">Log or go to</DialogPrimitive.Title>
+          <div {...stylex.props(styles.grab)} aria-hidden />
           <PaletteBody {...props} back={back} close={() => onOpenChange(false)} />
         </DialogPrimitive.Content>
       </DialogPortal>
@@ -150,6 +161,7 @@ type BodyProps = Omit<CommandPaletteProps, "open" | "onOpenChange"> & { back: Re
 // Mounts with the palette, so each opening starts at the root, at the current time, with nothing ticked.
 function PaletteBody({ date, isToday, onOpenRecord, onOpenSetting, back, close }: BodyProps) {
   const navigate = useNavigate();
+  const phone = usePhone();
   const [stack, setStack] = useState<Step[]>([{ kind: "root" }]);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState("");
@@ -186,7 +198,7 @@ function PaletteBody({ date, isToday, onOpenRecord, onOpenSetting, back, close }
 
   // cmdk highlights the first item itself only where it filters, at the root.
   useEffect(() => {
-    if (step.kind === "root" || !list.current) return;
+    if (step.kind === "root" || phone || !list.current) return;
     const first = list.current.querySelector("[cmdk-item]:not([data-disabled='true'])")?.getAttribute("data-value");
     const highlighted = list.current.querySelector("[cmdk-item][data-selected='true']");
 
@@ -268,7 +280,21 @@ function PaletteBody({ date, isToday, onOpenRecord, onOpenSetting, back, close }
     }
   }
 
-  const header = <PaletteHeader stack={stack} query={query} onQueryChange={search} onBack={pop} onJump={(depth) => moveTo(stack.slice(0, depth + 1))} />;
+  // A phone's root keeps its search at the bottom, by the thumb and the keyboard, under its buttons.
+  const bottomSearch = phone && step.kind === "root";
+
+  const header = (
+    <PaletteHeader
+      stack={stack}
+      query={query}
+      bottom={bottomSearch}
+      autoFocus={!phone}
+      onQueryChange={search}
+      onBack={pop}
+      onJump={(depth) => moveTo(stack.slice(0, depth + 1))}
+    />
+  );
+
   const when = <TimePicker id="palette-time" value={time} onChange={setTime} onNow={() => setTime(currentTime())} />;
 
   switch (step.kind) {
@@ -334,7 +360,7 @@ function PaletteBody({ date, isToday, onOpenRecord, onOpenSetting, back, close }
   return (
     <Command
       key={stack.length}
-      {...stylex.props(styles.command)}
+      {...stylex.props(styles.command, phone && step.kind === "food" && styles.tall)}
       // The root's items are fixed, so cmdk filters them; the other steps filter or search for themselves.
       shouldFilter={step.kind === "root"}
       value={active}
@@ -342,11 +368,20 @@ function PaletteBody({ date, isToday, onOpenRecord, onOpenSetting, back, close }
       onKeyDown={listKeyDown}
       loop
     >
-      {header}
-      <ActiveItem.Provider value={active}>
+      {!bottomSearch && header}
+      {/* Touch has no highlight to move, so a phone shows none. */}
+      <ActiveItem.Provider value={phone ? "" : active}>
       <CommandList ref={list} {...stylex.props(styles.list)} onPointerMove={() => (browsed.current = true)}>
-        {step.kind === "root" && !parseShortcut(query) && <CommandEmpty {...stylex.props(styles.message)}>Nothing matches “{query}”.</CommandEmpty>}
-        {step.kind === "root" && (
+        {step.kind === "root" && query !== "" && !parseShortcut(query) && <CommandEmpty {...stylex.props(styles.message)}>Nothing matches “{query}”.</CommandEmpty>}
+        {bottomSearch && query === "" && (
+          <PhoneLauncher
+            onPush={push}
+            onScan={() => moveTo([{ kind: "root" }, { kind: "food" }, { kind: "scan" }])}
+            onRecent={(row) => moveTo([{ kind: "root" }, { kind: "food" }, { kind: "amount", row }])}
+            onSleep={() => leave(() => onOpenRecord("sleep"))}
+          />
+        )}
+        {step.kind === "root" && (!bottomSearch || query !== "") && (
           <RootItems
             query={query}
             pending={journal.create.isPending}
@@ -362,6 +397,7 @@ function PaletteBody({ date, isToday, onOpenRecord, onOpenSetting, back, close }
             foods={foods}
             query={query}
             tray={tray}
+            phone={phone}
             pending={logFoods.isPending || logMeal.isPending}
             onPick={(row) => push({ kind: "amount", row: tray.find((other) => other.key === row.key) ?? row })}
             onToggle={toggle}
@@ -407,15 +443,26 @@ function PaletteBody({ date, isToday, onOpenRecord, onOpenSetting, back, close }
         )}
       </CommandList>
       </ActiveItem.Provider>
-      <div {...stylex.props(styles.footer)}>
-        <Hint keys={["↑", "↓"]} label="move" />
-        <Hint keys={["↵"]} label={step.kind === "food" ? "set amount" : "choose"} />
-        {step.kind === "food" && <Hint keys={["Shift", "↵"]} label="tick" />}
-        {step.kind !== "root" && <Hint keys={["Esc"]} label="back" />}
-        {(step.kind === "food" || step.kind === "water") && (
-          <span {...stylex.props(styles.footerEnd)}>Logging to {target} at {when}</span>
-        )}
-      </div>
+      {bottomSearch && header}
+      {phone && step.kind === "food" ? (
+        // Phones tick foods by tapping them, then log them all from here.
+        <div {...stylex.props(styles.footer, styles.logBar)}>
+          {when}
+          <Button type="button" {...stylex.props(styles.logBarButton)} disabled={tray.length === 0 || logFoods.isPending} onClick={() => logRows(tray)}>
+            {tray.length === 0 ? "Tap foods to tick them" : `Log ${foodsLabel(tray.length)} · ${format(rowsKcal(tray))} kcal`}
+          </Button>
+        </div>
+      ) : (!phone || step.kind === "water") && (
+        <div {...stylex.props(styles.footer)}>
+          <Hint keys={["↑", "↓"]} label="move" />
+          <Hint keys={["↵"]} label={step.kind === "food" ? "set amount" : "choose"} />
+          {step.kind === "food" && <Hint keys={["Shift", "↵"]} label="tick" />}
+          {step.kind !== "root" && <Hint keys={["Esc"]} label="back" />}
+          {(step.kind === "food" || step.kind === "water") && (
+            <span {...stylex.props(styles.footerEnd)}>Logging to {target} at {when}</span>
+          )}
+        </div>
+      )}
     </Command>
   );
 }
@@ -437,9 +484,11 @@ function stepChip(step: Step): { label: string; icon: ReactNode } | null {
 const formSteps = new Set<Step["kind"]>(["amount", "manual", "scan", "measurement-value"]);
 
 // Back, the steps taken so far as chips, then this step's search. An earlier chip goes back to its step.
-function PaletteHeader({ stack, query, onQueryChange, onBack, onJump }: {
+function PaletteHeader({ stack, query, bottom, autoFocus, onQueryChange, onBack, onJump }: {
   stack: Step[];
   query: string;
+  bottom: boolean;
+  autoFocus: boolean;
   onQueryChange: (query: string) => void;
   onBack: () => void;
   onJump: (depth: number) => void;
@@ -454,7 +503,7 @@ function PaletteHeader({ stack, query, onQueryChange, onBack, onJump }: {
   }
 
   return (
-    <div {...stylex.props(styles.header)}>
+    <div {...stylex.props(styles.header, bottom && styles.headerBottom)}>
       {stack.length > 1 ? (
         <Button type="button" variant="ghost" size="icon-sm" {...stylex.props(styles.backButton)} aria-label="Back" title="Back (Esc)" onClick={onBack}>
           <ArrowLeft size={16} />
@@ -482,9 +531,9 @@ function PaletteHeader({ stack, query, onQueryChange, onBack, onJump }: {
           value={query}
           onValueChange={onQueryChange}
           onKeyDown={keyDown}
-          placeholder={placeholders[step.kind]}
+          placeholder={bottom ? "Search, or type “weight 82.4”" : placeholders[step.kind]}
           aria-label={placeholders[step.kind]}
-          autoFocus
+          autoFocus={autoFocus}
         />
       )}
     </div>
@@ -557,6 +606,55 @@ function Highlighted({ name, query }: { name: string; query: string }) {
   ));
 }
 
+// A phone's root before anything is typed: the common logs as big buttons, then recent foods to log again.
+function PhoneLauncher({ onPush, onScan, onRecent, onSleep }: {
+  onPush: (step: Step) => void;
+  onScan: () => void;
+  onRecent: (row: FoodRow) => void;
+  onSleep: () => void;
+}) {
+  const recent = useRecentFoods();
+
+  const tiles = [
+    { label: "Food", icon: UtensilsCrossed, tint: styles.tintFood, onClick: () => onPush({ kind: "food" }) },
+    { label: "Water", icon: Droplet, tint: styles.tintWater, onClick: () => onPush({ kind: "water" }) },
+    { label: "Scan", icon: ScanBarcode, tint: styles.tintScan, onClick: onScan },
+    { label: "Weight", icon: Weight, tint: styles.tintWeight, onClick: () => onPush({ kind: "measurement-value", measurement: "weight" }) },
+    { label: "Workout", icon: Dumbbell, tint: styles.tintWorkout, onClick: () => onPush({ kind: "workout" }) },
+    { label: "Sleep", icon: Moon, tint: styles.tintSleep, onClick: onSleep },
+  ];
+
+  return (
+    <div {...stylex.props(styles.launcher)}>
+      <div {...stylex.props(styles.tiles)}>
+        {tiles.map(({ label, icon: Icon, tint, onClick }) => (
+          <button key={label} type="button" {...stylex.props(styles.tile, tint)} onClick={onClick}>
+            <Icon size={22} />
+            {label}
+          </button>
+        ))}
+      </div>
+      {(recent.data ?? []).length > 0 && (
+        <>
+          <p {...stylex.props(styles.groupHeading, styles.launcherHeading)}>Log again</p>
+          <div {...stylex.props(styles.chips)}>
+            {(recent.data ?? []).slice(0, 6).map(({ entryId, food }) => (
+              <button
+                key={entryId}
+                type="button"
+                {...stylex.props(styles.chip)}
+                onClick={() => onRecent({ ...draftRow({ kind: "entry", entryId }, food), key: `entry:${entryId}` })}
+              >
+                {food.name}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function RootItems({ query, pending, onPush, onShortcut, onRecord, onSetting, onGo }: {
   query: string;
   pending: boolean;
@@ -580,7 +678,7 @@ function RootItems({ query, pending, onPush, onShortcut, onRecord, onSetting, on
             name={shortcut.kind === "water"
               ? <>Add <strong>{shortcut.volumeMl} ml</strong> of water</>
               : <>Log {measurementLabels[shortcut.measurement].name.toLowerCase()} <strong>{format(shortcut.value, 1)} {measurementLabels[shortcut.measurement].unit}</strong></>}
-            aside={<Kbd>↵</Kbd>}
+            aside={<Kbd {...stylex.props(styles.desktopOnly)}>↵</Kbd>}
             onSelect={() => onShortcut(shortcut)}
           />
         </PaletteGroup>
@@ -686,10 +784,12 @@ function useFoodOptions(query: string, enabled: boolean) {
   };
 }
 
-function FoodItems({ foods, query, tray, pending, onPick, onToggle, onLogTray, onLogMeal, onManual, onScan }: {
+function FoodItems({ foods, query, tray, phone, pending, onPick, onToggle, onLogTray, onLogMeal, onManual, onScan }: {
   foods: ReturnType<typeof useFoodOptions>;
   query: string;
   tray: FoodRow[];
+  // Phones tick a food when it is tapped, and open its amount from the amount on the right.
+  phone: boolean;
   pending: boolean;
   onPick: (row: FoodRow) => void;
   onToggle: (row: FoodRow) => void;
@@ -700,9 +800,13 @@ function FoodItems({ foods, query, tray, pending, onPick, onToggle, onLogTray, o
 }) {
   const ticked = (row: FoodRow) => tray.some((other) => other.key === row.key);
 
+  // A phone lists ticked foods under Selected instead, until a search.
+  const recent = phone && !query ? foods.recent.filter((food) => !ticked(food.row)) : foods.recent;
+
   const option = (food: FoodOption) => {
     const on = ticked(food.row);
-    const { quantity, nutrients } = food.row.food;
+    // At its ticked amount, if it has been changed.
+    const { quantity, nutrients } = rowFood(food.row);
 
     return (
       <PaletteItem
@@ -726,16 +830,28 @@ function FoodItems({ foods, query, tray, pending, onPick, onToggle, onLogTray, o
           </button>
         }
         name={<Highlighted name={food.row.food.name} query={query} />}
-        meta={food.meta}
-        aside={`${format(quantity.amount)} ${unitLabels[quantity.unit]} · ${format(nutrients.kcal)} kcal`}
-        onSelect={() => onPick(food.row)}
+        meta={phone ? [food.meta, `${format(nutrients.kcal)} kcal`].filter(Boolean).join(" · ") : food.meta}
+        aside={phone ? (
+          <button
+            type="button"
+            {...stylex.props(styles.amountButton)}
+            aria-label={`Change the amount of ${food.row.food.name}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              onPick(food.row);
+            }}
+          >
+            {format(quantity.amount)} {unitLabels[quantity.unit]} <ChevronRight size={14} />
+          </button>
+        ) : `${format(quantity.amount)} ${unitLabels[quantity.unit]} · ${format(nutrients.kcal)} kcal`}
+        onSelect={() => (phone ? onToggle(food.row) : onPick(food.row))}
       />
     );
   };
 
   return (
     <>
-      {tray.length > 0 && !query && (
+      {tray.length > 0 && !query && !phone && (
         <PaletteGroup heading="Selected">
           <PaletteItem
             value="log-tray"
@@ -748,8 +864,14 @@ function FoodItems({ foods, query, tray, pending, onPick, onToggle, onLogTray, o
           />
         </PaletteGroup>
       )}
-      {foods.recent.length > 0 && (
-        <PaletteGroup heading="Recent">{foods.recent.map(option)}</PaletteGroup>
+      {phone && tray.length > 0 && !query && (
+        // What is ticked, whether or not the list shows it, such as a food added by hand.
+        <PaletteGroup heading="Selected">
+          {tray.map((row) => option({ value: `selected:${row.key}`, row, meta: null }))}
+        </PaletteGroup>
+      )}
+      {recent.length > 0 && (
+        <PaletteGroup heading="Recent">{recent.map(option)}</PaletteGroup>
       )}
       {foods.meals.length > 0 && (
         <PaletteGroup heading="Saved meals">
@@ -859,7 +981,7 @@ function AmountStep({ row, tray, when, pending, onRemove, onKeep, onLog }: {
       )}
       <div {...stylex.props(styles.actions)}>
         <Button type="button" variant="outline" disabled={!usable} onClick={() => onKeep(current)}>
-          Add another <Kbd>Ctrl ↵</Kbd>
+          Add another <Kbd {...stylex.props(styles.desktopOnly)}>Ctrl ↵</Kbd>
         </Button>
         <Button type="submit" disabled={pending || !usable}>
           Log {foodsLabel(others.length + 1)} · {format(rowsKcal([...others, current]))} kcal
