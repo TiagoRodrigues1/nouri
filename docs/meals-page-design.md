@@ -6,7 +6,7 @@ A saved meal could only be made from foods already logged on a day, then edited 
 
 ## Usage (caller's view)
 
-- **Meals** in the sidebar opens `/meals`: one card per meal with its foods, energy and macros, and a **Log every day at** toggle and time. **New meal** opens the editor.
+- **Meals** in the sidebar opens `/meals`: one card per meal with its foods, energy and macros, and a daily toggle and time, labelled by its days (**Every day at**, **Weekdays at**, **Mon, Wed, Fri at**). The editor picks the weekdays. **New meal** opens the editor.
 - The editor (`/meals/new`, `/meals/<id>`) has the name, the foods with an amount each and a remove button, the meal's totals, an **Add food** panel with Recent, Search (including barcodes), and Manual tabs, the daily setting, **Save meal**, and **Delete meal**.
 - The Timeline's **Save as meal** opens `/meals/new?date=<day>` with that day's foods already in the editor.
 - **+ Log → Food → Meals** only logs: pick a meal, adjust amounts for this time, **Log meal**. **Manage meals** goes to the page.

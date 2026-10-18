@@ -146,6 +146,8 @@ export const styles = stylex.create({
     borderRadius: 8,
     borderWidth: 1, borderStyle: "solid", borderColor: colors.border,
   },
+  weekday: { width: 32 },
+  weekdayOn: { backgroundColor: colors.meals, color: "white", borderColor: colors.meals },
   hint: { margin: 0, color: colors.mutedForeground, fontSize: 12 },
   actions: { display: "flex", alignItems: "center", gap: 8 },
   spacer: { flexGrow: 1 },

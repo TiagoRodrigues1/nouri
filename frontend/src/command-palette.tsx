@@ -49,7 +49,7 @@ import { nutrientLine, unitLabels } from "./lib/food-text";
 import { portionFood } from "./lib/food-portion";
 import { rowsKcal } from "./lib/food-selection";
 import { nameMatches, parseShortcut, type PaletteShortcut } from "./lib/palette-shortcuts";
-import { draftRow, foodItems, rowFood, type FoodRow } from "./lib/saved-meals";
+import { dailyDays, draftRow, foodItems, rowFood, type FoodRow } from "./lib/saved-meals";
 import { typedAmount } from "./lib/typed-amount";
 import { currentTime, dateLabel, occurredAt, timeZone } from "./lib/time";
 import { useLogFoods, useRecentFoods } from "./lib/use-recent-foods";
@@ -887,7 +887,7 @@ function FoodItems({ foods, query, tray, phone, pending, onPick, onToggle, onLog
               disabled={pending}
               icon={<History size={14} />}
               name={meal.name}
-              meta={`${foodsLabel(meal.items.length)}${meal.daily ? ` · every day at ${meal.daily.time}` : ""}`}
+              meta={`${foodsLabel(meal.items.length)}${meal.daily ? ` · ${dailyDays(meal.daily.weekdays).phrase} at ${meal.daily.time}` : ""}`}
               aside={`${format(totalNutrients(meal.items.map(({ food }) => food.nutrients)).kcal)} kcal`}
               onSelect={() => onLogMeal(meal)}
             />

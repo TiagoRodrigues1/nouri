@@ -1,6 +1,7 @@
 import { createHarness } from "../harness.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { everyDay } from "../../src/meals/contract.js";
 import type { MealInput } from "../../src/meals/contract.js";
 import { localDate } from "../../src/time.js";
 
@@ -27,7 +28,7 @@ void test("a meal is built from Ciqual and typed foods without logging them firs
     const apple = search.items[0];
 
     // Ciqual foods are resolved on the server; a typed food keeps its own label; daily applies on create.
-    const created = await create("meal-1", { name: "Breakfast", items: [{ food: skyr }, { food: { kind: "catalog", ref: apple.ref, quantity: { amount: 150, unit: "g" } } }], daily: { time: "08:00", timeZone } });
+    const created = await create("meal-1", { name: "Breakfast", items: [{ food: skyr }, { food: { kind: "catalog", ref: apple.ref, quantity: { amount: 150, unit: "g" } } }], daily: { time: "08:00", timeZone, weekdays: everyDay } });
     assert.equal(created.status, 201);
     const meal = await created.json();
 
@@ -36,7 +37,7 @@ void test("a meal is built from Ciqual and typed foods without logging them firs
     assert.deepEqual(meal.items[1].food.quantity, { amount: 150, unit: "g" });
     assert.equal(meal.items[1].food.nutrients.kcal, Math.round(apple.nutrients.kcal * 1.5 * 1000) / 1000);
     assert.deepEqual(meal.items[1].food.catalogRef, apple.ref);
-    assert.deepEqual(meal.daily, { time: "08:00", timeZone });
+    assert.deepEqual(meal.daily, { time: "08:00", timeZone, weekdays: everyDay });
 
     // Nothing was logged by building it, apart from today's daily fill.
     const today = localDate(new Date().toISOString(), timeZone);

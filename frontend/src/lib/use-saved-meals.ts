@@ -4,6 +4,7 @@ import { createSavedMeal, deleteSavedMeal, getSavedMeals, logSavedMeal, undoMeal
 import { useIdempotentDelete, useIdempotentWrite } from "./use-idempotent";
 import { queryRefresh } from "./query-refresh";
 import type { MealDaily, MealInput, MealLogInput, MealLogRef } from "../../../src/meals/contract";
+import { dailyDays } from "./saved-meals";
 
 type PendingLog = { meal: SavedMeal; input: MealLogInput };
 
@@ -35,9 +36,9 @@ export function useSaveMeal(onSaved: () => void) {
 
 // The one-tap daily toggle: the meal sent back as it is, with only its daily setting changed.
 export function useMealDaily() {
-  const write = useMealWrite(({ input }) => (input.daily
-    ? `${input.name} will be logged every day at ${input.daily.time}.`
-    : `${input.name} will no longer be logged every day.`));
+  const write = useMealWrite(({ meal, input }) => (input.daily
+    ? `${input.name} will be logged ${dailyDays(input.daily.weekdays).phrase} at ${input.daily.time}.`
+    : `${input.name} will no longer be logged ${meal?.daily ? dailyDays(meal.daily.weekdays).phrase : "every day"}.`));
 
   return {
     isPending: write.isPending,

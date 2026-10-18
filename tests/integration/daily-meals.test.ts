@@ -18,7 +18,7 @@ type Meal = { id: string; revision: number; name: string; daily: unknown; items:
 let keys = 0;
 
 // Sets daily the way the page does: the meal sent back whole with only its daily setting changed.
-function setDaily(target: typeof app, meal: Meal, daily: { time: string; timeZone: string } | null, name = meal.name) {
+function setDaily(target: typeof app, meal: Meal, daily: { time: string; timeZone: string; weekdays?: number[] } | null, name = meal.name) {
   keys += 1;
 
   return target.request(`/v1/saved-meals/${meal.id}`, {
@@ -54,7 +54,8 @@ void test("a daily meal fills each day once with its foods, through today", asyn
     assert.equal(meal.daily, null);
 
     // Turning it on fills today at its time, once, however many reads race.
-    assert.deepEqual((await save(await setDaily(app, meal, { time: "08:00", timeZone }))).daily, { time: "08:00", timeZone });
+    // Weekdays left out mean every day, as before weekdays existed.
+    assert.deepEqual((await save(await setDaily(app, meal, { time: "08:00", timeZone }))).daily, { time: "08:00", timeZone, weekdays: [1, 2, 3, 4, 5, 6, 7] });
     await Promise.all([foods(today), foods(today), app.request(`/v1/review/${today}`, { headers })]);
     const filled = await foods(today);
     assert.equal(filled.length, 1);

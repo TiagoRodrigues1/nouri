@@ -8,6 +8,7 @@ import { Checkbox } from "../components/ui/checkbox";
 import { TimePicker } from "../components/ui/time-picker";
 import { format, type ListedMeal, type SavedMeal } from "../lib/api";
 import { unitLabels } from "../lib/food-text";
+import { dailyDays, everyDay } from "../lib/saved-meals";
 import { totalNutrients } from "../../../src/food/contract";
 import { currentTime, recentDayLabel, timeZone } from "../lib/time";
 import { useMealDaily, useSavedMeals } from "../lib/use-saved-meals";
@@ -15,7 +16,7 @@ import { Bone, Loading } from "../loading";
 import { queryFallback } from "../query-status";
 import { styles } from "./meals-styles";
 
-// The meals you eat often. Each can log itself every day; any can be logged from + Log, Food, Meals.
+// The meals you eat often. Each can log itself on chosen days; any can be logged from + Log, Food, Meals.
 export function MealsPage() {
   const query = useSavedMeals();
   const meals = query.data;
@@ -31,7 +32,7 @@ export function MealsPage() {
         )}
       </header>
       <p {...stylex.props(styles.intro)}>
-        Build the meals you eat often, then log them in one step from + Log, Food, Meals. A meal set to every day is already on each day's log.
+        Build the meals you eat often, then log them in one step from + Log, Food, Meals. A daily meal is already on the log of each day it's set for.
       </p>
       {!meals || query.isError ? (
         queryFallback(query, <MealsSkeleton />, styles.hint)
@@ -109,15 +110,17 @@ function MealCard({ meal }: { meal: ListedMeal }) {
   );
 }
 
-// Ticking it logs the meal on today and every later day at the time shown; a daily meal's new time saves when the
-// picker closes. Unticking keeps the days already filled.
+// Ticking it logs the meal on today and every later day at the time shown; the editor narrows it to some weekdays.
+// A daily meal's new time saves when the picker closes, keeping its weekdays. Unticking keeps the days already
+// filled.
 function DailyToggle({ meal }: { meal: SavedMeal }) {
   const daily = useMealDaily();
   const [time, setTime] = useState(meal.daily?.time ?? "08:00");
   const id = `daily-${meal.id}`;
+  const days = dailyDays(meal.daily?.weekdays ?? everyDay);
 
   function saveTime(next: string) {
-    if (meal.daily && next !== meal.daily.time) daily.set(meal, { time: next, timeZone });
+    if (meal.daily && next !== meal.daily.time) daily.set(meal, { ...meal.daily, time: next, timeZone });
   }
 
   return (
@@ -126,10 +129,10 @@ function DailyToggle({ meal }: { meal: SavedMeal }) {
         id={id}
         checked={meal.daily !== null}
         disabled={daily.isPending}
-        aria-label={`Log ${meal.name} every day`}
-        onCheckedChange={(checked) => daily.set(meal, checked === true ? { time, timeZone } : null)}
+        aria-label={`Log ${meal.name} ${days.phrase}`}
+        onCheckedChange={(checked) => daily.set(meal, checked === true ? { time, timeZone, weekdays: everyDay } : null)}
       />
-      <label htmlFor={id} {...stylex.props(styles.dailyLabel, meal.daily && styles.dailyOn)}>Every day at</label>
+      <label htmlFor={id} {...stylex.props(styles.dailyLabel, meal.daily && styles.dailyOn)}>{days.label} at</label>
       <TimePicker
         id={`${id}-time`}
         value={time}
