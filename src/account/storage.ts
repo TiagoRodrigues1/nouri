@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { mib } from "../request-limits.js";
 
-// db/migrations/0010-account-storage.sql enforces these when a row is added; they are here for tests and docs.
+// db/migrations/0011-account-storage.sql enforces these when a row is added; they are here for tests and docs.
 export const maxAccountRecordBytes = 128 * mib;
 
 export const maxTotalRecordBytes = 2048 * mib;

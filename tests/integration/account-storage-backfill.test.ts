@@ -10,10 +10,10 @@ void test("the ledger backfill counts rows from before accounts existed as unown
   await setup();
 
   try {
-    // Undo 0010, then add a row under an API_USER_ID no users row has, as 0002's NOT VALID keys allow.
+    // Undo 0011, then add a row under an API_USER_ID no users row has, as 0002's NOT VALID keys allow.
     await client`DROP FUNCTION track_account_storage() CASCADE`;
     await client`DROP TABLE account_storage, unowned_storage`;
-    await client`DELETE FROM schema_migrations WHERE name = 'migrations/0010-account-storage.sql'`;
+    await client`DELETE FROM schema_migrations WHERE name = 'migrations/0011-account-storage.sql'`;
     const legacyOwner = randomUUID();
 
     await client.begin(async (sql) => {

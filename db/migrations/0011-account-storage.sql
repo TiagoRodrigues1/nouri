@@ -58,7 +58,7 @@ BEGIN
   FOREACH tracked IN ARRAY ARRAY[
     'food_entries', 'community_foods', 'saved_meals', 'meal_logs', 'water_entries', 'body_measurements', 'workouts',
     'custom_exercises', 'workout_routines', 'sleep_sessions', 'daily_activity', 'daily_heart_rate', 'dashboard_layouts',
-    'user_targets', 'user_profiles', 'supplement_stacks', 'supplement_intakes'
+    'user_targets', 'user_profiles', 'supplement_stacks', 'supplement_intakes', 'assistant_connections'
   ] LOOP
     EXECUTE format('CREATE TRIGGER %I AFTER INSERT OR UPDATE OR DELETE ON %I FOR EACH ROW EXECUTE FUNCTION track_account_storage()', tracked || '_storage', tracked);
     -- Rows from before accounts existed may name an API_USER_ID no users row has (see 0002); they count as unowned.

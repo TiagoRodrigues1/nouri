@@ -25,8 +25,8 @@ async function stored(owner: string): Promise<number> {
 }
 
 // Tables owned by a person that the ledger deliberately leaves out: photos have their own quota, and receipts,
-// sign-in states, and wearable and assistant connections are short-lived or operational. The two ledger tables close the list.
-const untracked = ["progress_photos", "mutation_receipts", "wearable_oauth_states", "wearable_connections", "assistant_connections", "account_storage", "unowned_storage"];
+// sign-in states, and wearable connections are short-lived or operational. The two ledger tables close the list.
+const untracked = ["progress_photos", "mutation_receipts", "wearable_oauth_states", "wearable_connections", "account_storage", "unowned_storage"];
 
 void test("the storage ledger counts every write path and refuses new records past an allowance", async () => {
   await setup();
@@ -57,6 +57,9 @@ void test("the storage ledger counts every write path and refuses new records pa
     await client`UPDATE account_storage SET bytes = ${maxAccountRecordBytes} WHERE user_id = ${userId}`;
     await assert.rejects(client`UPDATE water_entries SET time_zone = 'America/Argentina/ComodRivadavia' WHERE id = ${entry.id}`, (failure: Error & { code?: string }) => failure.code === "53Q01");
     await client`UPDATE water_entries SET volume_ml = 300 WHERE id = ${entry.id}`;
+
+    // Assistant connections are kept, so a full account cannot add another one either.
+    await assert.rejects(client`INSERT INTO assistant_connections (user_id, client_id, name) VALUES (${userId}, 'new-client', 'Claude')`, (failure: Error & { code?: string }) => failure.code === "53Q01");
 
     // A refused write leaves no half-made receipt, so the same key works once there is room.
     const [pending] = await client`SELECT count(*) AS count FROM mutation_receipts WHERE outcome IS NULL`;
