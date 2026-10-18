@@ -89,8 +89,10 @@ export function requestLimits(consume: UsageWindows, policy: {
 
     // Eight handlers stay free for signed-in people however busy anonymous API traffic keeps the rest. The page and
     // its files take milliseconds and may use all 32, so a page loading its chunks at once is not refused.
-    // No one signed-in person may hold more than 8, so slow uploads from one account cannot fill the rest either.
-    const busy = activeRequests >= 32 || (shared && anonymousRequests >= 24) || (clerkUserId !== null && (callerRequests.get(clerkUserId) ?? 0) >= 8);
+    // Only a request with a body can be made slow by its sender, so one signed-in person holds at most 8 of those and
+    // their slow uploads cannot fill the rest. Reads are not counted: a grid loads every photo thumbnail at once.
+    const uploader = clerkUserId !== null && !["GET", "HEAD", "OPTIONS"].includes(context.req.method) ? clerkUserId : null;
+    const busy = activeRequests >= 32 || (shared && anonymousRequests >= 24) || (uploader !== null && (callerRequests.get(uploader) ?? 0) >= 8);
 
     // Each person's share is reserved with the pool, so an account past its share is refused without draining it.
     const pool = clerkUserId === null
@@ -106,7 +108,7 @@ export function requestLimits(consume: UsageWindows, policy: {
 
     if (shared) anonymousRequests++;
 
-    if (clerkUserId !== null) callerRequests.set(clerkUserId, (callerRequests.get(clerkUserId) ?? 0) + 1);
+    if (uploader !== null) callerRequests.set(uploader, (callerRequests.get(uploader) ?? 0) + 1);
 
     try {
       const rejected = await bodyLimit({ maxSize: policy.bodySize(context.req.method, context.req.path), onError: () => error(413, "Request body is too large") })(context, next);
@@ -119,11 +121,11 @@ export function requestLimits(consume: UsageWindows, policy: {
 
       if (shared) anonymousRequests--;
 
-      if (clerkUserId !== null) {
-        const remaining = (callerRequests.get(clerkUserId) ?? 1) - 1;
+      if (uploader !== null) {
+        const remaining = (callerRequests.get(uploader) ?? 1) - 1;
 
-        if (remaining > 0) callerRequests.set(clerkUserId, remaining);
-        else callerRequests.delete(clerkUserId);
+        if (remaining > 0) callerRequests.set(uploader, remaining);
+        else callerRequests.delete(uploader);
       }
     }
   };
