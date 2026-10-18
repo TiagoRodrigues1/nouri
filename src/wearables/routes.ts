@@ -3,6 +3,7 @@ import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import type { Context } from "hono";
 import { z } from "zod";
 import type { AppDatabase } from "../db/database.js";
+import { sameSecret } from "../crypto.js";
 import { error, errorSchema } from "../http-error.js";
 import { authorizationSchema, connectionStatusSchema, disconnectResultSchema, syncResultSchema, wearableProviderSchema } from "./contract.js";
 import type { WearableProvider } from "./contract.js";
@@ -73,11 +74,13 @@ export function integrationRoutes(db: AppDatabase, runtime: WearableRuntime | un
     const cookie = cookieFor(id);
     const query = (name: string) => context.req.query(name) || undefined;
     const state = query("state");
-    const owner = state ? await stateOwner(db, id, state) : null;
+    const browserState = getCookie(context, cookie.name);
+    // Only the browser that started the sign-in holds the cookie, so links from anyone else never reach the database.
+    const owner = state && sameSecret(browserState, state) ? await stateOwner(db, id, state) : null;
     const connected = owner ? connection(id, owner) : undefined;
 
     const result = connected
-      ? await connected.complete({ state, cookie: getCookie(context, cookie.name), code: query("code"), error: query("error") })
+      ? await connected.complete({ state, cookie: browserState, code: query("code"), error: query("error") })
       : providers.has(id) ? "expired-link" : "token-failed";
 
     deleteCookie(context, cookie.name, cookie.options);

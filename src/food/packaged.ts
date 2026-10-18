@@ -114,3 +114,33 @@ export function openFoodFacts(fetch: typeof globalThis.fetch): PackagedFoods {
     },
   };
 }
+
+const foundLifetimeMs = 24 * 60 * 60_000;
+
+const missingLifetimeMs = 6 * 60 * 60_000;
+
+// Open Food Facts answers each barcode once a day, or once in six hours when it has no product, however often it is
+// scanned. Failures are not kept, so the next scan asks again. Fetches past the app's allowance read as unavailable.
+export function rememberedLookups(foods: PackagedFoods, allowFetch: () => boolean, now = Date.now): PackagedFoods {
+  const remembered = new Map<string, { answer: PackagedLookup; expiresAt: number }>();
+
+  return {
+    async lookup(barcode) {
+      const kept = remembered.get(barcode);
+
+      if (kept && kept.expiresAt > now()) return kept.answer;
+      remembered.delete(barcode);
+
+      if (!allowFetch()) return { outcome: "unavailable" };
+      const answer = await foods.lookup(barcode);
+
+      if (answer.outcome === "unavailable") return answer;
+
+      // Bounds memory; the oldest barcode goes first, since a Map keeps insertion order.
+      if (remembered.size >= 5000) remembered.delete(remembered.keys().next().value ?? "");
+      remembered.set(barcode, { answer, expiresAt: now() + (answer.outcome === "found" ? foundLifetimeMs : missingLifetimeMs) });
+
+      return answer;
+    },
+  };
+}

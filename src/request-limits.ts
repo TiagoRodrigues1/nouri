@@ -58,12 +58,19 @@ export function limited(message: string, retryAfter: number): Response {
   return response;
 }
 
-// Feature routes supply admission and body policy; this middleware only owns process resources.
+export type CallerVariables = { Variables: { clerkUserId: string | undefined } };
+
+// Feature routes supply admission and body policy; this middleware only owns process resources. It identifies the
+// caller first, locally, so anonymous traffic draws from its own budgets and cannot lock out signed-in people.
 export function requestLimits(consume: UsageWindows, policy: {
-  admit: (method: string, path: string) => Response | null;
+  identify: (request: Request) => Promise<string | null>;
+  admit: (method: string, path: string, clerkUserId: string | null) => Response | null;
+  // Requests that reach the database or a provider, as opposed to the page and its files.
+  costly: (path: string) => boolean;
   bodySize: (method: string, path: string) => number;
-}): MiddlewareHandler {
+}): MiddlewareHandler<CallerVariables> {
   let activeRequests = 0;
+  let anonymousRequests = 0;
 
   const reserveTraffic = (amount: number) => consume.reserve([
     { key: "response-bytes-day", maximum: 4 * 1024 * mib, duration: day, amount },
@@ -73,13 +80,23 @@ export function requestLimits(consume: UsageWindows, policy: {
   return async (context, next) => {
     if (!reserveTraffic(0)) return limited("The app's download allowance has been reached. Try again later.", 86400);
 
-    if (!consume("requests", 3000, minute) || activeRequests >= 32) return limited("Too many requests. Try again shortly.", 60);
-
     if ((context.req.header("Authorization")?.length ?? 0) > 16_384) return error(431, "Authorization header is too large");
-    const refused = policy.admit(context.req.method, context.req.path);
+    const clerkUserId = await policy.identify(context.req.raw);
+    const anonymous = clerkUserId === null;
+    const shared = anonymous && policy.costly(context.req.path);
+
+    // Eight handlers stay free for signed-in people however busy anonymous API traffic keeps the rest. The page and
+    // its files take milliseconds and may use all 32, so a page loading its chunks at once is not refused.
+    const busy = activeRequests >= 32 || (shared && anonymousRequests >= 24);
+
+    if (!consume(anonymous ? "requests" : "account-requests", 3000, minute) || busy) return limited("Too many requests. Try again shortly.", 60);
+    const refused = policy.admit(context.req.method, context.req.path, clerkUserId);
 
     if (refused) return refused;
+    context.set("clerkUserId", clerkUserId ?? undefined);
     activeRequests++;
+
+    if (shared) anonymousRequests++;
 
     try {
       const rejected = await bodyLimit({ maxSize: policy.bodySize(context.req.method, context.req.path), onError: () => error(413, "Request body is too large") })(context, next);
@@ -89,6 +106,8 @@ export function requestLimits(consume: UsageWindows, policy: {
       if (context.res.body) context.res = new Response(budgetedBody(context.res.body, reserveTraffic), context.res);
     } finally {
       activeRequests--;
+
+      if (shared) anonymousRequests--;
     }
   };
 }

@@ -24,7 +24,8 @@ const db = drizzle(client);
 
 const app = createApp(db, identityFromEnv(process.env), openFoodFacts(fetch), wearables, settings.NOURI_PUBLIC_URL);
 
-const server = serve({ fetch: app.fetch, port: settings.PORT, hostname: settings.HOST });
+// A request that takes longer than two minutes to arrive, such as a stalled upload, gives its handler back.
+const server = serve({ fetch: app.fetch, port: settings.PORT, hostname: settings.HOST, serverOptions: { requestTimeout: 120_000 } });
 
 // Retry receipts and other short-lived rows expire by age. The Dockerfile runs one instance, so this process sweeps.
 const sweep = () => void sweepExpired(db, new Date()).catch((failure: Error) => console.error(`Retention sweep failed: ${failure.message}`));
