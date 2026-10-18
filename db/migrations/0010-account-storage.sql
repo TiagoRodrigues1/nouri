@@ -7,6 +7,8 @@ CREATE TABLE account_storage (
 
 -- A new row past 128 MiB for its person, or 2 GiB for the app, is refused with SQLSTATE 53Q01 (see
 -- src/account/storage.ts). Edits and deletions never are, so a full account can still change what it has.
+-- The account check is exact (its ledger row is locked); the app-wide sum cannot see other accounts' uncommitted
+-- rows, so concurrent writers may pass it by what they have in flight, rather than every insert waiting on one lock.
 CREATE FUNCTION track_account_storage() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
   stored bigint;

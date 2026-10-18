@@ -81,6 +81,7 @@ B leaks into every feature, and imports or new routes forget it. C lags an hour,
 ## Tradeoffs accepted
 
 - We accept that a revoked MCP token keeps working for up to 60 seconds. In exchange, a busy agent sends Clerk one check a minute instead of one per message.
+- We accept that the app-wide ceiling is approximate. Concurrent inserts by different accounts cannot see each other's uncommitted bytes, so the total can pass 2 GiB by what in-flight transactions add: a few MB at most, given 32 handlers and schema-bounded rows. In exchange, accounts never wait on each other. A shared lock would serialize every insert in the app, imports included. Each account's own ceiling is exact, because its ledger row is locked.
 - We accept limits fixed in SQL. Changing them takes a migration, but they cannot drift between processes or restarts.
 - We accept that soft deletes do not free ledger bytes, because the rows still exist. A full account stays full until records are hard-erased. That only happens when the account is erased.
 - We accept that a Google Health import that would pass the ceiling fails like any other sync failure.
