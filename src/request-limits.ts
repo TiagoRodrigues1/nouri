@@ -89,7 +89,12 @@ export function requestLimits(consume: UsageWindows, policy: {
     // its files take milliseconds and may use all 32, so a page loading its chunks at once is not refused.
     const busy = activeRequests >= 32 || (shared && anonymousRequests >= 24);
 
-    if (!consume(anonymous ? "requests" : "account-requests", 3000, minute) || busy) return limited("Too many requests. Try again shortly.", 60);
+    // Each person's share is reserved with the pool, so an account past its share is refused without draining it.
+    const pool = clerkUserId === null
+      ? [{ key: "requests", maximum: 3000, duration: minute }]
+      : [{ key: `pool-share:${clerkUserId}`, maximum: 180, duration: minute }, { key: "account-requests", maximum: 3000, duration: minute }];
+
+    if (busy || !consume.reserve(pool)) return limited("Too many requests. Try again shortly.", 60);
     const refused = policy.admit(context.req.method, context.req.path, clerkUserId);
 
     if (refused) return refused;

@@ -333,3 +333,14 @@ void test("barcode answers are remembered, failures are not, and fetches have an
   await foods.lookup("12345670");
   assert.equal(fetches, 3);
 });
+
+void test("one account past its share cannot drain the signed-in pool for everyone else", async () => {
+  const app = new Hono<CallerVariables>();
+  const limits = requestLimits({ identify: async (request) => request.headers.get("Authorization")?.slice(7) ?? null });
+  app.use(limits.beforeRequest);
+  app.get("/v1/me", (context) => context.text("ok"));
+
+  for (let index = 0; index < 3000; index++) await app.request("/v1/me", { headers: { Authorization: "Bearer greedy" } });
+  assert.equal((await app.request("/v1/me", { headers: { Authorization: "Bearer greedy" } })).status, 429);
+  assert.equal((await app.request("/v1/me", { headers: { Authorization: "Bearer someone-else" } })).status, 200);
+});
