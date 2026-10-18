@@ -258,6 +258,23 @@ void test("forged sessions and anonymous floods cannot lock out a signed-in pers
   finish();
   assert.ok((await Promise.all(pending)).every((response) => response.status === 200));
 
+  // One signed-in person holds at most 8 handlers, so their slow requests leave room for everyone else.
+  let release: () => void = () => undefined;
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  const pair = { identify: async (request: Request) => request.headers.get("Authorization")?.slice(7) ?? null };
+  const shared = new Hono<CallerVariables>();
+  shared.use(requestLimits(pair).beforeRequest);
+  shared.get("/v1/slow", async (context) => { await held;
+
+ return context.text("ok"); });
+  shared.get("/v1/me", (context) => context.text("ok"));
+  const hogging = Array.from({ length: 8 }, () => Promise.resolve(shared.request("/v1/slow", { headers: { Authorization: "Bearer hog" } })));
+  assert.equal((await shared.request("/v1/me", { headers: { Authorization: "Bearer hog" } })).status, 429);
+  assert.equal((await shared.request("/v1/me", { headers: { Authorization: "Bearer other" } })).status, 200);
+  release();
+  await Promise.all(hogging);
+  assert.equal((await shared.request("/v1/me", { headers: { Authorization: "Bearer hog" } })).status, 200);
+
   // The anonymous request budget runs out on its own.
   const flooded = requestLimits(signedIn);
   const quiet = new Hono<CallerVariables>();

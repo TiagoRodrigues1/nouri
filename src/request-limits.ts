@@ -71,6 +71,8 @@ export function requestLimits(consume: UsageWindows, policy: {
 }): MiddlewareHandler<CallerVariables> {
   let activeRequests = 0;
   let anonymousRequests = 0;
+  // In-flight handlers per signed-in person; absent means none.
+  const callerRequests = new Map<string, number>();
 
   const reserveTraffic = (amount: number) => consume.reserve([
     { key: "response-bytes-day", maximum: 4 * 1024 * mib, duration: day, amount },
@@ -87,7 +89,8 @@ export function requestLimits(consume: UsageWindows, policy: {
 
     // Eight handlers stay free for signed-in people however busy anonymous API traffic keeps the rest. The page and
     // its files take milliseconds and may use all 32, so a page loading its chunks at once is not refused.
-    const busy = activeRequests >= 32 || (shared && anonymousRequests >= 24);
+    // No one signed-in person may hold more than 8, so slow uploads from one account cannot fill the rest either.
+    const busy = activeRequests >= 32 || (shared && anonymousRequests >= 24) || (clerkUserId !== null && (callerRequests.get(clerkUserId) ?? 0) >= 8);
 
     // Each person's share is reserved with the pool, so an account past its share is refused without draining it.
     const pool = clerkUserId === null
@@ -103,6 +106,8 @@ export function requestLimits(consume: UsageWindows, policy: {
 
     if (shared) anonymousRequests++;
 
+    if (clerkUserId !== null) callerRequests.set(clerkUserId, (callerRequests.get(clerkUserId) ?? 0) + 1);
+
     try {
       const rejected = await bodyLimit({ maxSize: policy.bodySize(context.req.method, context.req.path), onError: () => error(413, "Request body is too large") })(context, next);
 
@@ -113,6 +118,13 @@ export function requestLimits(consume: UsageWindows, policy: {
       activeRequests--;
 
       if (shared) anonymousRequests--;
+
+      if (clerkUserId !== null) {
+        const remaining = (callerRequests.get(clerkUserId) ?? 1) - 1;
+
+        if (remaining > 0) callerRequests.set(clerkUserId, remaining);
+        else callerRequests.delete(clerkUserId);
+      }
     }
   };
 }

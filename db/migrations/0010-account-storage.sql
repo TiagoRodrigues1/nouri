@@ -5,6 +5,14 @@ CREATE TABLE account_storage (
   bytes bigint NOT NULL DEFAULT 0
 );
 
+-- Rows nobody owns any more, such as community foods whose author erased their account, still count app-wide.
+CREATE TABLE unowned_storage (
+  only_row boolean PRIMARY KEY DEFAULT true CHECK (only_row),
+  bytes bigint NOT NULL DEFAULT 0
+);
+
+INSERT INTO unowned_storage DEFAULT VALUES;
+
 -- A new row past 128 MiB for its person, or 2 GiB for the app, is refused with SQLSTATE 53Q01 (see
 -- src/account/storage.ts). Edits and deletions never are, so a full account can still change what it has.
 -- The account check is exact (its ledger row is locked); the app-wide sum cannot see other accounts' uncommitted
@@ -16,6 +24,8 @@ BEGIN
   -- Only an update; a deleted person's ledger row is gone already or going with them.
   IF TG_OP <> 'INSERT' AND OLD.user_id IS NOT NULL THEN
     UPDATE account_storage SET bytes = bytes - pg_column_size(OLD) WHERE user_id = OLD.user_id;
+  ELSIF TG_OP <> 'INSERT' THEN
+    UPDATE unowned_storage SET bytes = bytes - pg_column_size(OLD);
   END IF;
 
   IF TG_OP <> 'DELETE' AND NEW.user_id IS NOT NULL THEN
@@ -23,9 +33,11 @@ BEGIN
     ON CONFLICT (user_id) DO UPDATE SET bytes = account_storage.bytes + EXCLUDED.bytes
     RETURNING bytes INTO stored;
 
-    IF TG_OP = 'INSERT' AND (stored > 134217728 OR (SELECT sum(bytes) FROM account_storage) > 2147483648) THEN
+    IF TG_OP = 'INSERT' AND (stored > 134217728 OR (SELECT sum(bytes) FROM account_storage) + (SELECT bytes FROM unowned_storage) > 2147483648) THEN
       RAISE EXCEPTION 'Storage allowance reached' USING ERRCODE = '53Q01';
     END IF;
+  ELSIF TG_OP <> 'DELETE' THEN
+    UPDATE unowned_storage SET bytes = bytes + pg_column_size(NEW);
   END IF;
 
   RETURN NULL;
@@ -43,5 +55,6 @@ BEGIN
     EXECUTE format('CREATE TRIGGER %I AFTER INSERT OR UPDATE OR DELETE ON %I FOR EACH ROW EXECUTE FUNCTION track_account_storage()', tracked || '_storage', tracked);
     EXECUTE format('INSERT INTO account_storage (user_id, bytes) SELECT user_id, sum(pg_column_size(t)) FROM %I t WHERE user_id IS NOT NULL GROUP BY user_id
       ON CONFLICT (user_id) DO UPDATE SET bytes = account_storage.bytes + EXCLUDED.bytes', tracked);
+    EXECUTE format('UPDATE unowned_storage SET bytes = bytes + (SELECT coalesce(sum(pg_column_size(t)), 0) FROM %I t WHERE user_id IS NULL)', tracked);
   END LOOP;
 END $$;

@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { createHarness } from "../harness.js";
 import { maxAccountRecordBytes, maxTotalRecordBytes } from "../../src/account/storage.js";
-import type { FoodSubmission } from "../../src/food/contract.js";
+import type { CommunityFoodInput, FoodSubmission } from "../../src/food/contract.js";
 import type { MealInput } from "../../src/meals/contract.js";
 import { localDate, shiftDate } from "../../src/time.js";
 import type { WaterInput } from "../../src/water/contract.js";
@@ -14,7 +14,7 @@ const timeZone = "Europe/Lisbon";
 
 const glass = { occurredAt: "2026-10-18T08:00:00Z", timeZone, volumeMl: 250 };
 
-function post(target: typeof app, path: string, body: WaterInput | FoodSubmission | MealInput, key = randomUUID()) {
+function post(target: typeof app, path: string, body: WaterInput | FoodSubmission | MealInput | CommunityFoodInput, key = randomUUID()) {
   return target.request(path, { method: "POST", headers: { ...headers, "Idempotency-Key": key }, body: JSON.stringify(body) });
 }
 
@@ -26,7 +26,7 @@ async function stored(owner: string): Promise<number> {
 
 // Tables owned by a person that the ledger deliberately leaves out: photos have their own quota, and receipts,
 // sign-in states, and connections are short-lived or operational. The ledger itself is the last.
-const untracked = ["progress_photos", "mutation_receipts", "wearable_oauth_states", "wearable_connections", "account_storage"];
+const untracked = ["progress_photos", "mutation_receipts", "wearable_oauth_states", "wearable_connections", "account_storage", "unowned_storage"];
 
 void test("the storage ledger counts every write path and refuses new records past an allowance", async () => {
   await setup();
@@ -87,7 +87,14 @@ void test("the storage ledger counts every write path and refuses new records pa
     const before = await stored(userId);
     await client`DELETE FROM water_entries WHERE user_id = ${userId}`;
     assert.ok(await stored(userId) < before);
+    // The author's community food outlives their account, so its bytes move to the app's unowned total.
+    const shared = await post(app, "/v1/foods", { name: "Bolo de arroz", brand: "Pastelaria Aurora", barcode: "5601234567892", unit: "g", nutrientsPer100: { kcal: 410, proteinG: 6, carbsG: 55, fatG: 18 }, serving: { amount: 80 } });
+    assert.equal(shared.status, 201);
     await client`DELETE FROM users WHERE id = ${userId}`;
+    const [orphan] = await client`SELECT pg_column_size(c) AS bytes FROM community_foods c WHERE barcode = '5601234567892'`;
+    const [unowned] = await client`SELECT bytes FROM unowned_storage`;
+    assert.ok(Number(orphan?.bytes) > 0);
+    assert.equal(Number(unowned?.bytes), Number(orphan?.bytes));
     const [ledger] = await client`SELECT count(*) AS count FROM account_storage WHERE user_id = ${userId}`;
     assert.equal(Number(ledger?.count), 0);
   } finally {
