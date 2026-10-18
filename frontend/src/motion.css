@@ -67,6 +67,11 @@
   transition: opacity 180ms var(--ease-ui-out), transform 180ms var(--ease-ui-out);
 }
 
+/* A control that has just changed state, like a supplement's tick becoming its taken button, settles into place. */
+[data-state-enter] {
+  transition: opacity 150ms var(--ease-ui-out), transform 150ms var(--ease-ui-out);
+}
+
 [data-exiting="true"] {
   opacity: 0;
   transform: translateY(6px);
@@ -84,6 +89,11 @@
   [data-connection-change] {
     opacity: 0;
     transform: translateY(6px);
+  }
+
+  [data-state-enter] {
+    opacity: 0;
+    transform: scale(0.97);
   }
 }
 
@@ -156,7 +166,8 @@
     transition: opacity 100ms var(--ease-ui-out);
   }
 
-  [data-connection-change] {
+  [data-connection-change],
+  [data-state-enter] {
     transition: opacity 100ms var(--ease-ui-out);
   }
 
@@ -167,7 +178,8 @@
   @starting-style {
     [data-form-enter],
     [data-exercise-list],
-    [data-connection-change] {
+    [data-connection-change],
+    [data-state-enter] {
       transform: none;
     }
   }
