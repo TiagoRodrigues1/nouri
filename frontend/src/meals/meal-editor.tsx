@@ -11,13 +11,13 @@ import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { TimePicker } from "../components/ui/time-picker";
 import { ToggleGroup, ToggleGroupItem } from "../components/ui/toggle-group";
-import { format, type SavedMeal } from "../lib/api";
+import { format, type ListedMeal } from "../lib/api";
 import { dayQueryOptions } from "../lib/day-query";
 import { nutrientLine, unitLabels } from "../lib/food-text";
 import { rowSelection } from "../lib/food-selection";
 import { draftItems, entryRows, everyDay, maxMealItems, rowFood, savedRows, weekdayNames, type DraftRow } from "../lib/saved-meals";
 import { totalNutrients } from "../../../src/food/contract";
-import { currentTime, dateLabel, timeZone } from "../lib/time";
+import { currentTime, dateLabel, localDate, timeZone } from "../lib/time";
 import { useDeleteMeal, useSaveMeal, useSavedMeals } from "../lib/use-saved-meals";
 import { useExitingRows } from "../lib/use-exiting-rows";
 import { Bone, Loading } from "../loading";
@@ -71,7 +71,7 @@ function BackLink() {
   );
 }
 
-function MealEditor({ meal, initialRows, from }: { meal: SavedMeal | null; initialRows: DraftRow[]; from?: string }) {
+function MealEditor({ meal, initialRows, from }: { meal: ListedMeal | null; initialRows: DraftRow[]; from?: string }) {
   const navigate = useNavigate();
   const toList = () => void navigate({ to: "/meals" });
   const save = useSaveMeal(toList);
@@ -82,6 +82,10 @@ function MealEditor({ meal, initialRows, from }: { meal: SavedMeal | null; initi
   const [daily, setDaily] = useState(Boolean(meal?.daily));
   const [dailyTime, setDailyTime] = useState(meal?.daily?.time ?? "08:00");
   const [weekdays, setWeekdays] = useState(meal?.daily?.weekdays ?? everyDay);
+  // Only turning a meal on can skip today. It starts tomorrow by default when its foods are already on today's log:
+  // the meal was logged today, or it is being made from today's foods.
+  const turningOn = daily && !meal?.daily;
+  const [startTomorrow, setStartTomorrow] = useState(() => [meal?.lastLogged, from].includes(localDate(new Date())));
   const totals = totalNutrients(rows.map((row) => rowFood(row).nutrients));
   const tooMany = rows.length > maxMealItems;
 
@@ -108,7 +112,7 @@ function MealEditor({ meal, initialRows, from }: { meal: SavedMeal | null; initi
     const items = draftItems(rows);
 
     if (!items || items.length === 0 || tooMany) return;
-    save.mutate({ meal, input: { name: name.trim(), items, daily: daily ? { time: dailyTime, timeZone, weekdays } : null } });
+    save.mutate({ meal, input: { name: name.trim(), items, daily: daily ? { time: dailyTime, timeZone, weekdays, from: turningOn && startTomorrow ? "tomorrow" : "today" } : null } });
   }
 
   return (
@@ -167,7 +171,13 @@ function MealEditor({ meal, initialRows, from }: { meal: SavedMeal | null; initi
                   </ToggleGroupItem>
                 ))}
               </ToggleGroup>
-              <p {...stylex.props(styles.hint)}>Its foods are already on the log of each chosen day from today. Delete them on a day you skip it.</p>
+              {turningOn && (
+                <div {...stylex.props(styles.daily)}>
+                  <Checkbox id="meal-daily-tomorrow" checked={startTomorrow} onCheckedChange={(checked) => setStartTomorrow(checked === true)} />
+                  <label htmlFor="meal-daily-tomorrow" {...stylex.props(styles.dailyLabel)}>Start tomorrow</label>
+                </div>
+              )}
+              <p {...stylex.props(styles.hint)}>Its foods are already on the log of each chosen day from {turningOn && startTomorrow ? "tomorrow" : "today"}. Delete them on a day you skip it.</p>
             </div>
             <div {...stylex.props(styles.actions)}>
               {meal && (

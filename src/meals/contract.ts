@@ -18,6 +18,10 @@ export const mealDailySchema = z.object({
     .default(() => [...everyDay]),
 }).strict();
 
+// The setting as a write sends it. "tomorrow" leaves today empty when turning a meal on, for when today's meal is
+// already logged. It is a one-time choice, not part of the setting, so a meal already on ignores it.
+export const mealDailyInputSchema = mealDailySchema.extend({ from: z.enum(["today", "tomorrow"]).optional() }).strict();
+
 export const savedMealSchema = z.object({
   id: z.uuid(),
   revision: z.number().int().positive(),
@@ -55,7 +59,7 @@ export const mealInputSchema = z.object({
   items: z.array(mealItemInputSchema).min(1).max(maxMealItems)
     .refine((items) => unique(items.flatMap((item) => ("id" in item ? [item.id] : []))), "Items must be unique"),
   // Required, since an edit replaces the meal: leaving it out must not turn a daily meal off.
-  daily: mealDailySchema.nullable(),
+  daily: mealDailyInputSchema.nullable(),
 }).strict();
 
 // The items to log and their amounts this time; a saved item left out is not logged.
@@ -85,6 +89,8 @@ export type MealLogInput = z.infer<typeof mealLogInputSchema>;
 export type MealItemInput = z.infer<typeof mealItemInputSchema>;
 
 export type MealDaily = z.infer<typeof mealDailySchema>;
+
+export type MealDailyInput = z.infer<typeof mealDailyInputSchema>;
 
 // A saved item as stored. The basis is the food as recorded when the meal was saved, so every amount scales
 // from it and edits never compound rounding. It stays on the server; meals saved before editing lack it.

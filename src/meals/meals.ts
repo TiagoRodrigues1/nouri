@@ -9,7 +9,7 @@ import { scaledFood } from "../food/contract.js";
 import type { FoodItemInput } from "../food/contract.js";
 import { instantAt, isoWeekday, localDate, shiftDate } from "../time.js";
 import { everyDay, mealLogSchema, savedMealSchema } from "./contract.js";
-import type { MealDaily, MealInput, MealItemInput, MealLog, MealLogInput, MealLogRef, SavedMeal, SavedMealList, StoredMealItem } from "./contract.js";
+import type { MealDailyInput, MealInput, MealItemInput, MealLog, MealLogInput, MealLogRef, SavedMeal, SavedMealList, StoredMealItem } from "./contract.js";
 import { storageFull } from "../account/storage.js";
 
 export type MealCommand =
@@ -48,13 +48,14 @@ function hash<Request extends { kind: MealCommand["kind"] | "log" | "undo" }>(re
   return requestHash({ ...request, kind: `saved-meal-${request.kind}` });
 }
 
-// A daily meal saved for every day is fingerprinted without its weekdays, as it was before they existed, so a
-// write retried across that change still replays.
+// A daily meal saved for every day is fingerprinted without its weekdays, as it was before they existed, and one
+// starting today without its start, as before it could start tomorrow, so a write retried across either change
+// still replays.
 function fingerprintInput(input: MealInput) {
-  if (!input.daily || input.daily.weekdays.length < everyDay.length) return input;
-  const { time, timeZone } = input.daily;
+  if (!input.daily) return input;
+  const { time, timeZone, weekdays, from } = input.daily;
 
-  return { ...input, daily: { time, timeZone } };
+  return { ...input, daily: { time, timeZone, ...(weekdays.length < everyDay.length && { weekdays }), ...(from === "tomorrow" && { from }) } };
 }
 
 // The item at another amount, scaled from its basis so a chain of edits matches a single one.
@@ -66,19 +67,19 @@ function portion(item: StoredMealItem, amount: number): StoredMealItem | null {
 }
 
 // The daily columns a write sets, given the meal as stored (none for a new meal). Only turning a meal on moves the
-// cursor: to yesterday, so today fills next, and never back, so turning it off and on again the same day fills
-// nothing twice. A meal already on keeps its cursor, so an edit never skips days not yet filled, and turning it
-// off keeps the days already filled. New weekdays apply from the next unfilled day.
-function dailyColumns(daily: MealDaily | null, stored: Pick<MealRow, "dailyTime" | "dailyFilledThrough"> | null) {
+// cursor: to yesterday, so today fills next, or to today when it starts tomorrow, and never back, so turning it off
+// and on again the same day fills nothing twice. A meal already on keeps its cursor, so an edit never skips days not
+// yet filled, and turning it off keeps the days already filled. New weekdays apply from the next unfilled day.
+function dailyColumns(daily: MealDailyInput | null, stored: Pick<MealRow, "dailyTime" | "dailyFilledThrough"> | null) {
   if (!daily) return { dailyTime: null, dailyTimeZone: null, dailyWeekdays: null };
   const setting = { dailyTime: daily.time, dailyTimeZone: daily.timeZone, dailyWeekdays: daily.weekdays.toSorted((a, b) => a - b) };
 
   // A meal already on always has a cursor (saved_meals_daily_check).
   if (stored?.dailyTime) return setting;
   const cursor = stored?.dailyFilledThrough ?? null;
-  const yesterday = shiftDate(today(daily.timeZone), -1);
+  const decided = shiftDate(today(daily.timeZone), daily.from === "tomorrow" ? 0 : -1);
 
-  return { ...setting, dailyFilledThrough: cursor && cursor > yesterday ? cursor : yesterday };
+  return { ...setting, dailyFilledThrough: cursor && cursor > decided ? cursor : decided };
 }
 
 // Why an item cannot be saved: its logged entry is gone, the catalog lacks it, or the meal lacks it or its amount
