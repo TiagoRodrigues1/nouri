@@ -301,5 +301,7 @@ export const assistantConnections = pgTable("assistant_connections", {
   name: text("name"),
   connectedAt: timestamp("connected_at", { withTimezone: true }).notNull().defaultNow(),
   lastUsedAt: timestamp("last_used_at", { withTimezone: true }).notNull().defaultNow(),
+  // False while the client's access tokens are JWTs, which Clerk cannot revoke, so the page cannot disconnect it.
+  revocable: boolean("revocable").notNull().default(true),
   disconnectedAt: timestamp("disconnected_at", { withTimezone: true }),
 }, (table) => [primaryKey({ columns: [table.userId, table.clientId] })]);

@@ -21,6 +21,8 @@ export function createHarness(wearables?: WearableRuntime) {
   const otherUserId = "22222222-2222-4222-8222-222222222222";
   const token = "test-session-token";
   const agentToken = "test-oauth-token";
+  // A JWT-format access token, which Clerk cannot revoke, issued to a second client.
+  const jwtAgentToken = "test.jwt.token";
   const webhookSignature = "test-webhook-signature";
   const db = drizzle(client);
 
@@ -30,7 +32,13 @@ export function createHarness(wearables?: WearableRuntime) {
   // Stands in for Clerk: the test tokens sign in as whichever Clerk user the app was built for, through one OAuth client.
   const identity = (clerkUserId: string) => ({
     authenticate: async (request: Request) => request.headers.get("Authorization") === `Bearer ${token}` ? clerkUserId : null,
-    authenticateAgent: async (request: Request) => request.headers.get("Authorization") === `Bearer ${agentToken}` && !revokedAgentTokens.has(agentToken) ? { clerkUserId, clientId: "client_claude" } : null,
+    authenticateAgent: async (request: Request) => {
+      const header = request.headers.get("Authorization");
+
+      if (header === `Bearer ${jwtAgentToken}`) return { clerkUserId, clientId: "client_chatgpt", revocable: false };
+
+      return header === `Bearer ${agentToken}` && !revokedAgentTokens.has(agentToken) ? { clerkUserId, clientId: "client_claude", revocable: true } : null;
+    },
     agentName: async (clientId: string) => clientId === "client_claude" ? "Claude" : null,
     revokeAgent: async (_clientId: string, revoked: string) => {
       revokedAgentTokens.add(revoked);
@@ -52,7 +60,7 @@ export function createHarness(wearables?: WearableRuntime) {
   const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
 
   return {
-    app, otherApp, client, db, token, agentToken, revokedAgentTokens, webhookSignature, userId, otherUserId, headers, products,
+    app, otherApp, client, db, token, agentToken, jwtAgentToken, revokedAgentTokens, webhookSignature, userId, otherUserId, headers, products,
     signedInAs: (clerkUserId: string) => createApp(db, identity(clerkUserId), packagedFoods, wearables),
     setup: async () => {
       await admin.unsafe(`CREATE SCHEMA "${schema}"`);

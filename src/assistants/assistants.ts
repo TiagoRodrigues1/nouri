@@ -1,15 +1,15 @@
-import { and, desc, eq, isNotNull, isNull } from "drizzle-orm";
+import { and, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import type { AppDatabase } from "../db/database.js";
 import { assistantConnections } from "../db/schema.js";
-import type { Agents } from "../identity/identity.js";
+import type { Agent, Agents } from "../identity/identity.js";
 import type { AssistantList } from "./contract.js";
 
 const connection = (userId: string, clientId: string) => and(eq(assistantConnections.userId, userId), eq(assistantConnections.clientId, clientId));
 
 // Notes an assistant's call, and whether to answer it. Clerk cannot list a person's grants, so a disconnect waits
 // for the client's next call: its token ends the grant at Clerk, and the row goes, so letting it in again starts
-// afresh. Until Clerk confirms, every call is refused.
-export async function admitAssistant(db: AppDatabase, agents: Pick<Agents, "agentName" | "revokeAgent">, userId: string, clientId: string, token: string): Promise<boolean> {
+// afresh. Until Clerk confirms, every call is refused. Only a client with revocable tokens can be disconnected.
+export async function admitAssistant(db: AppDatabase, agents: Pick<Agents, "agentName" | "revokeAgent">, userId: string, { clientId, revocable }: Pick<Agent, "clientId" | "revocable">, token: string): Promise<boolean> {
   const [row] = await db.select({ disconnectedAt: assistantConnections.disconnectedAt }).from(assistantConnections).where(connection(userId, clientId));
 
   if (row?.disconnectedAt) {
@@ -21,9 +21,9 @@ export async function admitAssistant(db: AppDatabase, agents: Pick<Agents, "agen
   }
 
   if (row) {
-    await db.update(assistantConnections).set({ lastUsedAt: new Date() }).where(and(connection(userId, clientId), isNull(assistantConnections.disconnectedAt)));
+    await db.update(assistantConnections).set({ lastUsedAt: new Date(), revocable }).where(and(connection(userId, clientId), isNull(assistantConnections.disconnectedAt)));
   } else {
-    await db.insert(assistantConnections).values({ userId, clientId, name: await agents.agentName(clientId) }).onConflictDoNothing();
+    await db.insert(assistantConnections).values({ userId, clientId, revocable, name: await agents.agentName(clientId) }).onConflictDoNothing();
   }
 
   return true;
@@ -36,15 +36,18 @@ export async function listAssistants(db: AppDatabase, userId: string): Promise<A
     .orderBy(desc(assistantConnections.lastUsedAt), assistantConnections.clientId);
 
   return {
-    assistants: rows.map((row) => ({ clientId: row.clientId, name: row.name, connectedAt: row.connectedAt.toISOString(), lastUsedAt: row.lastUsedAt.toISOString() })),
+    assistants: rows.map((row) => ({ clientId: row.clientId, name: row.name, connectedAt: row.connectedAt.toISOString(), lastUsedAt: row.lastUsedAt.toISOString(), revocable: row.revocable })),
   };
 }
 
-// Refuses the assistant from now on. False when it is not let in, so repeating it is safe.
-export async function disconnectAssistant(db: AppDatabase, userId: string, clientId: string): Promise<boolean> {
-  const rows = await db.update(assistantConnections).set({ disconnectedAt: new Date() })
+// Refuses the assistant from now on. "missing" when it is not let in, so repeating it is safe. A client with JWT
+// access tokens is never disconnected: its grant could not be ended, so it would be locked out for good.
+export async function disconnectAssistant(db: AppDatabase, userId: string, clientId: string): Promise<"disconnected" | "missing" | "not-revocable"> {
+  const [row] = await db.update(assistantConnections).set({ disconnectedAt: sql`CASE WHEN ${assistantConnections.revocable} THEN now() END` })
     .where(and(connection(userId, clientId), isNull(assistantConnections.disconnectedAt)))
-    .returning({ clientId: assistantConnections.clientId });
+    .returning({ revocable: assistantConnections.revocable });
 
-  return rows.length > 0;
+  if (!row) return "missing";
+
+  return row.revocable ? "disconnected" : "not-revocable";
 }

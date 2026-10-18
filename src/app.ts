@@ -463,11 +463,15 @@ export function createApp(db: AppDatabase, identity: Identity, packagedFoods: Pa
   app.delete("/v1/assistants/:clientId", async (context) => {
     const clientId = z.string().min(1).max(200).safeParse(context.req.param("clientId"));
 
-    if (!clientId.success || !await disconnectAssistant(db, context.get("userId"), clientId.data)) return error(404, "Assistant not found");
+    const result = clientId.success ? await disconnectAssistant(db, context.get("userId"), clientId.data) : "missing";
+
+    if (result === "missing") return error(404, "Assistant not found");
+
+    if (result === "not-revocable") return error(409, "Clerk issues this assistant JWT access tokens, which cannot be revoked. Turn off Generate access tokens as JWTs under OAuth applications in Clerk, then use it once more before disconnecting it.");
 
     return context.body(null, 204);
   });
-  app.openAPIRegistry.registerPath({ method: "delete", path: "/v1/assistants/{clientId}", request: { params: z.object({ clientId: z.string() }) }, responses: { 204: { description: "Disconnected. Its next call ends its grant at Clerk and is refused, so it must ask again." }, 404: failure("Assistant not found or already disconnected") } });
+  app.openAPIRegistry.registerPath({ method: "delete", path: "/v1/assistants/{clientId}", request: { params: z.object({ clientId: z.string() }) }, responses: { 204: { description: "Disconnected. Its next call ends its grant at Clerk and is refused, so it must ask again." }, 404: failure("Assistant not found or already disconnected"), 409: failure("Its access tokens are JWTs, which Clerk cannot revoke") } });
 
   app.get("/v1/dashboard", async (context) => context.json(await getDashboard(db, context.get("userId"))));
   app.openAPIRegistry.registerPath({ method: "get", path: "/v1/dashboard", responses: { 200: { description: "Cards shown on the My Day page, in display order; defaults until the user saves a layout", ...json(dashboardSchema) } } });

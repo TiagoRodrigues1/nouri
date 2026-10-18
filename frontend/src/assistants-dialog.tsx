@@ -55,10 +55,17 @@ export function AssistantsDialog({ open, onOpenChange }: AssistantsDialogProps) 
             <section key={assistant.clientId} {...stylex.props(styles.assistant)} aria-label={nameOf(assistant)}>
               <div {...stylex.props(styles.header)}>
                 <h3 {...stylex.props(styles.name)}><Bot size={16} /> {nameOf(assistant)}</h3>
-                <Button size="sm" variant="ghost" disabled={disconnect.isPending} onClick={() => setConfirming(assistant)}>
-                  <Unplug size={15} /> Disconnect
-                </Button>
+                {assistant.revocable && (
+                  <Button size="sm" variant="ghost" disabled={disconnect.isPending} onClick={() => setConfirming(assistant)}>
+                    <Unplug size={15} /> Disconnect
+                  </Button>
+                )}
               </div>
+              {!assistant.revocable && (
+                <p {...stylex.props(overviewStyles.note)}>
+                  Clerk gives it access tokens that cannot be revoked. To disconnect it here, turn off Generate access tokens as JWTs under OAuth applications in Clerk, then use it once more.
+                </p>
+              )}
               <div {...stylex.props(overviewStyles.rows)}>
                 <Stat label="Connected" value={when.format(new Date(assistant.connectedAt))} />
                 <Stat label="Last used" value={when.format(new Date(assistant.lastUsedAt))} />

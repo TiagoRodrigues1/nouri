@@ -7,6 +7,8 @@ export const assistantSchema = z.object({
   name: z.string().nullable(),
   connectedAt: z.iso.datetime({ offset: true }),
   lastUsedAt: z.iso.datetime({ offset: true }),
+  // False while Clerk issues it JWT access tokens, which cannot be revoked, so it cannot be disconnected here.
+  revocable: z.boolean(),
 });
 
 export const assistantListSchema = z.object({ assistants: z.array(assistantSchema) });

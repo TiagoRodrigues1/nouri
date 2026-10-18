@@ -7,6 +7,8 @@ CREATE TABLE assistant_connections (
   name text CHECK (length(name) <= 256),
   connected_at timestamptz NOT NULL DEFAULT now(),
   last_used_at timestamptz NOT NULL DEFAULT now(),
+  -- False while the client's access tokens are JWTs, which Clerk cannot revoke, so the page cannot disconnect it.
+  revocable boolean NOT NULL DEFAULT true,
   disconnected_at timestamptz,
   PRIMARY KEY (user_id, client_id)
 );

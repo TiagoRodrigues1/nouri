@@ -39,7 +39,7 @@ export function mcpRoutes(db: AppDatabase, identity: Identity, limitUser: (userI
     const userId = agent && await userFor(db, agent.clerkUserId);
     // A client the person disconnected from Nouri's page is refused like a bad token, so it asks them again.
     const token = context.req.header("Authorization")?.slice("Bearer ".length) ?? "";
-    const admitted = agent && userId && await admitAssistant(db, identity, userId, agent.clientId, token);
+    const admitted = agent && userId && await admitAssistant(db, identity, userId, agent, token);
 
     if (!userId || !admitted) {
       const response = error(401, "Unauthorized");

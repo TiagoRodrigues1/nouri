@@ -178,7 +178,7 @@ Disconnecting an assistant:
 
 ## Tradeoffs accepted
 
-- Clerk OAuth access tokens are opaque by default and verified with a Clerk API call, so each MCP request costs one round trip to Clerk. Tool calls are infrequent; switching the OAuth application to JWT access tokens would make verification local.
+- Clerk issues OAuth access tokens as JWTs by default for applications created since January 2026, and as opaque tokens for older ones; the **Generate access tokens as JWTs** setting chooses. Opaque tokens cost one Clerk round trip per MCP request, which is fine for infrequent tool calls, and they are the only ones Clerk can revoke. Nouri therefore offers Disconnect only for a client whose latest call carried an opaque token; a JWT client is listed with a note, and `DELETE /v1/assistants/:clientId` answers 409. Locking out a JWT client would be permanent, since its grant could never be ended and the person could not let it in again.
 - Each tool call gets a fresh idempotency key. MCP clients do not retry tool calls on their own, and a key derived from the arguments would block logging the same food twice on purpose.
 - The assistant's nutrient estimates are stored as manual foods. They are labelled by whatever name the assistant gives; a catalog `ref` from `search_foods` is preferred when one matches.
 - Stateless transport: no MCP sessions, no server-sent notifications. The tools are request-response only.
@@ -187,6 +187,7 @@ Disconnecting an assistant:
 - `edit_food` and `take_supplements`, like `logFoods`, keep no idempotency receipt; each tool call is one attempt.
 - `get_day` returns the 30-day weight history inside the measurement summary. That is a few hundred bytes the assistant can use or skip.
 - `edit_entry`, like `edit_food`, keeps no receipt and needs no revision: it locks the row, so each call is one attempt at what is stored now.
+- If the token format changes to JWT between a disconnect and the client's next call, that call cannot end the grant, so the client stays refused.
 - Disconnecting waits for the client's next call to end its grant at Clerk. A client that never calls again keeps a live grant at Clerk, but Nouri refuses it whenever it does. If the person lets the same client in again before its next call, that call ends the new grant too, and the client asks once more.
 - Each new client costs one Clerk API call to look up its name; the name is not refreshed later.
 - `change_targets` on a person who never saved targets saves the defaults alongside the change, as the targets dialog does.
@@ -194,7 +195,7 @@ Disconnecting an assistant:
 
 ## Setup
 
-In the Clerk dashboard, open **Configure → OAuth applications** and turn on **Dynamic client registration**. Set `NOURI_PUBLIC_URL` to the origin the assistant reaches (for example `https://nouri.example.com`); without it the server uses the request's own origin. Add `https://<origin>/mcp` as a custom connector in Claude (Settings → Connectors) or ChatGPT (Settings → Apps → developer mode).
+In the Clerk dashboard, open **Configure → OAuth applications** and turn on **Dynamic client registration**. Set `NOURI_PUBLIC_URL` to the origin the assistant reaches (for example `https://nouri.example.com`); without it the server uses the request's own origin. To disconnect assistants from Nouri's Assistants dialog, turn off **Generate access tokens as JWTs** on the same page, so Clerk issues opaque access tokens it can revoke. Add `https://<origin>/mcp` as a custom connector in Claude (Settings → Connectors) or ChatGPT (Settings → Apps → developer mode).
 
 ## Not in this version
 

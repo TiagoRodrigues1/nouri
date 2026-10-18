@@ -13,8 +13,9 @@ export type Authenticate = (request: Request) => Promise<string | null>;
 // A webhook Clerk sent: the Clerk user it deleted, null for any other event, or "forged" when the signature fails.
 export type ReadWebhook = (request: Request) => Promise<{ deletedUser: string | null } | "forged">;
 
-// An assistant's request: the Clerk user who let it in, and the OAuth client Clerk registered it as.
-export type Agent = { clerkUserId: string; clientId: string };
+// An assistant's request: the Clerk user who let it in, the OAuth client Clerk registered it as, and whether its
+// grant can be ended from Nouri. Clerk revokes only opaque access tokens; JWT access tokens live until they expire.
+export type Agent = { clerkUserId: string; clientId: string; revocable: boolean };
 
 // Clerk acts as the OAuth server for MCP clients such as Claude or ChatGPT.
 export type Agents = {
@@ -84,7 +85,8 @@ export function clerkAgents(options: { secretKey: string; publishableKey: string
       const state = await clerk.authenticateRequest(request, { acceptsToken: "oauth_token" }).catch(() => null);
       const auth = state?.isAuthenticated ? agentAuth.safeParse(state.toAuth()).data : undefined;
 
-      return auth ? { clerkUserId: auth.userId, clientId: auth.clientId } : null;
+      // A JWT has three dot-separated parts; Clerk's opaque tokens have none.
+      return auth ? { clerkUserId: auth.userId, clientId: auth.clientId, revocable: header.split(".").length !== 3 } : null;
     },
     agentName: async (clientId) => (await application(clientId).catch(() => null))?.name ?? null,
     revokeAgent: async (clientId, token) => {

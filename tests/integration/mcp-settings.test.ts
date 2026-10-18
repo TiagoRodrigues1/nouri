@@ -168,6 +168,14 @@ void test("the MCP server changes the supplement stack, targets, and saved meals
     assert.match((await call(client, "edit_saved_meal", { mealId: meal.id, remove: [oats.id] })).text, /no item/);
     assert.ok((await call(client, "edit_saved_meal", { mealId: meal.id, remove: edited.json().items.map((item: { id: string }) => item.id) })).isError);
 
+    // A meal due today logs its old items before an edit changes them.
+    const today = (await call(client, "get_day", {})).json().date;
+    const due = await (await app.request("/v1/saved-meals", { method: "POST", headers: { ...headers, "Idempotency-Key": "due" }, body: JSON.stringify({ name: "Snack", items: [{ entryId: oats.id, amount: 80 }], daily: { time: "00:00", timeZone } }) })).json();
+    assert.ok(!(await call(client, "edit_saved_meal", { mealId: due.id, amounts: [{ id: due.items[0].id, amount: 10 }] })).isError);
+    const filled = (await call(client, "get_day", { date: today })).json().food.entries;
+    assert.deepEqual(filled.map((entry: { food: { quantity: { amount: number } } }) => entry.food.quantity.amount), [80]);
+    assert.ok(!(await call(client, "delete_saved_meal", { mealId: due.id })).isError);
+
     const other = await connect(otherApp, agentToken);
     assert.ok((await call(other, "delete_saved_meal", { mealId: meal.id })).isError);
 
@@ -185,7 +193,7 @@ void test("the MCP server changes the supplement stack, targets, and saved meals
 });
 
 void test("the page lists connected assistants and disconnects one, which ends its grant on its next call", async () => {
-  const { app, otherApp, headers, agentToken, revokedAgentTokens, setup, cleanup } = createHarness();
+  const { app, otherApp, headers, agentToken, jwtAgentToken, revokedAgentTokens, setup, cleanup } = createHarness();
 
   await setup();
 
@@ -219,8 +227,19 @@ void test("the page lists connected assistants and disconnects one, which ends i
     await call(again, "get_day", { date });
     assert.equal((await (await app.request("/v1/assistants", { headers })).json()).assistants.length, 1);
 
+    // Clerk cannot revoke JWT access tokens, so a client that has them is listed but not disconnected.
+    const jwtClient = await connect(app, jwtAgentToken);
+    await call(jwtClient, "get_day", { date });
+    const listed = (await (await app.request("/v1/assistants", { headers })).json()).assistants;
+    assert.deepEqual(listed.map((assistant: { clientId: string; revocable: boolean }) => [assistant.clientId, assistant.revocable]).sort(), [["client_chatgpt", false], ["client_claude", true]]);
+    const kept = await app.request("/v1/assistants/client_chatgpt", { method: "DELETE", headers });
+    assert.equal(kept.status, 409);
+    assert.match((await kept.json()).error, /JWT/);
+    assert.ok(!(await call(jwtClient, "get_day", { date })).isError);
+
     await client.close();
     await again.close();
+    await jwtClient.close();
   } finally {
     await cleanup();
   }

@@ -365,8 +365,13 @@ export function nouriMcpServer(db: AppDatabase, userId: string): McpServer {
     }
   });
 
-  // A saved meal by id, as list_saved_meals shows it.
-  const savedMeal = async (id: string) => (await listMeals(db, userId)).meals.find((meal) => meal.id === id);
+  // A saved meal by id, as list_saved_meals shows it. Daily meals are filled first, so a change never alters or drops
+  // a day the meal was already due to log.
+  async function savedMeal(id: string) {
+    await fillDailyMeals(db, userId);
+
+    return (await listMeals(db, userId)).meals.find((meal) => meal.id === id);
+  }
 
   // Saves a meal the way the REST API would, so its checks answer the assistant in words.
   async function saveMeal(command: { kind: "create" } | { kind: "edit"; id: string; revision: number }, value: MealInput): Promise<CallToolResult> {
