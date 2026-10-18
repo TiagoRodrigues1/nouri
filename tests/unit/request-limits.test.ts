@@ -365,3 +365,30 @@ void test("one account past its share cannot drain the signed-in pool for everyo
   assert.equal((await app.request("/v1/me", { headers: { Authorization: "Bearer greedy" } })).status, 429);
   assert.equal((await app.request("/v1/me", { headers: { Authorization: "Bearer someone-else" } })).status, 200);
 });
+
+void test("requests waiting on identification are bounded before they are counted anywhere else", { timeout: 5000 }, async () => {
+  let release: () => void = () => undefined;
+  const keysArrive = new Promise<void>((resolve) => { release = resolve; });
+  let checks = 0;
+  const app = new Hono<CallerVariables>();
+
+  const slowKeys = {
+    identify: async () => {
+      checks++;
+      await keysArrive;
+
+      return null;
+    },
+  };
+
+  app.use(requestLimits(slowKeys).beforeRequest);
+  app.get("/v1/me", (context) => context.body(null, 401));
+  const waiting = Array.from({ length: 32 }, () => Promise.resolve(app.request("/v1/me", { headers: { Authorization: "Bearer forged" } })));
+  assert.equal((await app.request("/v1/me", { headers: { Authorization: "Bearer forged" } })).status, 429);
+  assert.equal(checks, 32);
+  release();
+
+  // Released together, the waiting requests meet the 24-handler anonymous share, so some are refused there instead.
+  assert.ok((await Promise.all(waiting)).every((response) => [401, 429].includes(response.status)));
+  assert.equal((await app.request("/v1/me")).status, 401);
+});

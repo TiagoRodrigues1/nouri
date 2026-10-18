@@ -71,6 +71,7 @@ export function requestLimits(consume: UsageWindows, policy: {
 }): MiddlewareHandler<CallerVariables> {
   let activeRequests = 0;
   let anonymousRequests = 0;
+  let identifying = 0;
   // In-flight handlers per signed-in person; absent means none.
   const callerRequests = new Map<string, number>();
 
@@ -83,7 +84,18 @@ export function requestLimits(consume: UsageWindows, policy: {
     if (!reserveTraffic(0)) return limited("The app's download allowance has been reached. Try again later.", 86400);
 
     if ((context.req.header("Authorization")?.length ?? 0) > 16_384) return error(431, "Authorization header is too large");
-    const clerkUserId = await policy.identify(context.req.raw);
+
+    // Identifying can wait up to five seconds on a signing-key refresh, so requests doing it are bounded too.
+    if (identifying >= 32) return limited("Too many requests. Try again shortly.", 60);
+    identifying++;
+    let clerkUserId: string | null;
+
+    try {
+      clerkUserId = await policy.identify(context.req.raw);
+    } finally {
+      identifying--;
+    }
+
     const anonymous = clerkUserId === null;
     const shared = anonymous && policy.costly(context.req.path);
 
