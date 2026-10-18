@@ -3,10 +3,10 @@ import { and, between, eq, isNull } from "drizzle-orm";
 import { supplementIntakes, supplementStacks } from "../db/schema.js";
 import type { AppDatabase, Transaction } from "../db/database.js";
 import { getDated, getDatedHistory, type DatedKind } from "../effective-dated.js";
-import type { RecordKind } from "../journal/records.js";
+import { recordEdit, type RecordKind } from "../journal/records.js";
 import { localDate, shiftDate } from "../time.js";
-import { stackForDaySchema, supplementIntakeSchema, supplementStackSchema } from "./contract.js";
-import type { IntakeInput, StackForDay, SupplementDay, SupplementIntake, SupplementStack } from "./contract.js";
+import { intakeInputSchema, stackForDaySchema, supplementIntakeSchema, supplementStackSchema } from "./contract.js";
+import type { IntakeInput, StackForDay, Supplement, SupplementDay, SupplementIntake, SupplementStack } from "./contract.js";
 
 type IntakeRow = typeof supplementIntakes.$inferSelect;
 
@@ -35,26 +35,36 @@ export const stackKind: DatedKind<typeof supplementStacks, SupplementStack, Stac
 
 type When = Pick<IntakeInput, "occurredAt" | "timeZone">;
 
-// Logs supplements at one time, in the order given, all or none. Only what is on that day's stack can be taken; name,
-// kind, and dose are copied from it so later edits never rewrite an intake.
-async function insertIntakes(tx: Transaction, userId: string, when: When, supplementIds: string[]): Promise<
-  { outcome: "created"; entries: SupplementIntake[] } | { outcome: "unknown-reference"; message: string }
-> {
+type UnknownSupplement = { outcome: "unknown-reference"; message: string };
+
+// The row values of intakes taken at one time, in the order given. Only what is on that day's stack can be taken;
+// name, kind, and dose are copied from it so later edits to the stack never rewrite an intake.
+async function intakeValues(tx: Transaction, userId: string, when: When, supplementIds: string[]) {
   const day = localDate(when.occurredAt, when.timeZone);
   const { supplements } = await getDated(tx, stackKind, userId, day);
-  const chosen = [];
+  const chosen: Supplement[] = [];
 
   for (const id of supplementIds) {
     const supplement = supplements.find((candidate) => candidate.id === id);
 
-    if (!supplement) return { outcome: "unknown-reference", message: "Supplement is not on your stack for that day" };
+    if (!supplement) return { outcome: "unknown-reference" as const, message: "Supplement is not on your stack for that day" };
     chosen.push(supplement);
   }
 
-  const rows = chosen.map((supplement) => ({
-    id: randomUUID(), userId, occurredAt: new Date(when.occurredAt), timeZone: when.timeZone, localDate: day,
+  return chosen.map((supplement) => ({
+    occurredAt: new Date(when.occurredAt), timeZone: when.timeZone, localDate: day,
     supplementId: supplement.id, name: supplement.name, kind: supplement.kind, dose: supplement.dose,
   }));
+}
+
+// Logs supplements at one time, in the order given, all or none.
+async function insertIntakes(tx: Transaction, userId: string, when: When, supplementIds: string[]): Promise<
+  { outcome: "created"; entries: SupplementIntake[] } | UnknownSupplement
+> {
+  const values = await intakeValues(tx, userId, when, supplementIds);
+
+  if ("outcome" in values) return values;
+  const rows = values.map((value) => ({ id: randomUUID(), userId, ...value }));
 
   const byId = new Map((await tx.insert(supplementIntakes).values(rows).returning()).map((row) => [row.id, intake(row)]));
 
@@ -75,6 +85,17 @@ export const intakeRecords: RecordKind<IntakeInput, SupplementIntake> = {
   label: "Supplement intake",
   table: supplementIntakes,
   schema: supplementIntakeSchema,
+  // Moving an intake to another day takes that day's stack, as logging it there would.
+  edit: recordEdit(supplementIntakes, {
+    input: intakeInputSchema,
+    inputOf: ({ occurredAt, timeZone, supplementId }) => ({ occurredAt, timeZone, supplementId }),
+    entry: intake,
+    values: async (tx, userId, { supplementId, ...when }) => {
+      const values = await intakeValues(tx, userId, when, [supplementId]);
+
+      return "outcome" in values ? values : values[0] ?? {};
+    },
+  }),
   create: async (tx, userId, { supplementId, ...when }) => {
     const result = await insertIntakes(tx, userId, when, [supplementId]);
 

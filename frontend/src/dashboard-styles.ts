@@ -69,7 +69,8 @@ export const styles = stylex.create({
     width: { default: "100%", "@media (max-width: 680px)": "auto" },
     display: "flex",
     alignItems: "center",
-    gap: "15px",
+    // On phones the label is hidden, so no gap is left beside the icon and every setting fits the top bar.
+    gap: { default: "15px", "@media (max-width: 680px)": 0 },
     minHeight: "43px",
     padding: { default: "0 15px", "@media (max-width: 680px)": "0 10px" },
     margin: { default: "3px 0", "@media (max-width: 680px)": 0 },

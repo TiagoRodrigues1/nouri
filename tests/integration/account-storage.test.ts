@@ -25,8 +25,8 @@ async function stored(owner: string): Promise<number> {
 }
 
 // Tables owned by a person that the ledger deliberately leaves out: photos have their own quota, and receipts,
-// sign-in states, and connections are short-lived or operational. The ledger itself is the last.
-const untracked = ["progress_photos", "mutation_receipts", "wearable_oauth_states", "wearable_connections", "account_storage", "unowned_storage"];
+// sign-in states, and wearable and assistant connections are short-lived or operational. The two ledger tables close the list.
+const untracked = ["progress_photos", "mutation_receipts", "wearable_oauth_states", "wearable_connections", "assistant_connections", "account_storage", "unowned_storage"];
 
 void test("the storage ledger counts every write path and refuses new records past an allowance", async () => {
   await setup();

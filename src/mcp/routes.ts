@@ -1,5 +1,6 @@
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { Hono } from "hono";
+import { admitAssistant } from "../assistants/assistants.js";
 import type { AppDatabase } from "../db/database.js";
 import { error } from "../http-error.js";
 import type { CallerVariables } from "../request-limits.js";
@@ -28,19 +29,23 @@ export function mcpRoutes(db: AppDatabase, identity: Identity, access: AccountAc
   // Stateless: every message is a POST answered with JSON, so there is no event stream to open or session to end.
   app.on(["GET", "DELETE"], "/mcp", () => new Response(null, { status: 405, headers: { Allow: "POST" } }));
 
-  // The request gate identified a token Clerk confirmed in the last minute; any other is checked with Clerk.
+  // A token Clerk confirmed in the last minute is identified without asking Clerk again; any other is checked.
   app.post("/mcp", async (context) => {
-    const clerkUserId = context.get("clerkUserId") ?? await access.verifyAgent(context.req.raw);
+    const agent = await access.agent(context.req.raw);
 
-    if (clerkUserId) {
-      const refused = limitUser(clerkUserId, "POST", "/mcp");
+    if (agent) {
+      const refused = limitUser(agent.clerkUserId, "POST", "/mcp");
 
       if (refused) return refused;
     }
 
-    const userId = clerkUserId && await access.userId(clerkUserId);
+    const userId = agent && await access.userId(agent.clerkUserId);
+    // A client the person disconnected from Nouri's page is refused like a bad token, so it asks them again.
+    const token = context.req.header("Authorization")?.slice("Bearer ".length) ?? "";
+    const admitted = agent && userId && await admitAssistant(db, identity, userId, agent, token);
 
-    if (!userId) {
+    if (!userId || !admitted) {
+      access.forgetAgent(context.req.raw);
       const response = error(401, "Unauthorized");
 
       response.headers.set("WWW-Authenticate", `Bearer resource_metadata="${originOf(context.req.raw)}${metadataPath}"`);

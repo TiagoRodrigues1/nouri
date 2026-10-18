@@ -2,9 +2,9 @@ import { randomUUID } from "node:crypto";
 import { and, between, eq, isNull } from "drizzle-orm";
 import { sleepSessions } from "../db/schema.js";
 import type { AppDatabase } from "../db/database.js";
-import type { RecordKind } from "../journal/records.js";
+import { recordEdit, type RecordKind } from "../journal/records.js";
 import { localDate } from "../time.js";
-import { sleepSessionSchema } from "./contract.js";
+import { sleepInputSchema, sleepSessionSchema } from "./contract.js";
 import type { SleepDay, SleepInput, SleepSession, Stages } from "./contract.js";
 
 type SleepRow = typeof sleepSessions.$inferSelect;
@@ -45,27 +45,36 @@ function session(row: SleepRow): SleepSession {
   };
 }
 
+// The row values an input sets, on create and edit alike.
+function values(input: SleepInput) {
+  return {
+    startedAt: new Date(input.startedAt),
+    endedAt: new Date(input.endedAt),
+    timeZone: input.timeZone,
+    // A night belongs to the morning it ends on.
+    localDate: localDate(input.endedAt, input.timeZone),
+    awakeMinutes: input.stages?.awake ?? null,
+    lightMinutes: input.stages?.light ?? null,
+    deepMinutes: input.stages?.deep ?? null,
+    remMinutes: input.stages?.rem ?? null,
+  };
+}
+
 export const sleepRecords: RecordKind<SleepInput, SleepSession> = {
   name: "sleep",
   label: "Sleep session",
   table: sleepSessions,
   schema: sleepSessionSchema,
-  // Imported rows are outside the manual delete path. Their provider owns deletion.
+  // Imported rows are outside the manual delete and edit paths. Their provider owns them.
   deletable: eq(sleepSessions.source, "manual"),
+  edit: recordEdit(sleepSessions, {
+    input: sleepInputSchema,
+    inputOf: ({ startedAt, endedAt, timeZone, stages }) => ({ startedAt, endedAt, timeZone, stages }),
+    entry: session,
+    values: async (_tx, _userId, input) => values(input),
+  }),
   create: async (tx, userId, input) => {
-    const [row] = await tx.insert(sleepSessions).values({
-      id: randomUUID(),
-      userId,
-      startedAt: new Date(input.startedAt),
-      endedAt: new Date(input.endedAt),
-      timeZone: input.timeZone,
-      // A night belongs to the morning it ends on.
-      localDate: localDate(input.endedAt, input.timeZone),
-      awakeMinutes: input.stages?.awake ?? null,
-      lightMinutes: input.stages?.light ?? null,
-      deepMinutes: input.stages?.deep ?? null,
-      remMinutes: input.stages?.rem ?? null,
-    }).returning();
+    const [row] = await tx.insert(sleepSessions).values({ id: randomUUID(), userId, ...values(input) }).returning();
 
     if (!row) throw new Error("Sleep insert returned no row");
 

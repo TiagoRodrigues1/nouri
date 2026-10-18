@@ -2,9 +2,9 @@ import { randomUUID } from "node:crypto";
 import { and, between, count, eq, isNotNull, isNull, sum } from "drizzle-orm";
 import { workouts } from "../db/schema.js";
 import type { AppDatabase } from "../db/database.js";
-import type { RecordKind } from "../journal/records.js";
+import { recordEdit, type RecordKind } from "../journal/records.js";
 import { localDate } from "../time.js";
-import { exerciseKey, workoutSchema } from "./contract.js";
+import { exerciseKey, workoutInputSchema, workoutSchema } from "./contract.js";
 import type { ExerciseHistory, ExerciseHistoryList, ExerciseSession, Workout, WorkoutDay, WorkoutInput, WorkoutSummary } from "./contract.js";
 
 type WorkoutRow = typeof workouts.$inferSelect;
@@ -25,26 +25,35 @@ function workout(row: WorkoutRow): Workout {
   };
 }
 
+// The row values an input sets, on create and edit alike.
+function values(input: WorkoutInput) {
+  return {
+    occurredAt: new Date(input.occurredAt),
+    timeZone: input.timeZone,
+    localDate: localDate(input.occurredAt, input.timeZone),
+    activity: input.activity,
+    durationMinutes: input.durationMinutes,
+    distanceM: input.distanceM,
+    energyKcal: input.energyKcal,
+    strengthExercises: input.strengthExercises,
+  };
+}
+
 export const workoutRecords: RecordKind<WorkoutInput, Workout> = {
   name: "workout",
   label: "Workout",
   table: workouts,
   schema: workoutSchema,
-  // Imported rows are outside the manual delete path. Their provider owns deletion.
+  // Imported rows are outside the manual delete and edit paths. Their provider owns them.
   deletable: eq(workouts.source, "manual"),
+  edit: recordEdit(workouts, {
+    input: workoutInputSchema,
+    inputOf: ({ occurredAt, timeZone, activity, durationMinutes, distanceM, energyKcal, strengthExercises }) => ({ occurredAt, timeZone, activity, durationMinutes, distanceM, energyKcal, strengthExercises }),
+    entry: workout,
+    values: async (_tx, _userId, input) => values(input),
+  }),
   create: async (tx, userId, input) => {
-    const [row] = await tx.insert(workouts).values({
-      id: randomUUID(),
-      userId,
-      occurredAt: new Date(input.occurredAt),
-      timeZone: input.timeZone,
-      localDate: localDate(input.occurredAt, input.timeZone),
-      activity: input.activity,
-      durationMinutes: input.durationMinutes,
-      distanceM: input.distanceM,
-      energyKcal: input.energyKcal,
-      strengthExercises: input.strengthExercises,
-    }).returning();
+    const [row] = await tx.insert(workouts).values({ id: randomUUID(), userId, ...values(input) }).returning();
 
     if (!row) throw new Error("Workout insert returned no row");
 

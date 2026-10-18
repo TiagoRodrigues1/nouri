@@ -1,53 +1,63 @@
 import { createHash } from "node:crypto";
 import type { AppDatabase } from "../db/database.js";
-import { userFor, type Identity } from "./identity.js";
+import { userFor, type Agent, type Identity } from "./identity.js";
 
 const agentTokenLifetimeMs = 60_000;
 
 // Who is calling, as cheaply as it can be known. Session tokens verify locally; MCP tokens are opaque and need
 // Clerk's API, so a verified one is remembered briefly and repeat messages from an agent are identified locally too.
 export function accountAccess(db: AppDatabase, identity: Identity, now = Date.now) {
-  const agents = new Map<string, { clerkUserId: string; expiresAt: number }>();
+  const agents = new Map<string, { agent: Agent; expiresAt: number }>();
   // A Clerk user's Nouri id never changes, so each is looked up once rather than on every request.
   const userIds = new Map<string, string>();
 
   const tokenHash = (request: Request) => createHash("sha256").update(request.headers.get("Authorization") ?? "").digest("base64url");
 
-  function rememberedAgent(request: Request): string | null {
+  function rememberedAgent(request: Request): Agent | null {
     const key = tokenHash(request);
     const found = agents.get(key);
 
     if (!found) return null;
 
-    if (found.expiresAt > now()) return found.clerkUserId;
+    if (found.expiresAt > now()) return found.agent;
     agents.delete(key);
 
     return null;
   }
 
   return {
-    // Never reaches Clerk's API: a null here may still be a valid MCP token, which verifyAgent settles.
+    // Never reaches Clerk's API: a null here may still be a valid MCP token, which agent() settles.
     async identify(request: Request): Promise<string | null> {
       const { pathname } = new URL(request.url);
 
       if (pathname.startsWith("/v1/")) return identity.authenticate(request);
 
-      if (pathname === "/mcp" && request.headers.has("Authorization")) return rememberedAgent(request);
+      if (pathname === "/mcp" && request.headers.has("Authorization")) return rememberedAgent(request)?.clerkUserId ?? null;
 
       return null;
     },
 
-    // A revoked token keeps working until its minute is up, in exchange for one Clerk check a minute per agent.
-    async verifyAgent(request: Request): Promise<string | null> {
-      const clerkUserId = await identity.authenticateAgent(request);
+    // The MCP client behind a token: remembered, or else checked with Clerk and remembered. A token revoked in Clerk
+    // keeps working until its minute is up, in exchange for one Clerk check a minute per agent. Disconnecting from
+    // Nouri's page still applies at once, since admitting an assistant reads the database on every message.
+    async agent(request: Request): Promise<Agent | null> {
+      const remembered = rememberedAgent(request);
 
-      if (!clerkUserId) return null;
+      if (remembered) return remembered;
+      const agent = await identity.authenticateAgent(request);
+
+      if (!agent) return null;
 
       // Bounds memory; clearing only costs each agent one more Clerk check.
       if (agents.size >= 1000) agents.clear();
-      agents.set(tokenHash(request), { clerkUserId, expiresAt: now() + agentTokenLifetimeMs });
+      agents.set(tokenHash(request), { agent, expiresAt: now() + agentTokenLifetimeMs });
 
-      return clerkUserId;
+      return agent;
+    },
+
+    // A token Nouri refused, such as a disconnected assistant's, is checked with Clerk again next time.
+    forgetAgent(request: Request) {
+      agents.delete(tokenHash(request));
     },
 
     // Null for a Clerk user whose account was erased.
@@ -69,7 +79,7 @@ export function accountAccess(db: AppDatabase, identity: Identity, now = Date.no
     forget(clerkUserId: string) {
       userIds.delete(clerkUserId);
 
-      for (const [key, agent] of agents) if (agent.clerkUserId === clerkUserId) agents.delete(key);
+      for (const [key, remembered] of agents) if (remembered.agent.clerkUserId === clerkUserId) agents.delete(key);
     },
   };
 }

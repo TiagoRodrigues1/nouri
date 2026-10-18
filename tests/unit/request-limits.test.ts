@@ -293,14 +293,17 @@ void test("forged sessions and anonymous floods cannot lock out a signed-in pers
 void test("a verified MCP token is identified locally for a minute, then checked with Clerk again", async () => {
   let time = 0;
   let clerkChecks = 0;
+  const assistant = { clerkUserId: "person", clientId: "claude", revocable: true };
 
   const identity: Identity = {
     authenticate: async () => null,
     authenticateAgent: async (request) => {
       clerkChecks++;
 
-      return request.headers.get("Authorization") === "Bearer agent" ? "person" : null;
+      return request.headers.get("Authorization") === "Bearer agent" ? assistant : null;
     },
+    agentName: async () => null,
+    revokeAgent: async () => undefined,
     readWebhook: async () => "forged",
     publishableKey: "pk_test_unused",
   };
@@ -310,17 +313,23 @@ void test("a verified MCP token is identified locally for a minute, then checked
   const message = (token: string) => new Request("http://nouri.test/mcp", { method: "POST", headers: { Authorization: `Bearer ${token}` } });
 
   assert.equal(await access.identify(message("agent")), null);
-  assert.equal(await access.verifyAgent(message("agent")), "person");
+  assert.deepEqual(await access.agent(message("agent")), assistant);
   assert.equal(await access.identify(message("agent")), "person");
+  assert.deepEqual(await access.agent(message("agent")), assistant);
   assert.equal(await access.identify(message("other")), null);
-  assert.equal(await access.verifyAgent(message("other")), null);
+  assert.equal(await access.agent(message("other")), null);
   time = 60_001;
 
   assert.equal(await access.identify(message("agent")), null);
-  await access.verifyAgent(message("agent"));
+  await access.agent(message("agent"));
   access.forget("person");
   assert.equal(await access.identify(message("agent")), null);
-  assert.equal(clerkChecks, 3);
+
+  // A token Nouri refused, such as a disconnected assistant's, is checked with Clerk again.
+  await access.agent(message("agent"));
+  access.forgetAgent(message("agent"));
+  assert.equal(await access.identify(message("agent")), null);
+  assert.equal(clerkChecks, 4);
 });
 
 void test("barcode answers are remembered, failures are not, and fetches have an app-wide allowance", async () => {

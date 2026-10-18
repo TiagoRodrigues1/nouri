@@ -3,6 +3,7 @@ import { styles } from "./dashboard-styles";
 import { useEffect, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate, useSearch } from "@tanstack/react-router";
 import {
+  Bot,
   ChevronLeft,
   ChevronRight,
   LayoutDashboard,
@@ -36,6 +37,7 @@ import { EditFoodDialog } from "./edit-food-dialog";
 import { TargetsDialog } from "./targets-dialog";
 import { SupplementsDialog } from "./supplements-dialog";
 import { WearablesDialog } from "./wearables-dialog";
+import { AssistantsDialog } from "./assistants-dialog";
 import { dashboardPageContext, useDashboardPage } from "./dashboard-page-context";
 import { SleepDialog, WorkoutDialog } from "./overview-dialogs";
 import { useJournal } from "./overview/use-journal";
@@ -120,6 +122,7 @@ export function Dashboard() {
   const [targetsOpen, setTargetsOpen] = useState(false);
   const [supplementsOpen, setSupplementsOpen] = useState(false);
   const [wearablesOpen, setWearablesOpen] = useState(false);
+  const [assistantsOpen, setAssistantsOpen] = useState(false);
 
   const journal = useJournal();
   const workout = useWorkoutSession();
@@ -148,7 +151,8 @@ export function Dashboard() {
   function openSetting(setting: PaletteSetting) {
     if (setting === "targets") setTargetsOpen(true);
     else if (setting === "supplements") setSupplementsOpen(true);
-    else setWearablesOpen(true);
+    else if (setting === "wearables") setWearablesOpen(true);
+    else setAssistantsOpen(true);
   }
 
   function saveRecord(command: RecordCommand, label: string) {
@@ -239,6 +243,14 @@ export function Dashboard() {
               <Watch data-nav-icon size={17} {...stylex.props(wearablesOpen && styles.iconAccent)} />
               Wearables
             </button>
+            <button
+              type="button"
+              {...stylex.props(styles.navItem, assistantsOpen && styles.navItemActive)}
+              onClick={() => setAssistantsOpen(true)}
+            >
+              <Bot data-nav-icon size={17} {...stylex.props(assistantsOpen && styles.iconAccent)} />
+              Assistants
+            </button>
           </div>
         </nav>
         <div {...stylex.props(styles.sidebarBottom)}>
@@ -278,6 +290,7 @@ export function Dashboard() {
       <TargetsDialog open={targetsOpen} onOpenChange={setTargetsOpen} />
       <SupplementsDialog open={supplementsOpen} onOpenChange={setSupplementsOpen} />
       <WearablesDialog open={wearablesOpen} onOpenChange={setWearablesOpen} connection={googleHealth} />
+      <AssistantsDialog open={assistantsOpen} onOpenChange={setAssistantsOpen} />
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} date={date} isToday={isToday} onOpenRecord={setRecordDialog} onOpenSetting={openSetting} />
       <EditFoodDialog date={date} entryId={editingId} onClose={() => setEditingId(null)} />
       <WorkoutDialog open={recordDialog === "workout"} onOpenChange={(open) => setRecordDialog(open ? "workout" : null)} date={date} pending={journal.create.isPending} onSave={(input) => saveRecord({ path: recordPaths.workout, input }, "Workout")} />
