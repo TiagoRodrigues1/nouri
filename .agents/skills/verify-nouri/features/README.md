@@ -45,5 +45,5 @@ This index is the maintained list of Nouri's user paths. Read the relevant file 
 - [Log again](log-again.md): timeline log-again button on today and past days, recorded time zones, `/food` redirect.
 - [Meals](saved-meals.md): Meals page in the main navigation, build a meal from search, recent, and manual foods, edit and delete it, start one from the Timeline's Save as meal, log it from the palette's `Saved meals` group, make it log itself every day.
 - [Supplements](supplements.md): sidebar dialog edits the list from today, My Day checklist ticks and unticks intakes, earlier days keep their list.
-- [Targets](targets.md): sidebar dialog, save, pages reflect new targets, earlier days keep old ones.
+- [Targets](targets.md): sidebar dialog, save, pages reflect new targets, earlier days keep old ones, suggestions from a profile and goal direction.
 - [MCP server](mcp.md): `/mcp` refuses requests without an OAuth token and points clients at Clerk; the tools themselves need a registered OAuth client.
