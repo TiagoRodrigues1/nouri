@@ -14,6 +14,7 @@ import { useLogAgain } from "./lib/use-log-again";
 import { useUndoMealLog } from "./lib/use-saved-meals";
 import { queryError } from "./query-status";
 import { useSupplements } from "./lib/use-supplements";
+import { useArrivals, type Arrivals } from "./lib/use-arrivals";
 import { useDashboardPage } from "./dashboard-page-context";
 import { SupplementsCard } from "./my-day/supplements-card";
 import { format, type CardId, type FoodEntry } from "./lib/api";
@@ -44,6 +45,9 @@ export function MyDay() {
   const day = dayQuery.data;
   const loading = dayQuery.isPending;
   const entries = day?.food.entries ?? [];
+  const mealLogs = day?.mealLogs ?? [];
+  const intakes = [...(day?.supplements.items.flatMap((item) => item.intakes) ?? []), ...(day?.supplements.unlisted ?? [])];
+  const arrived = useArrivals([...entries, ...mealLogs, ...intakes].map((record) => record.id), date, day !== undefined);
 
   // While the day loads, the timeline and cards show their skeletons instead of a message.
   const status = loading ? null : queryError(dayQuery)
@@ -100,6 +104,7 @@ export function MyDay() {
       <SupplementsCard
         day={day?.supplements}
         pending={supplements.pending}
+        arrived={arrived}
         onTake={supplements.take}
         onRemove={supplements.remove}
         onManage={onManageSupplements}
@@ -116,7 +121,8 @@ export function MyDay() {
     <div {...stylex.props(styles.layout)}>
       <Timeline
         entries={entries}
-        mealLogs={day?.mealLogs ?? []}
+        mealLogs={mealLogs}
+        arrived={arrived}
         now={isToday ? now : null}
         logAgainWhen={isToday ? "now" : "today"}
         summary={`${entries.length} ${entries.length === 1 ? "food" : "foods"} · ${format(totals?.kcal)} kcal`}
@@ -228,9 +234,11 @@ type TimelineProps = {
   onDelete: (entry: FoodEntry) => void;
   onRemoveMeal: (log: MealLogRef) => void;
   onSaveMeal: () => void;
+  // Foods and meals logged since the day opened, which fade in where they land.
+  arrived: Arrivals;
 };
 
-function Timeline({ entries, mealLogs, now, logAgainWhen, summary, loading, status, busy, onLogAgain, onEdit, onDelete, onRemoveMeal, onSaveMeal }: TimelineProps) {
+function Timeline({ entries, mealLogs, arrived, now, logAgainWhen, summary, loading, status, busy, onLogAgain, onEdit, onDelete, onRemoveMeal, onSaveMeal }: TimelineProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const focusRef = useRef<HTMLLIElement>(null);
   const hasNow = now !== null;
@@ -283,7 +291,7 @@ function Timeline({ entries, mealLogs, now, logAgainWhen, summary, loading, stat
 
               if (row.kind === "meal")
                 return (
-                  <li key={`meal-${row.log.id}`} ref={ref} {...stylex.props(styles.mealRow)}>
+                  <li key={`meal-${row.log.id}`} ref={ref} {...arrived.rowProps(row.log.id)} {...stylex.props(styles.mealRow)}>
                     <span {...stylex.props(styles.mealLogName)}>{row.log.name}</span>
                     <Button
                       variant="ghost"
@@ -302,7 +310,7 @@ function Timeline({ entries, mealLogs, now, logAgainWhen, summary, loading, stat
               const { entry } = row;
 
               return (
-                <li key={entry.id} ref={ref} {...stylex.props(styles.entryRow)}>
+                <li key={entry.id} ref={ref} {...arrived.rowProps(entry.id)} {...stylex.props(styles.entryRow)}>
                   <span {...stylex.props(styles.entryDot)} />
                   <span {...stylex.props(styles.entryText)}>
                     <span {...stylex.props(styles.entryName)}>{entry.food.name}</span>

@@ -4,17 +4,20 @@ import { Button } from "../components/ui/button";
 import { colors } from "../theme.stylex";
 import { styles as cardStyles } from "../my-day-styles";
 import { checklist, takenAt } from "../lib/supplements";
+import type { Arrivals } from "../lib/use-arrivals";
 import type { Supplement, SupplementDay, SupplementIntake } from "../lib/api";
 
 type SupplementsCardProps = {
   day: SupplementDay | undefined;
   pending: boolean;
+  // Intakes logged since the day opened; a fresh tick turns into its taken button with a short settle.
+  arrived: Arrivals;
   onTake: (supplement: Supplement) => void;
   onRemove: (intake: SupplementIntake) => void;
   onManage: () => void;
 };
 
-export function SupplementsCard({ day, pending, onTake, onRemove, onManage }: SupplementsCardProps) {
+export function SupplementsCard({ day, pending, arrived, onTake, onRemove, onManage }: SupplementsCardProps) {
   const { rows, unlisted, taken, total, empty } = checklist(day ?? { items: [], unlisted: [] });
 
   return (
@@ -45,18 +48,18 @@ export function SupplementsCard({ day, pending, onTake, onRemove, onManage }: Su
               </span>
               {/* One click takes it now; clicking the taken button removes the latest intake, so a slip is one click to undo. */}
               {last ? (
-                <Button variant="secondary" size="sm" {...stylex.props(styles.taken)} aria-label={unmarkLabel} disabled={pending} onClick={() => onRemove(last)}>
+                <Button key={last.id} variant="secondary" size="sm" {...arrived.stateProps(last.id)} {...stylex.props(styles.taken)} aria-label={unmarkLabel} disabled={pending} onClick={() => onRemove(last)}>
                   <Check size={15} /> {timesLabel}{takenAt(last)}
                 </Button>
               ) : (
-                <Button variant="outline" size="icon-sm" aria-label={markLabel} title="Mark as taken" disabled={pending} onClick={() => onTake(supplement)}>
+                <Button key="untaken" variant="outline" size="icon-sm" aria-label={markLabel} title="Mark as taken" disabled={pending} onClick={() => onTake(supplement)}>
                   <Check size={15} />
                 </Button>
               )}
             </li>
           ))}
           {unlisted.map(({ intake, time, meta, removeLabel }) => (
-            <li key={intake.id} {...stylex.props(styles.row)}>
+            <li key={intake.id} {...arrived.rowProps(intake.id)} {...stylex.props(styles.row)}>
               <span {...stylex.props(styles.label)}>
                 <span {...stylex.props(styles.name)}>{intake.name}</span>
                 <span {...stylex.props(styles.meta)}>{meta}</span>
