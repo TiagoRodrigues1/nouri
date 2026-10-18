@@ -14,7 +14,8 @@ CREATE TABLE unowned_storage (
 INSERT INTO unowned_storage DEFAULT VALUES;
 
 -- A new row past 128 MiB for its person, or 2 GiB for the app, is refused with SQLSTATE 53Q01 (see
--- src/account/storage.ts). Edits and deletions never are, so a full account can still change what it has.
+-- src/account/storage.ts), and so is an edit that grows a row past them. Deletions, soft ones included, never are,
+-- so a full account can still remove what it has.
 -- The account check is exact (its ledger row is locked); the app-wide sum cannot see other accounts' uncommitted
 -- rows, so concurrent writers may pass it by what they have in flight, rather than every insert waiting on one lock.
 CREATE FUNCTION track_account_storage() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -33,7 +34,8 @@ BEGIN
     ON CONFLICT (user_id) DO UPDATE SET bytes = account_storage.bytes + EXCLUDED.bytes
     RETURNING bytes INTO stored;
 
-    IF TG_OP = 'INSERT' AND (stored > 134217728 OR (SELECT sum(bytes) FROM account_storage) + (SELECT bytes FROM unowned_storage) > 2147483648) THEN
+    IF (TG_OP = 'INSERT' OR (pg_column_size(NEW) > pg_column_size(OLD) AND NOT (to_jsonb(OLD) ->> 'deleted_at' IS NULL AND to_jsonb(NEW) ->> 'deleted_at' IS NOT NULL)))
+      AND (stored > 134217728 OR (SELECT sum(bytes) FROM account_storage) + (SELECT bytes FROM unowned_storage) > 2147483648) THEN
       RAISE EXCEPTION 'Storage allowance reached' USING ERRCODE = '53Q01';
     END IF;
   ELSIF TG_OP <> 'DELETE' THEN

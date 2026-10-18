@@ -53,6 +53,11 @@ void test("the storage ledger counts every write path and refuses new records pa
     assert.equal(removed.status, 204);
     assert.equal((await post(otherApp, "/v1/water-entries", glass)).status, 201);
 
+    // An edit that grows a row past the allowance is refused too; one that does not grow it still saves.
+    await client`UPDATE account_storage SET bytes = ${maxAccountRecordBytes} WHERE user_id = ${userId}`;
+    await assert.rejects(client`UPDATE water_entries SET time_zone = 'America/Argentina/ComodRivadavia' WHERE id = ${entry.id}`, (failure: Error & { code?: string }) => failure.code === "53Q01");
+    await client`UPDATE water_entries SET volume_ml = 300 WHERE id = ${entry.id}`;
+
     // A refused write leaves no half-made receipt, so the same key works once there is room.
     const [pending] = await client`SELECT count(*) AS count FROM mutation_receipts WHERE outcome IS NULL`;
     assert.equal(Number(pending?.count), 0);
