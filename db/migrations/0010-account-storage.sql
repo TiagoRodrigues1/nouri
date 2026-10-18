@@ -55,8 +55,9 @@ BEGIN
     'user_targets', 'user_profiles', 'supplement_stacks', 'supplement_intakes'
   ] LOOP
     EXECUTE format('CREATE TRIGGER %I AFTER INSERT OR UPDATE OR DELETE ON %I FOR EACH ROW EXECUTE FUNCTION track_account_storage()', tracked || '_storage', tracked);
-    EXECUTE format('INSERT INTO account_storage (user_id, bytes) SELECT user_id, sum(pg_column_size(t)) FROM %I t WHERE user_id IS NOT NULL GROUP BY user_id
+    -- Rows from before accounts existed may name an API_USER_ID no users row has (see 0002); they count as unowned.
+    EXECUTE format('INSERT INTO account_storage (user_id, bytes) SELECT t.user_id, sum(pg_column_size(t)) FROM %I t WHERE EXISTS (SELECT 1 FROM users u WHERE u.id = t.user_id) GROUP BY t.user_id
       ON CONFLICT (user_id) DO UPDATE SET bytes = account_storage.bytes + EXCLUDED.bytes', tracked);
-    EXECUTE format('UPDATE unowned_storage SET bytes = bytes + (SELECT coalesce(sum(pg_column_size(t)), 0) FROM %I t WHERE user_id IS NULL)', tracked);
+    EXECUTE format('UPDATE unowned_storage SET bytes = bytes + (SELECT coalesce(sum(pg_column_size(t)), 0) FROM %I t WHERE NOT EXISTS (SELECT 1 FROM users u WHERE u.id = t.user_id))', tracked);
   END LOOP;
 END $$;
