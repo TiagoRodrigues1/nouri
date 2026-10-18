@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import { createSavedMeal, deleteSavedMeal, getSavedMeals, logSavedMeal, undoMealLog, updateSavedMeal, type FoodEntry, type SavedMeal } from "./api";
 import { useIdempotentDelete, useIdempotentWrite } from "./use-idempotent";
 import { queryRefresh } from "./query-refresh";
-import type { MealDaily, MealInput, MealLogInput, MealLogRef } from "../../../src/meals/contract";
+import type { MealDailyInput, MealInput, MealLogInput, MealLogRef } from "../../../src/meals/contract";
 import { dailyDays } from "./saved-meals";
 
 type PendingLog = { meal: SavedMeal; input: MealLogInput };
@@ -37,12 +37,12 @@ export function useSaveMeal(onSaved: () => void) {
 // The one-tap daily toggle: the meal sent back as it is, with only its daily setting changed.
 export function useMealDaily() {
   const write = useMealWrite(({ meal, input }) => (input.daily
-    ? `${input.name} will be logged ${dailyDays(input.daily.weekdays).phrase} at ${input.daily.time}.`
+    ? `${input.name} will be logged ${dailyDays(input.daily.weekdays).phrase} at ${input.daily.time}${input.daily.from === "tomorrow" ? " from tomorrow" : ""}.`
     : `${input.name} will no longer be logged ${meal?.daily ? dailyDays(meal.daily.weekdays).phrase : "every day"}.`));
 
   return {
     isPending: write.isPending,
-    set: (meal: SavedMeal, daily: MealDaily | null) => write.mutate({
+    set: (meal: SavedMeal, daily: MealDailyInput | null) => write.mutate({
       meal,
       input: { name: meal.name, items: meal.items.map(({ id, food }) => ({ id, amount: food.quantity.amount })), daily },
     }),

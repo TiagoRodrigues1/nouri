@@ -5,12 +5,13 @@ import { CookingPot, Plus } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Checkbox } from "../components/ui/checkbox";
+import { Popover, PopoverAnchor, PopoverContent, PopoverDescription, PopoverHeader, PopoverTitle } from "../components/ui/popover";
 import { TimePicker } from "../components/ui/time-picker";
-import { format, type ListedMeal, type SavedMeal } from "../lib/api";
+import { format, type ListedMeal } from "../lib/api";
 import { unitLabels } from "../lib/food-text";
 import { dailyDays, everyDay } from "../lib/saved-meals";
 import { totalNutrients } from "../../../src/food/contract";
-import { currentTime, recentDayLabel, timeZone } from "../lib/time";
+import { currentTime, localDate, recentDayLabel, timeZone } from "../lib/time";
 import { useMealDaily, useSavedMeals } from "../lib/use-saved-meals";
 import { Bone, Loading } from "../loading";
 import { queryFallback } from "../query-status";
@@ -111,11 +112,12 @@ function MealCard({ meal }: { meal: ListedMeal }) {
 }
 
 // Ticking it logs the meal on today and every later day at the time shown; the editor narrows it to some weekdays.
-// A daily meal's new time saves when the picker closes, keeping its weekdays. Unticking keeps the days already
-// filled.
-function DailyToggle({ meal }: { meal: SavedMeal }) {
+// When the meal is already on today's log, ticking asks whether to start today anyway or from tomorrow. A daily
+// meal's new time saves when the picker closes, keeping its weekdays. Unticking keeps the days already filled.
+function DailyToggle({ meal }: { meal: ListedMeal }) {
   const daily = useMealDaily();
   const [time, setTime] = useState(meal.daily?.time ?? "08:00");
+  const [asking, setAsking] = useState(false);
   const id = `daily-${meal.id}`;
   const days = dailyDays(meal.daily?.weekdays ?? everyDay);
 
@@ -123,29 +125,54 @@ function DailyToggle({ meal }: { meal: SavedMeal }) {
     if (meal.daily && next !== meal.daily.time) daily.set(meal, { ...meal.daily, time: next, timeZone });
   }
 
-  return (
-    <div {...stylex.props(styles.daily)}>
-      <Checkbox
-        id={id}
-        checked={meal.daily !== null}
-        disabled={daily.isPending}
-        aria-label={`Log ${meal.name} ${days.phrase}`}
-        onCheckedChange={(checked) => daily.set(meal, checked === true ? { time, timeZone, weekdays: everyDay } : null)}
-      />
-      <label htmlFor={id} {...stylex.props(styles.dailyLabel, meal.daily && styles.dailyOn)}>{days.label} at</label>
-      <TimePicker
-        id={`${id}-time`}
-        value={time}
-        onChange={setTime}
-        onClose={() => saveTime(time)}
-        onNow={() => {
-          const now = currentTime();
+  function start(from: "today" | "tomorrow") {
+    setAsking(false);
+    daily.set(meal, { time, timeZone, weekdays: everyDay, from });
+  }
 
-          setTime(now);
-          saveTime(now);
-        }}
-      />
-    </div>
+  function toggle(checked: boolean) {
+    if (!checked) daily.set(meal, null);
+    else if (meal.lastLogged === localDate(new Date())) setAsking(true);
+    else start("today");
+  }
+
+  return (
+    <Popover open={asking} onOpenChange={setAsking}>
+      <PopoverAnchor asChild>
+        <div {...stylex.props(styles.daily)}>
+          <Checkbox
+            id={id}
+            checked={meal.daily !== null}
+            disabled={daily.isPending}
+            aria-label={`Log ${meal.name} ${days.phrase}`}
+            onCheckedChange={(checked) => toggle(checked === true)}
+          />
+          <label htmlFor={id} {...stylex.props(styles.dailyLabel, meal.daily && styles.dailyOn)}>{days.label} at</label>
+          <TimePicker
+            id={`${id}-time`}
+            value={time}
+            onChange={setTime}
+            onClose={() => saveTime(time)}
+            onNow={() => {
+              const now = currentTime();
+
+              setTime(now);
+              saveTime(now);
+            }}
+          />
+        </div>
+      </PopoverAnchor>
+      <PopoverContent align="start">
+        <PopoverHeader>
+          <PopoverTitle>{meal.name} is already logged today</PopoverTitle>
+          <PopoverDescription>Start logging it every day from tomorrow, or add it to today again too.</PopoverDescription>
+        </PopoverHeader>
+        <div {...stylex.props(styles.startChoice)}>
+          <Button variant="outline" size="sm" onClick={() => start("today")}>Today too</Button>
+          <Button size="sm" onClick={() => start("tomorrow")}>From tomorrow</Button>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 

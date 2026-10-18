@@ -73,6 +73,7 @@ export const styles = stylex.create({
   daily: { display: "flex", alignItems: "center", gap: 8, fontSize: 13 },
   dailyLabel: { cursor: "pointer", userSelect: "none" },
   dailyOn: { color: colors.meals, fontWeight: 600 },
+  startChoice: { display: "flex", justifyContent: "flex-end", gap: 8 },
   empty: {
     display: "grid",
     justifyItems: "center",

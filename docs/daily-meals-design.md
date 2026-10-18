@@ -6,12 +6,13 @@ Some meals are eaten every day, such as the same breakfast. Logging a saved meal
 
 ## Usage (caller's view)
 
-On the Meals page, each meal's card and its editor have a daily checkbox and a time (see [meals-page-design.md](meals-page-design.md)). Ticking it fills today and every later day with the meal's foods at that time. The editor adds a row of weekday toggles, so a meal can log itself only Monday to Friday; the card's label names the days (**Every day at**, **Weekdays at**, **Mon, Wed, Fri at**). Unticking it stops future days, and days already filled keep their foods.
+On the Meals page, each meal's card and its editor have a daily checkbox and a time (see [meals-page-design.md](meals-page-design.md)). Ticking it fills today and every later day with the meal's foods at that time. When the meal is already on today's log, ticking asks first: **From tomorrow** or **Today too**. The editor adds a row of weekday toggles, so a meal can log itself only Monday to Friday; the card's label names the days (**Every day at**, **Weekdays at**, **Mon, Wed, Fri at**). Unticking it stops future days, and days already filled keep their foods.
 
 ```http
 POST /v1/saved-meals, PATCH /v1/saved-meals/<id>     the whole meal, as the editor saves it
 {"name":"Breakfast","items":[…],"daily":{"time":"08:00","timeZone":"Europe/Lisbon","weekdays":[1,2,3,4,5]}}   → SavedMeal (daily: {time, timeZone, weekdays})
 {"name":"Breakfast","items":[…],"daily":{"time":"08:00","timeZone":"Europe/Lisbon"}}   → weekdays [1..7], every day
+{"name":"Breakfast","items":[…],"daily":{"time":"08:00","timeZone":"Europe/Lisbon","from":"tomorrow"}}   → today is left as it is
 {"name":"Breakfast","items":[…],"daily":null}                                          → SavedMeal (daily: null)
 
 GET /v1/days/2026-10-08   → the meal's foods are ordinary entries at 08:00
@@ -19,7 +20,7 @@ GET /v1/days/2026-10-08   → the meal's foods are ordinary entries at 08:00
 
 ```ts
 const daily = useMealDaily();            // the card's toggle: the meal sent back with only `daily` changed
-daily.set(meal, checked ? { time, timeZone } : null);
+daily.set(meal, checked ? { time, timeZone, weekdays, from } : null);   // from: "today" | "tomorrow"
 ```
 
 ## Shape
@@ -28,7 +29,8 @@ daily.set(meal, checked ? { time, timeZone } : null);
 // src/meals/contract.ts
 mealDailySchema = { time: "HH:MM"; timeZone; weekdays: number[] }   // ISO 1 Monday to 7 Sunday, default all seven
 savedMealSchema += { daily: MealDaily | null }
-mealInputSchema += { daily: MealDaily | null }           // create and edit alike
+mealDailyInputSchema = mealDailySchema + { from?: "today" | "tomorrow" }   // a write's one-time start, never stored
+mealInputSchema += { daily: MealDailyInput | null }      // create and edit alike
 
 // src/meals/meals.ts
 dailyColumns(daily, stored)                               // the setting and, when turned on, the cursor
@@ -37,7 +39,7 @@ fillDailyMeals(db, userId): Promise<void>                 // logs every day due 
 
 `saved_meals` gains `daily_time`, `daily_time_zone`, `daily_weekdays`, and `daily_filled_through`. The last is a cursor: the latest local day already filled. `fillDailyMeals` reads the daily meals whose cursor is before today in their own zone. It locks them, inserts the meal's foods for each day after the cursor through today that falls on one of its weekdays with `insertFoods`, and advances the cursor through today, all in one transaction. The cursor moves past days not chosen too, so it always means "decided through", and changing the weekdays never fills or skips a day already passed. A day the person never opened is filled with the next read, so the week stays complete.
 
-Only turning a meal on moves the cursor: to the later of the cursor and yesterday, so today fills next and turning it off and on again the same day does not fill today twice. A meal already on keeps its cursor through any edit, including a new time or zone, so days not yet filled are never skipped. Turning it off clears the time and weekdays and keeps the cursor. The setting is part of the meal, written only by the meal's create and edit, so the card's toggle is an edit like any other: it bumps the revision and a stale one conflicts.
+Only turning a meal on moves the cursor: to the later of the cursor and yesterday, so today fills next and turning it off and on again the same day does not fill today twice. Turning it on with `from: "tomorrow"` moves it to today instead (see [From tomorrow](#from-tomorrow)). A meal already on keeps its cursor through any edit, including a new time or zone, so days not yet filled are never skipped. Turning it off clears the time and weekdays and keeps the cursor. The setting is part of the meal, written only by the meal's create and edit, so the card's toggle is an edit like any other: it bumps the revision and a stale one conflicts.
 
 The reads that show logged foods (`GET /v1/days/<date>`, `GET /v1/review/<date>`, and `GET /v1/foods/recent`) call `fillDailyMeals` first, from one route list in `src/app.ts`, so no day, week, or recent food appears before its daily meals are on it. Other reads never write. The MCP server sits outside `/v1`, so its `get_day` tool calls it itself. The call stays at the route layer because the food reads live in `src/food/food.ts`, which `src/meals/meals.ts` already imports for `insertFoods`. The fill costs one indexed query when nothing is due.
 
@@ -68,13 +70,32 @@ A is the base. From B it takes the rule that a filled day is never filled again,
 ## Tradeoffs accepted
 
 - Filling happens on read, so a GET can write. A scheduler would need its own catch-up after downtime, which is this same function.
-- Today fills as soon as the meal is turned on, even if that meal's time has passed or it was already logged by hand. Deleting the duplicate fixes it once.
+- Today fills as soon as the meal is turned on, even if that meal's time has passed, unless it starts tomorrow. The card asks only when the meal itself is on today's log; foods logged one by one go unnoticed there, and the editor's **Start tomorrow** covers them.
 - Edits to the meal apply from the next unfilled day. Today's foods, once filled, keep the amounts they had.
 - Days are counted in the zone saved with the setting. After travel, ticking the box again updates the zone.
 - Entries do not link back to their meal, as with logging a saved meal by hand.
 - New weekdays apply from the next unfilled day. Adding today's weekday after today was passed over leaves today empty; log the meal by hand.
 - Turning a meal off forgets its weekdays, as it forgets its time. Ticking the card again turns it on for every day.
 
-## Open questions
+## From tomorrow
 
-- Should turning it on offer "from tomorrow" for when today's meal is already logged?
+Turning a meal on fills today at once, so a breakfast already logged by hand shows up twice. A daily setting sent with a write can carry `from: "tomorrow"`. When the write turns the meal on, the cursor moves to today rather than yesterday, so the next fill is tomorrow. `from` is a one-time instruction, not part of the setting. It is not stored or returned, and a meal already on ignores it, as it ignores any change to its cursor. A start of today, or none, is fingerprinted as before, so saves retried from before `from` existed still replay.
+
+On the Meals card, ticking a meal whose `lastLogged` is today opens a popover anchored to the daily row: "Breakfast is already logged today", with **Today too** and **From tomorrow**. Other meals turn on at once, as before. Dismissing the popover leaves the meal off. The toast names the start: "Breakfast will be logged every day at 08:00 from tomorrow." When the editor is turning a meal on, it shows a **Start tomorrow** checkbox under the weekdays, and the hint below it says which day the fill starts. The checkbox starts ticked when the meal was logged today or is being made from today's foods (`/meals/new?date=<today>`), since in both cases its foods are already on today's log.
+
+```ts
+// src/meals/meals.ts
+dailyColumns(daily: MealDailyInput | null, stored)   // turning on: cursor = max(stored, from === "tomorrow" ? today : yesterday)
+```
+
+Shapes compared inline, since the arena runners were not available:
+
+- **A: a `from` start on the write** (chosen). It adds one optional field, changes one line of cursor logic, and lets the page decide when to ask.
+- **B: the server skips today on its own** when the meal has a kept log on today. It adds nothing to the interface, but the same tick would mean different things on different days without saying so. It also still misses foods logged one by one, and the person cannot choose today anyway.
+- **C: the toast after turning on offers "Skip today"**, which undoes today's fill as a meal log. It needs no server change, but the fill happens on the next read, so the page would have to find today's daily log by meal name and race the read that creates it.
+- **D: a start date** (`startsOn: "2026-10-20"`). It is more general, since it could also start next Monday, but it puts date math and zone questions on the page for a choice between two days.
+
+### Tradeoffs accepted
+
+- Turning a meal off and on again from today, after starting it tomorrow the same day, still leaves today empty. The cursor never moves back. Log the meal by hand.
+- The card asks only when the meal itself is on today's log, including logs that came from its own daily fills. For a meal turned off today after it filled, both answers leave today as it is.
