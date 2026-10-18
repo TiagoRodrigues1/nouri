@@ -10,7 +10,7 @@ This index is the maintained list of Nouri's user paths. Read the relevant file 
 - The header date is a shadcn date picker, not a text input. Choose the `Choose log date` button (`Choose the last day of the range` on Review), use `Go to the Previous Month` or `Go to the Next Month` if needed, then choose the day button, named like `Friday, September 25th, 2026`. To return to the current date, use the popover's `Today` button (match it exactly; the calendar's current day is named `Today, Friday, …`).
 - The chosen date sticks for the browser tab. The sidebar `Today` link opens My Day on that remembered date, not on today, so check the `h1` reads `Today` before a recipe that says to stay on today's date.
 - `+ Log` and `Ctrl+K` open the command palette, where every record is logged (see [command-palette.md](command-palette.md)). Its search is `getByRole("combobox")` and its choices are `option`s.
-- At 680px wide or narrower the sidebar becomes a top bar holding `+ Log`, the `Targets`, `Supplements`, `Wearables`, and theme (`Dark theme` or `Light theme`) icon buttons, and `Open user menu` (the account's name or address is hidden), and the page links move to a bottom tab bar. Names stay the same, so recipes that say "sidebar" work at phone width too.
+- At 680px wide or narrower the sidebar becomes a top bar holding `+ Log`, the `Targets`, `Supplements`, `Wearables`, `Assistants`, and theme (`Dark theme` or `Light theme`) icon buttons, and `Open user menu` (the account's name or address is hidden), and the page links move to a bottom tab bar. Names stay the same, so recipes that say "sidebar" work at phone width too.
 - Keep screenshots and redacted snapshots in `/tmp/nouri-verification-evidence/$RUN_ID`.
 
 ## Proof rules
@@ -47,3 +47,4 @@ This index is the maintained list of Nouri's user paths. Read the relevant file 
 - [Supplements](supplements.md): sidebar dialog edits the list from today, My Day checklist ticks and unticks intakes, earlier days keep their list.
 - [Targets](targets.md): sidebar dialog, save, pages reflect new targets, earlier days keep old ones, suggestions from a profile and goal direction.
 - [MCP server](mcp.md): `/mcp` refuses requests without an OAuth token and points clients at Clerk; the tools themselves need a registered OAuth client.
+- [Connected assistants](assistants.md): Assistants dialog in the sidebar and palette, empty state, listed assistants, disconnect.

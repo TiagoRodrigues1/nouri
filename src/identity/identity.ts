@@ -13,10 +13,22 @@ export type Authenticate = (request: Request) => Promise<string | null>;
 // A webhook Clerk sent: the Clerk user it deleted, null for any other event, or "forged" when the signature fails.
 export type ReadWebhook = (request: Request) => Promise<{ deletedUser: string | null } | "forged">;
 
-export type Identity = {
+// An assistant's request: the Clerk user who let it in, the OAuth client Clerk registered it as, and whether its
+// grant can be ended from Nouri. Clerk revokes only opaque access tokens; JWT access tokens live until they expire.
+export type Agent = { clerkUserId: string; clientId: string; revocable: boolean };
+
+// Clerk acts as the OAuth server for MCP clients such as Claude or ChatGPT.
+export type Agents = {
+  // Checks an OAuth access token Clerk issued to an MCP client on the person's consent.
+  authenticateAgent: (request: Request) => Promise<Agent | null>;
+  // The name the client registered with, such as "Claude"; null when Clerk has none or cannot be reached.
+  agentName: (clientId: string) => Promise<string | null>;
+  // Ends the grant a token belongs to, its refresh token included, so the client must ask the person again.
+  revokeAgent: (clientId: string, token: string) => Promise<void>;
+};
+
+export type Identity = Agents & {
   authenticate: Authenticate;
-  // OAuth access tokens Clerk issued to an MCP client such as Claude or ChatGPT, on the person's consent.
-  authenticateAgent: Authenticate;
   readWebhook: ReadWebhook;
   // Public; the page hands it to Clerk's browser SDK.
   publishableKey: string;
@@ -52,19 +64,37 @@ export function clerkAuthenticator(options: { keyFor: (kid: string) => string | 
   };
 }
 
-const agentAuth = z.object({ userId: z.string().min(1) });
+const agentAuth = z.object({ userId: z.string().min(1), clientId: z.string().min(1).max(200) });
 
-// Clerk acts as the OAuth server for MCP clients. Its access tokens are opaque, so each check asks Clerk's API.
-export function clerkAgentAuthenticator(options: { secretKey: string; publishableKey: string }): Authenticate {
+// Clerk's access tokens are opaque, so each check asks Clerk's API. Clerk names clients by their own id elsewhere,
+// so the client id is looked up among the instance's OAuth applications.
+export function clerkAgents(options: { secretKey: string; publishableKey: string }): Agents {
   const clerk = createClerkClient(options);
 
-  return async (request) => {
-    const header = request.headers.get("Authorization");
+  async function application(clientId: string) {
+    const { data } = await clerk.oauthApplications.list({ nameQuery: clientId, limit: 10 });
 
-    if (!header?.startsWith("Bearer ") || header.length > 16_384) return null;
-    const state = await clerk.authenticateRequest(request, { acceptsToken: "oauth_token" }).catch(() => null);
+    return data.find((candidate) => candidate.clientId === clientId) ?? null;
+  }
 
-    return state?.isAuthenticated ? agentAuth.safeParse(state.toAuth()).data?.userId ?? null : null;
+  return {
+    authenticateAgent: async (request) => {
+      const header = request.headers.get("Authorization");
+
+      if (!header?.startsWith("Bearer ") || header.length > 16_384) return null;
+      const state = await clerk.authenticateRequest(request, { acceptsToken: "oauth_token" }).catch(() => null);
+      const auth = state?.isAuthenticated ? agentAuth.safeParse(state.toAuth()).data : undefined;
+
+      // A JWT has three dot-separated parts; Clerk's opaque tokens have none.
+      return auth ? { clerkUserId: auth.userId, clientId: auth.clientId, revocable: header.split(".").length !== 3 } : null;
+    },
+    agentName: async (clientId) => (await application(clientId).catch(() => null))?.name ?? null,
+    revokeAgent: async (clientId, token) => {
+      const found = await application(clientId);
+
+      // A deleted application's grants went with it.
+      if (found) await clerk.oauthApplications.revokeToken({ oauthApplicationId: found.id, token });
+    },
   };
 }
 
@@ -108,7 +138,7 @@ export function identityFromEnv(env: Record<string, string | undefined>): Identi
 
   return {
     authenticate: clerkAuthenticator({ keyFor: settings.CLERK_JWT_KEY ? () => settings.CLERK_JWT_KEY : signingKeys(`${clerkFrontendOrigin(settings.CLERK_PUBLISHABLE_KEY)}/.well-known/jwks.json`), authorizedParties: settings.CLERK_AUTHORIZED_PARTIES }),
-    authenticateAgent: clerkAgentAuthenticator({ secretKey: settings.CLERK_SECRET_KEY, publishableKey: settings.CLERK_PUBLISHABLE_KEY }),
+    ...clerkAgents({ secretKey: settings.CLERK_SECRET_KEY, publishableKey: settings.CLERK_PUBLISHABLE_KEY }),
     readWebhook: signingSecret ? clerkWebhookReader(signingSecret) : async () => "forged",
     publishableKey: settings.CLERK_PUBLISHABLE_KEY,
   };

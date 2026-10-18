@@ -1,5 +1,6 @@
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { Hono } from "hono";
+import { admitAssistant } from "../assistants/assistants.js";
 import type { AppDatabase } from "../db/database.js";
 import { error } from "../http-error.js";
 import { clerkFrontendOrigin, userFor, type Identity } from "../identity/identity.js";
@@ -27,17 +28,20 @@ export function mcpRoutes(db: AppDatabase, identity: Identity, limitUser: (userI
   app.on(["GET", "DELETE"], "/mcp", () => new Response(null, { status: 405, headers: { Allow: "POST" } }));
 
   app.post("/mcp", async (context) => {
-    const clerkUserId = await identity.authenticateAgent(context.req.raw);
+    const agent = await identity.authenticateAgent(context.req.raw);
 
-    if (clerkUserId) {
-      const refused = limitUser(clerkUserId, "POST", "/mcp");
+    if (agent) {
+      const refused = limitUser(agent.clerkUserId, "POST", "/mcp");
 
       if (refused) return refused;
     }
 
-    const userId = clerkUserId && await userFor(db, clerkUserId);
+    const userId = agent && await userFor(db, agent.clerkUserId);
+    // A client the person disconnected from Nouri's page is refused like a bad token, so it asks them again.
+    const token = context.req.header("Authorization")?.slice("Bearer ".length) ?? "";
+    const admitted = agent && userId && await admitAssistant(db, identity, userId, agent, token);
 
-    if (!userId) {
+    if (!userId || !admitted) {
       const response = error(401, "Unauthorized");
 
       response.headers.set("WWW-Authenticate", `Bearer resource_metadata="${originOf(context.req.raw)}${metadataPath}"`);

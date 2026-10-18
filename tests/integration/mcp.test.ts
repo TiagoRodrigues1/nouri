@@ -57,7 +57,7 @@ void test("the MCP server signs in through Clerk OAuth and logs meals and workou
     const client = await connect(app);
     const { tools } = await client.listTools();
     assert.deepEqual(tools.map((tool) => tool.name).sort(), [
-      "delete_entry", "edit_food", "get_day", "list_saved_meals", "log_meal", "log_measurement", "log_saved_meal", "log_sleep", "log_water", "log_workout", "search_exercises", "search_foods", "take_supplements",
+      "change_supplement_stack", "change_targets", "delete_entry", "delete_saved_meal", "edit_entry", "edit_food", "edit_saved_meal", "get_day", "list_saved_meals", "log_meal", "log_measurement", "log_saved_meal", "log_sleep", "log_water", "log_workout", "save_meal", "search_exercises", "search_foods", "take_supplements",
     ]);
 
     const toast = { name: "Wholemeal toast", amount: 35, unit: "g", nutrients: { kcal: 85, proteinG: 4, carbsG: 15, fatG: null } };

@@ -2,9 +2,9 @@ import { randomUUID } from "node:crypto";
 import { and, between, desc, eq, gte, isNull, lte } from "drizzle-orm";
 import { bodyMeasurements } from "../db/schema.js";
 import type { AppDatabase } from "../db/database.js";
-import type { RecordKind } from "../journal/records.js";
+import { recordEdit, type RecordKind } from "../journal/records.js";
 import { localDate, shiftDate } from "../time.js";
-import { measurementKinds, measurementSchema } from "./contract.js";
+import { measurementInputSchema, measurementKinds, measurementSchema } from "./contract.js";
 import type { Measurement, MeasurementInput, MeasurementSummary } from "./contract.js";
 
 type MeasurementRow = typeof bodyMeasurements.$inferSelect;
@@ -23,21 +23,30 @@ function measurement(row: MeasurementRow): Measurement {
   };
 }
 
+// The row values an input sets, on create and edit alike.
+function values(input: MeasurementInput) {
+  return {
+    occurredAt: new Date(input.occurredAt),
+    timeZone: input.timeZone,
+    localDate: localDate(input.occurredAt, input.timeZone),
+    kind: input.kind,
+    valueMilli: Math.round(input.value * 1000),
+  };
+}
+
 export const measurementRecords: RecordKind<MeasurementInput, Measurement> = {
   name: "measurement",
   label: "Measurement",
   table: bodyMeasurements,
   schema: measurementSchema,
+  edit: recordEdit(bodyMeasurements, {
+    input: measurementInputSchema,
+    inputOf: ({ occurredAt, timeZone, kind, value }) => ({ occurredAt, timeZone, kind, value }),
+    entry: measurement,
+    values: async (_tx, _userId, input) => values(input),
+  }),
   create: async (tx, userId, input) => {
-    const [row] = await tx.insert(bodyMeasurements).values({
-      id: randomUUID(),
-      userId,
-      occurredAt: new Date(input.occurredAt),
-      timeZone: input.timeZone,
-      localDate: localDate(input.occurredAt, input.timeZone),
-      kind: input.kind,
-      valueMilli: Math.round(input.value * 1000),
-    }).returning();
+    const [row] = await tx.insert(bodyMeasurements).values({ id: randomUUID(), userId, ...values(input) }).returning();
 
     if (!row) throw new Error("Measurement insert returned no row");
 

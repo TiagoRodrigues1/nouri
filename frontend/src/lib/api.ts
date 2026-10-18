@@ -27,10 +27,14 @@ import type { ListedMeal, MealInput, MealLogInput, SavedMeal } from "../../../sr
 import { authorizationSchema, callbackResults, connectionStatusSchema, importKindNames, importKinds, disconnectResultSchema, syncResultSchema } from "../../../src/wearables/contract";
 import type { ConnectionStatus, DisconnectResult, SyncResult, WearableProvider } from "../../../src/wearables/contract";
 import type { Overview } from "../../../src/overview/contract";
+import { assistantListSchema } from "../../../src/assistants/contract";
+import type { Assistant } from "../../../src/assistants/contract";
 
 export { callbackResults, importKindNames, importKinds };
 
 export type { CardId, Dashboard } from "../../../src/dashboard/contract";
+
+export type { Assistant } from "../../../src/assistants/contract";
 
 export type { Day } from "../../../src/days/contract";
 
@@ -304,6 +308,15 @@ export async function syncConnection(provider: WearableProvider): Promise<SyncRe
 
 export async function disconnectConnection(provider: WearableProvider): Promise<DisconnectResult> {
   return request(`/v1/integrations/${provider}`, disconnectResultSchema, { method: "DELETE" });
+}
+
+export async function getAssistants(): Promise<Assistant[]> {
+  return (await request("/v1/assistants", assistantListSchema)).assistants;
+}
+
+// Disconnecting is safe to repeat, so it takes no Idempotency-Key.
+export async function disconnectAssistant(clientId: string): Promise<void> {
+  await request(`/v1/assistants/${encodeURIComponent(clientId)}`, z.null(), { method: "DELETE" });
 }
 
 export async function getDashboard(): Promise<Dashboard> {

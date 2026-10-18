@@ -2,9 +2,9 @@ import { randomUUID } from "node:crypto";
 import { and, between, count, eq, isNull, sum } from "drizzle-orm";
 import { waterEntries } from "../db/schema.js";
 import type { AppDatabase } from "../db/database.js";
-import type { RecordKind } from "../journal/records.js";
+import { recordEdit, type RecordKind } from "../journal/records.js";
 import { localDate } from "../time.js";
-import { waterEntrySchema } from "./contract.js";
+import { waterEntrySchema, waterInputSchema } from "./contract.js";
 import type { WaterDay, WaterEntry, WaterInput } from "./contract.js";
 
 type WaterRow = typeof waterEntries.$inferSelect;
@@ -20,17 +20,24 @@ function entry(row: WaterRow): WaterEntry {
   };
 }
 
+// The row values an input sets, on create and edit alike.
+function values(input: WaterInput) {
+  return { occurredAt: new Date(input.occurredAt), timeZone: input.timeZone, localDate: localDate(input.occurredAt, input.timeZone), volumeMl: input.volumeMl };
+}
+
 export const waterRecords: RecordKind<WaterInput, WaterEntry> = {
   name: "water",
   label: "Water entry",
   table: waterEntries,
   schema: waterEntrySchema,
+  edit: recordEdit(waterEntries, {
+    input: waterInputSchema,
+    inputOf: ({ occurredAt, timeZone, volumeMl }) => ({ occurredAt, timeZone, volumeMl }),
+    entry,
+    values: async (_tx, _userId, input) => values(input),
+  }),
   create: async (tx, userId, input) => {
-    const [row] = await tx.insert(waterEntries).values({
-      id: randomUUID(), userId, occurredAt: new Date(input.occurredAt),
-      timeZone: input.timeZone, localDate: localDate(input.occurredAt, input.timeZone),
-      volumeMl: input.volumeMl,
-    }).returning();
+    const [row] = await tx.insert(waterEntries).values({ id: randomUUID(), userId, ...values(input) }).returning();
 
     if (!row) throw new Error("Water insert returned no row");
 
