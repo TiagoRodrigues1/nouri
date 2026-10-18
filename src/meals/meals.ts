@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { and, desc, eq, inArray, isNotNull, isNull, max, sql } from "drizzle-orm";
 import type { AppDatabase, Transaction } from "../db/database.js";
-import { mealLogs, savedMeals } from "../db/schema.js";
+import { foodEntries, mealLogs, savedMeals } from "../db/schema.js";
 import { deleteMealFoods, foodSources, insertFoods } from "../food/food.js";
 import { softDelete } from "../journal/records.js";
 import { requestHash, withReceipt } from "../journal/receipt.js";
@@ -141,19 +141,26 @@ async function editMeal(tx: Transaction, userId: string, id: string, revision: n
 }
 
 // Meals most recently used first: logged by hand and not removed since, or else saved. Daily fills are logged for
-// the person, so they never move a meal up.
+// the person, so they never move a meal up, but they do count as the last day the meal is on.
 export async function listMeals(db: AppDatabase, userId: string): Promise<SavedMealList> {
-  const lastLogged = db.select({ mealId: mealLogs.savedMealId, at: max(mealLogs.createdAt).as("at") }).from(mealLogs)
+  const lastUsed = db.select({ mealId: mealLogs.savedMealId, at: max(mealLogs.createdAt).as("at") }).from(mealLogs)
     .where(and(eq(mealLogs.userId, userId), isNull(mealLogs.deletedAt), eq(mealLogs.daily, false)))
-    .groupBy(mealLogs.savedMealId).as("last_logged");
+    .groupBy(mealLogs.savedMealId).as("last_used");
 
-  const rows = await db.select({ meal: savedMeals }).from(savedMeals)
-    .leftJoin(lastLogged, eq(lastLogged.mealId, savedMeals.id))
+  // A log whose foods were all removed one by one is on no day.
+  const lastDay = db.select({ mealId: mealLogs.savedMealId, day: max(foodEntries.localDate).as("day") }).from(mealLogs)
+    .innerJoin(foodEntries, and(eq(foodEntries.mealLogId, mealLogs.id), isNull(foodEntries.deletedAt)))
+    .where(and(eq(mealLogs.userId, userId), isNull(mealLogs.deletedAt)))
+    .groupBy(mealLogs.savedMealId).as("last_day");
+
+  const rows = await db.select({ meal: savedMeals, lastLogged: lastDay.day }).from(savedMeals)
+    .leftJoin(lastUsed, eq(lastUsed.mealId, savedMeals.id))
+    .leftJoin(lastDay, eq(lastDay.mealId, savedMeals.id))
     .where(and(eq(savedMeals.userId, userId), isNull(savedMeals.deletedAt)))
     // greatest skips the null of a meal never logged.
-    .orderBy(desc(sql`greatest(${lastLogged.at}, ${savedMeals.createdAt})`), savedMeals.id);
+    .orderBy(desc(sql`greatest(${lastUsed.at}, ${savedMeals.createdAt})`), savedMeals.id);
 
-  return { meals: rows.map((row) => meal(row.meal)) };
+  return { meals: rows.map((row) => ({ ...meal(row.meal), lastLogged: row.lastLogged })) };
 }
 
 // Saving copies each food, so later edits to a logged day or the catalog never change the meal.

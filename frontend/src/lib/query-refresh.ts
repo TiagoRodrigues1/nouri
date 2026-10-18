@@ -2,7 +2,8 @@ import { recordPaths } from "../../../src/journal/paths";
 
 // A record kind owns the list of reads that include it.
 export const queryRefresh = {
-  food: ["day", "overview", "review", "recent-foods"],
+  // Saved meals list the last day each is on, which a food edit or removal can move.
+  food: ["day", "overview", "review", "recent-foods", "saved-meals"],
   water: ["day", "overview", "review"],
   workout: ["overview", "review", "workout-summary", "exercise-history", "exercise-library"],
   exercises: ["exercise-library"],

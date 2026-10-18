@@ -274,10 +274,15 @@ export function nouriMcpServer(db: AppDatabase, userId: string): McpServer {
 
   server.registerTool("list_saved_meals", {
     title: "List saved meals",
-    description: "The person's saved meals, most recently logged or saved first, each with its items and the amounts they were saved at.",
+    description: "The person's saved meals, most recently logged or saved first, each with its items, the amounts they were saved at, and the last day it was logged on.",
     inputSchema: {},
     annotations: { readOnlyHint: true },
-  }, async () => text(await listMeals(db, userId)));
+  }, async () => {
+    // The last day a daily meal is on counts today's fill.
+    await fillDailyMeals(db, userId);
+
+    return text(await listMeals(db, userId));
+  });
 
   server.registerTool("log_saved_meal", {
     title: "Log a saved meal",

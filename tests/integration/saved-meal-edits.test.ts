@@ -48,7 +48,7 @@ void test("editing a saved meal renames it and re-amounts or removes items witho
     assert.equal(light.name, "Light breakfast");
     assert.equal(light.revision, 3);
     assert.deepEqual(light.items, [{ id: oatsItem.id, food: oats.food }]);
-    assert.deepEqual((await (await app.request("/v1/saved-meals", { headers })).json()).meals, [light]);
+    assert.deepEqual((await (await app.request("/v1/saved-meals", { headers })).json()).meals, [{ ...light, lastLogged: null }]);
 
     // A stale revision, an item the meal lacks, no items, or an amount past the limits changes nothing.
     // An invalid item keeps no receipt, so the key works once the request is fixed.

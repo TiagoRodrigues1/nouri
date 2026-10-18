@@ -114,4 +114,22 @@ A is the base. It adds one noun, one endpoint, and one nullable column, and rece
 
 ## Open questions and risks
 
-- Should the Meals page show "Last logged …" on each card now that the server knows it?
+- Resolved: each Meals card reads "Last logged today", "yesterday", or "Sep 28". See [Last logged on a card](#last-logged-on-a-card).
+
+## Last logged on a card
+
+```http
+GET /v1/saved-meals → {"meals":[{…, "lastLogged":"2026-10-16"}, {…, "lastLogged":null}]}
+```
+
+```ts
+// src/meals/contract.ts: only the list carries it, so create, edit, and their receipts are unchanged
+listedMealSchema = savedMealSchema.extend({ lastLogged: z.iso.date().nullable() });
+
+// frontend/src/lib/time.ts: shared with recent foods' "last eaten"
+function recentDayLabel(value: string): string;   // "today" | "yesterday" | "Sep 28"
+```
+
+`lastLogged` is the latest day the meal is on: the greatest `local_date` among the active entries of its kept logs. It matches recent foods' `lastEaten`. A meal logged for last Monday reads "Sep 28", even though it was logged today. Daily fills count here, because a daily breakfast really is on every day, but they still do not change the ranking. A log whose foods were all removed one at a time is on no day. A meal with no logs shows no line, not "Never logged", because meals logged before meal logs existed have none.
+
+The value lives on the list only. Adding it to `savedMealSchema` would make create and edit look up logs and would freeze a stale value into their receipts. The list is the only reader that shows it.
