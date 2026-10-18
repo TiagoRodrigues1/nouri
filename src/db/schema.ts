@@ -291,3 +291,15 @@ export const erasedUsers = pgTable("erased_users", {
   clerkUserId: text("clerk_user_id").primaryKey(),
   erasedAt: timestamp("erased_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// The assistants (MCP clients such as Claude or ChatGPT) a person has let in, by Clerk's OAuth client id, so the
+// page can list and disconnect them. Clerk keeps the grants but cannot list one person's, so Nouri notes each
+// client on its first call. A disconnected client keeps its row until its next call ends the grant at Clerk.
+export const assistantConnections = pgTable("assistant_connections", {
+  userId: ownerColumn(),
+  clientId: text("client_id").notNull(),
+  name: text("name"),
+  connectedAt: timestamp("connected_at", { withTimezone: true }).notNull().defaultNow(),
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }).notNull().defaultNow(),
+  disconnectedAt: timestamp("disconnected_at", { withTimezone: true }),
+}, (table) => [primaryKey({ columns: [table.userId, table.clientId] })]);

@@ -4,11 +4,11 @@
 
 Logging a meal means opening the page, searching, and picking amounts. Typing "two eggs and toast at 8, then 40 minutes of squats and bench" into ChatGPT or Claude is faster, and those assistants can already estimate nutrients. Both connect to remote [MCP](https://modelcontextprotocol.io) servers over Streamable HTTP and sign in with OAuth 2.1. They discover the authorization server through [protected resource metadata (RFC 9728)](https://datatracker.ietf.org/doc/html/rfc9728) and register themselves with dynamic client registration. Neither accepts a pasted API key in its web app. Nouri's REST API only accepts Clerk session tokens minted for the web app's origins, so an assistant cannot use it.
 
-The server should be small. It logs what the web app logs (meals, saved meals, workouts, water, supplements, sleep, and body measurements), fixes a logged food, reads a day back so the assistant can check its work and answer "how much protein is left", and removes an entry the assistant got wrong.
+The server should be small. It logs what the web app logs (meals, saved meals, workouts, water, supplements, sleep, and body measurements), fixes any logged entry, changes the settings behind them (the supplement stack, targets, and saved meals), reads a day back so the assistant can check its work and answer "how much protein is left", and removes an entry the assistant got wrong. The person can see which assistants they let in and disconnect one from Nouri's own page.
 
 ## Usage (caller's view)
 
-The person adds `https://<nouri host>/mcp` as a custom connector in Claude or ChatGPT. The assistant opens Clerk's consent page; the person signs in with their Nouri account and approves. The assistant then sees twelve tools.
+The person adds `https://<nouri host>/mcp` as a custom connector in Claude or ChatGPT. The assistant opens Clerk's consent page; the person signs in with their Nouri account and approves. The assistant then sees nineteen tools.
 
 ```ts
 // "Two eggs and a slice of toast at 8."
@@ -45,6 +45,19 @@ log_saved_meal({ mealId, items: [{ id: oatsItemId, amount: 40 }] })   // items l
 // "That was 120 g, at 9:15."
 edit_food({ id, amount: 120, time: "09:15" })   // nutrients scale with the amount; the date and zone stay the entry's
 
+// "Actually it was 750 ml, and I woke at 7:40."
+edit_entry({ kind: "water", id, volumeMl: 750 })
+edit_entry({ kind: "sleep", id, wakeTime: "07:40" })   // only the kind's own fields; the id and zone stay
+
+// "Add magnesium 400 mg to my stack from today, drop zinc." / "Make my protein target 150 g."
+change_supplement_stack({ add: [{ name: "Magnesium", kind: "mineral", dose: { amount: 400, unit: "mg" } }], remove: [zincId] })
+change_targets({ proteinG: 150 })                      // targets left out keep their value
+
+// "Save this breakfast, and have it log itself on weekdays at 7:30." / "Swap the milk for an apple."
+save_meal({ name: "Breakfast", items: [{ entryId: oatsId, amount: 60 }, milk], daily: { time: "07:30", weekdays: [1, 2, 3, 4, 5], from: "tomorrow" } })  // today is already logged
+edit_saved_meal({ mealId, remove: [milkItemId], add: [{ ref: appleRef, grams: 150 }] })
+delete_saved_meal({ mealId })                          // foods already logged from it stay
+
 get_day({})                              // today: food, water, supplements, workouts, sleep, measurements, targets
 delete_entry({ kind: "water", id })      // food, workout, water, supplement, sleep, or measurement
 ```
@@ -61,6 +74,11 @@ src/food/food.ts    logFoods(db, userId, when, items)   (atomic multi-food inser
                     editFood(db, userId, id, edit)      (wall-clock edit against the stored row)
 src/supplements/supplements.ts
                     takeSupplements(db, userId, when, ids)   (atomic multi-intake insert)
+src/journal/records.ts
+                    editRecord(db, userId, kind, id, change)   (in-place edit of any kind with an `edit`)
+                    recordEdit(table, { input, inputOf, entry, values })
+src/assistants/assistants.ts
+                    admitAssistant, listAssistants, disconnectAssistant
 src/time.ts         instantAt(date, time, zone)          (wall clock → ISO instant)
                     localTime(instant, zone)             (ISO instant → wall clock)
 src/identity/identity.ts
@@ -70,8 +88,10 @@ src/identity/identity.ts
 ```ts
 // identity.ts — the only module that knows about Clerk.
 export type Identity = {
-  authenticate: Authenticate;       // web app session tokens
-  authenticateAgent: Authenticate;  // OAuth access tokens Clerk issued to an MCP client
+  authenticate: Authenticate;                                       // web app session tokens
+  authenticateAgent: (request) => Promise<{ clerkUserId; clientId } | null>;  // OAuth access tokens Clerk issued to an MCP client
+  agentName: (clientId) => Promise<string | null>;                  // "Claude", from the instance's OAuth applications
+  revokeAgent: (clientId, token) => Promise<void>;                  // ends the grant the token belongs to
   publishableKey: string;
 };
 
@@ -98,6 +118,14 @@ export async function editFood(db: AppDatabase, userId: string, id: string, edit
 export async function takeSupplements(db: AppDatabase, userId: string, when: { occurredAt: string; timeZone: string }, supplementIds: string[]):
   Promise<{ outcome: "created"; entries: SupplementIntake[] } | { outcome: "unknown-reference"; message: string }>;
 
+// records.ts — kinds that can change in place carry an `edit`; imported rows (outside `deletable`) cannot.
+export type RecordEdit<Input, Entry> = { input: z.ZodType<Input>; inputOf(entry): Input; lock(tx, userId, id, scope); update(tx, userId, id, input) };
+export async function editRecord<Input, Entry>(db, userId, kind: RecordKind<Input, Entry>, id, change: (current: Input) => Input):
+  Promise<{ outcome: "updated"; entry: Entry } | { outcome: "missing" | "imported" } | { outcome: "invalid" | "unknown-reference"; message: string }>;
+
+// assistants.ts — false refuses the call; a disconnected client's token ends its grant at Clerk.
+export async function admitAssistant(db, agents, userId, clientId, token): Promise<boolean>;
+
 // time.ts
 export function instantAt(date: string, time: string, zone: string): string;
 export function localTime(instant: string, zone: string): string;
@@ -106,6 +134,10 @@ export function localTime(instant: string, zone: string): string;
 `/mcp` sits outside `/v1/*`, so the session-token and `Idempotency-Key` middleware do not apply. Writes reuse the journal's own operations. `logFoods` calls `insertFoods` in one transaction. `log_saved_meal` calls `logMeal`. `log_workout`, `log_water`, `log_sleep`, and `log_measurement` parse with the REST input schema and call `mutateRecord`, so range and length checks answer the assistant in words. `edit_food` locks the row, applies the change on the entry's own wall clock, and updates it at the revision it read. `delete_entry` looks the kind up in a table of `RecordKind`s, reads the current revision, and deletes through `mutateRecord`, or `mutateFood` for food; a kind with a `deletable` filter is one whose imported rows it refuses. A meal, a saved meal, and a set of supplements are each atomic: one unknown catalog food, saved item, or off-stack supplement fails the whole call and logs nothing.
 
 `get_day` returns `getDay` (food, water, supplements) with workouts, sleep, the measurement summary, and targets for the day.
+
+`edit_entry` rebuilds the record's create input from the stored row, applies the change on the entry's own wall clock and zone, parses it with the REST input schema, and rewrites the row in place under a lock, bumping its revision. Each kind's `values(input)` is shared by its create and its edit, so the two cannot disagree; a supplement intake moved to another day takes that day's stack, as logging it there would. `change_supplement_stack` and `change_targets` read the value in force on the date, apply the change, and save it with `saveDated` from that date. `save_meal`, `edit_saved_meal`, and `delete_saved_meal` build the REST `MealInput` (an edit lists the kept items by id with their amounts) and call `mutateMeal` at the revision `listMeals` returns.
+
+Every `/mcp` call goes through `admitAssistant` after its token is checked. A client's first call adds an `assistant_connections` row named from Clerk. `DELETE /v1/assistants/:clientId` marks the row disconnected; the client's next call hands its token to Clerk's `revokeToken`, which ends that grant's access and refresh tokens, deletes the row, and is answered 401 with the resource metadata, so the client asks the person again.
 
 ## Synthesis decision
 
@@ -127,6 +159,23 @@ The second version added seven tools to these five. Three surfaces were compared
 2. **One `log_entry({ kind, ... })` tool** with a union of per-kind inputs. Fewer names, but not a smaller interface: the assistant learns the same fields behind a `kind` switch, the descriptions blur together, and MCP clients render a top-level union poorly. Its registry idea survives inside `delete_entry`.
 3. **`edit_entry` for every kind**, as a delete and a re-log in one transaction. Journal records other than food are never updated, so this would change ids and hide a rule the rest of the app keeps. For those kinds the assistant still deletes and logs again.
 
+The third version took the settings and edits the second left out. Two shapes were compared for each part.
+
+Edits:
+
+1. **One `edit_entry` tool, changing rows in place** (chosen). Workouts, water, intakes, sleep, and measurements gain an `edit` on their `RecordKind`, built by `recordEdit` from the same row values their create uses, and `editRecord` locks, rebuilds, re-parses, and rewrites. The id stays, so get_day, links, and anything holding the id keep working, and the REST schemas still guard every value. A flat schema of optional per-kind fields renders well in MCP clients; a field that does not belong to the kind is refused by name. Food keeps `edit_food`, whose amount scaling and nutrient rules differ.
+2. **Delete and log again in one transaction** (rejected in the second version, rejected again). Simpler, but the id changes under the assistant, and for intakes and imported rows the rules would leak into the tool.
+
+Stack, targets, and saved meals:
+
+1. **Change tools that take a patch** (chosen): `add`, `change`, and `remove` by id for the stack; only the targets to change; `add`, `remove`, `amounts`, and `daily` for a saved meal. The assistant never resends what it means to keep, which is where a model drops an item.
+2. **Whole replacements, as REST takes them**: `save_supplement_stack({ supplements })`, `save_targets({ ...all twelve })`. A smaller server, but every change becomes "read, copy every field back, change one", and a dropped supplement silently loses its ticks' place on the list.
+
+Disconnecting an assistant:
+
+1. **Nouri notes each client and ends its grant on its next call** (chosen). Clerk cannot list one person's grants and can revoke one only given a token from it, so Nouri keeps the client ids it has seen and, after a disconnect, revokes with the next token the client presents. The page shows the disconnect at once; the assistant is refused from then on.
+2. **Refuse disconnected clients forever, without Clerk.** No Clerk call, but the grant stays alive at Clerk, and letting the same client in again would need its own undo on Nouri's page.
+
 ## Tradeoffs accepted
 
 - Clerk OAuth access tokens are opaque by default and verified with a Clerk API call, so each MCP request costs one round trip to Clerk. Tool calls are infrequent; switching the OAuth application to JWT access tokens would make verification local.
@@ -137,6 +186,10 @@ The second version added seven tools to these five. Three surfaces were compared
 - `log_saved_meal` without items reads every saved meal to find the one asked for. A person has a handful.
 - `edit_food` and `take_supplements`, like `logFoods`, keep no idempotency receipt; each tool call is one attempt.
 - `get_day` returns the 30-day weight history inside the measurement summary. That is a few hundred bytes the assistant can use or skip.
+- `edit_entry`, like `edit_food`, keeps no receipt and needs no revision: it locks the row, so each call is one attempt at what is stored now.
+- Disconnecting waits for the client's next call to end its grant at Clerk. A client that never calls again keeps a live grant at Clerk, but Nouri refuses it whenever it does. If the person lets the same client in again before its next call, that call ends the new grant too, and the client asks once more.
+- Each new client costs one Clerk API call to look up its name; the name is not refreshed later.
+- `change_targets` on a person who never saved targets saves the defaults alongside the change, as the targets dialog does.
 - The connector needs a public HTTPS origin. Locally, use a tunnel and set `NOURI_PUBLIC_URL` to it.
 
 ## Setup
@@ -145,6 +198,5 @@ In the Clerk dashboard, open **Configure → OAuth applications** and turn on **
 
 ## Not in this version
 
-- Editing anything but food. The assistant deletes and logs again.
-- Changing the supplement stack, targets, or saved meals themselves, and exercise history.
-- Revoking a connector from Nouri's own page. Clerk's user profile lists and revokes OAuth grants.
+- Custom exercises and workout routines. Exercise history follows the workouts, which `edit_entry` changes.
+- Editing or removing imported workouts and sleep. Their provider owns them.

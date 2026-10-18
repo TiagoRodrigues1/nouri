@@ -24,10 +24,17 @@ export function createHarness(wearables?: WearableRuntime) {
   const webhookSignature = "test-webhook-signature";
   const db = drizzle(client);
 
-  // Stands in for Clerk: the test tokens sign in as whichever Clerk user the app was built for.
+  // Grants Clerk has ended, by the token the test sent. Clearing it stands in for the person letting the client in again.
+  const revokedAgentTokens = new Set<string>();
+
+  // Stands in for Clerk: the test tokens sign in as whichever Clerk user the app was built for, through one OAuth client.
   const identity = (clerkUserId: string) => ({
     authenticate: async (request: Request) => request.headers.get("Authorization") === `Bearer ${token}` ? clerkUserId : null,
-    authenticateAgent: async (request: Request) => request.headers.get("Authorization") === `Bearer ${agentToken}` ? clerkUserId : null,
+    authenticateAgent: async (request: Request) => request.headers.get("Authorization") === `Bearer ${agentToken}` && !revokedAgentTokens.has(agentToken) ? { clerkUserId, clientId: "client_claude" } : null,
+    agentName: async (clientId: string) => clientId === "client_claude" ? "Claude" : null,
+    revokeAgent: async (_clientId: string, revoked: string) => {
+      revokedAgentTokens.add(revoked);
+    },
     // Stands in for Clerk's signed webhook: the test signature passes, and a user.deleted body names the user.
     readWebhook: async (request: Request) => {
       if (request.headers.get("Webhook-Signature") !== webhookSignature) return "forged" as const;
@@ -45,7 +52,7 @@ export function createHarness(wearables?: WearableRuntime) {
   const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
 
   return {
-    app, otherApp, client, db, token, agentToken, webhookSignature, userId, otherUserId, headers, products,
+    app, otherApp, client, db, token, agentToken, revokedAgentTokens, webhookSignature, userId, otherUserId, headers, products,
     signedInAs: (clerkUserId: string) => createApp(db, identity(clerkUserId), packagedFoods, wearables),
     setup: async () => {
       await admin.unsafe(`CREATE SCHEMA "${schema}"`);

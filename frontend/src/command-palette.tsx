@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import {
   ArrowLeft,
   BookOpen,
+  Bot,
   Check,
   ChevronRight,
   CalendarRange,
@@ -77,7 +78,7 @@ type Step =
 // Records that keep their full forms, which the palette opens.
 export type PaletteRecord = "sleep" | "workout";
 
-export type PaletteSetting = "targets" | "supplements" | "wearables";
+export type PaletteSetting = "targets" | "supplements" | "wearables" | "assistants";
 
 type CommandPaletteProps = {
   open: boolean;
@@ -101,6 +102,7 @@ const settings = [
   { setting: "targets", label: "Targets", icon: Target },
   { setting: "supplements", label: "Supplements", icon: Pill },
   { setting: "wearables", label: "Wearables", icon: Watch },
+  { setting: "assistants", label: "Assistants", icon: Bot },
 ] as const;
 
 const waterPresets = [

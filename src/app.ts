@@ -6,6 +6,8 @@ import { requestPolicy } from "./request-policy.js";
 import { compress } from "hono/compress";
 import { z } from "zod";
 import { eraseAccount, exportAccount } from "./account/account.js";
+import { disconnectAssistant, listAssistants } from "./assistants/assistants.js";
+import { assistantListSchema } from "./assistants/contract.js";
 import { customExerciseInputSchema, customExerciseSchema, exerciseLibrarySchema } from "./exercises/contract.js";
 import { getExerciseLibrary, mutateCustomExercise } from "./exercises/exercises.js";
 import { dashboardSchema } from "./dashboard/contract.js";
@@ -183,8 +185,8 @@ export function createApp(db: AppDatabase, identity: Identity, packagedFoods: Pa
   });
 
   app.use("/v1/*", async (context, next) => {
-    // Connecting, syncing, and disconnecting are safe to repeat, so integrations take no Idempotency-Key.
-    if (!["POST", "PATCH", "DELETE"].includes(context.req.method) || context.req.path.startsWith("/v1/integrations/")) return next();
+    // Connecting, syncing, and disconnecting are safe to repeat, so integrations and assistants take no Idempotency-Key.
+    if (!["POST", "PATCH", "DELETE"].includes(context.req.method) || ["/v1/integrations/", "/v1/assistants/"].some((path) => context.req.path.startsWith(path))) return next();
     const key = idempotencyKeySchema.safeParse(context.req.header("Idempotency-Key"));
 
     if (!key.success) return error(400, "Idempotency-Key required");
@@ -453,6 +455,19 @@ export function createApp(db: AppDatabase, identity: Identity, packagedFoods: Pa
     return context.json(await getReview(db, context.get("userId"), date.data, days.data));
   });
   app.openAPIRegistry.registerPath({ method: "get", path: "/v1/review/{date}", request: { params: z.object({ date: z.iso.date() }), query: z.object({ days: reviewRangeSchema.optional() }) }, responses: { 200: { description: "Calories, protein, workouts, sleep, and weight for the local days ending on the date (seven unless `days` asks for 14, 30, or 90), with null for unrecorded days", ...json(reviewSchema) }, 400: failure("Invalid date or range") } });
+
+  app.get("/v1/assistants", async (context) => context.json(await listAssistants(db, context.get("userId"))));
+  app.openAPIRegistry.registerPath({ method: "get", path: "/v1/assistants", responses: { 200: { description: "Assistants such as Claude or ChatGPT let in through Clerk's consent page, most recently used first", ...json(assistantListSchema) } } });
+
+  // Refuses the assistant from now on; Clerk ends its grant on its next call. Safe to repeat without an idempotency key.
+  app.delete("/v1/assistants/:clientId", async (context) => {
+    const clientId = z.string().min(1).max(200).safeParse(context.req.param("clientId"));
+
+    if (!clientId.success || !await disconnectAssistant(db, context.get("userId"), clientId.data)) return error(404, "Assistant not found");
+
+    return context.body(null, 204);
+  });
+  app.openAPIRegistry.registerPath({ method: "delete", path: "/v1/assistants/{clientId}", request: { params: z.object({ clientId: z.string() }) }, responses: { 204: { description: "Disconnected. Its next call ends its grant at Clerk and is refused, so it must ask again." }, 404: failure("Assistant not found or already disconnected") } });
 
   app.get("/v1/dashboard", async (context) => context.json(await getDashboard(db, context.get("userId"))));
   app.openAPIRegistry.registerPath({ method: "get", path: "/v1/dashboard", responses: { 200: { description: "Cards shown on the My Day page, in display order; defaults until the user saves a layout", ...json(dashboardSchema) } } });
