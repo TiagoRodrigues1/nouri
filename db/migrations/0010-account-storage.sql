@@ -22,14 +22,20 @@ CREATE FUNCTION track_account_storage() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
   stored bigint;
 BEGIN
-  -- Only an update; a deleted person's ledger row is gone already or going with them.
+  -- Only an update; a deleted person's ledger row is gone already or going with them. A row from before accounts
+  -- existed (see 0002) has an owner with no ledger row, so an edit that keeps that owner moves its bytes out of the
+  -- unowned total instead. Deleting one subtracts nothing, which leaves the total high rather than low.
   IF TG_OP <> 'INSERT' AND OLD.user_id IS NOT NULL THEN
     UPDATE account_storage SET bytes = bytes - pg_column_size(OLD) WHERE user_id = OLD.user_id;
+
+    IF NOT FOUND AND TG_OP = 'UPDATE' AND NEW.user_id = OLD.user_id THEN
+      UPDATE unowned_storage SET bytes = bytes - pg_column_size(OLD);
+    END IF;
   ELSIF TG_OP <> 'INSERT' THEN
     UPDATE unowned_storage SET bytes = bytes - pg_column_size(OLD);
   END IF;
 
-  IF TG_OP <> 'DELETE' AND NEW.user_id IS NOT NULL THEN
+  IF TG_OP <> 'DELETE' AND EXISTS (SELECT 1 FROM users WHERE id = NEW.user_id) THEN
     INSERT INTO account_storage (user_id, bytes) VALUES (NEW.user_id, pg_column_size(NEW))
     ON CONFLICT (user_id) DO UPDATE SET bytes = account_storage.bytes + EXCLUDED.bytes
     RETURNING bytes INTO stored;

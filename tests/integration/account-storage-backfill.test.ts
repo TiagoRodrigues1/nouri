@@ -36,6 +36,13 @@ void test("the ledger backfill counts rows from before accounts existed as unown
     assert.ok(close(Number(unowned?.bytes), Number(legacy?.bytes)));
     assert.ok(close(Number(account?.bytes), Number(owned?.bytes)));
     assert.equal(Number(orphans?.count), 0);
+
+    // Editing a legacy row keeps it in the unowned total instead of failing on the ledger's foreign key.
+    await client`UPDATE water_entries SET volume_ml = 330 WHERE user_id = ${legacyOwner}`;
+    const [edited] = await client`SELECT bytes FROM unowned_storage`;
+    assert.equal(Number(edited?.bytes), Number(unowned?.bytes));
+    const [stillNone] = await client`SELECT count(*) AS count FROM account_storage WHERE user_id = ${legacyOwner}`;
+    assert.equal(Number(stillNone?.count), 0);
   } finally {
     await cleanup();
   }
