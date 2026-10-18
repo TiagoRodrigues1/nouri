@@ -14,7 +14,7 @@ import { useLogAgain } from "./lib/use-log-again";
 import { useUndoMealLog } from "./lib/use-saved-meals";
 import { queryError } from "./query-status";
 import { useSupplements } from "./lib/use-supplements";
-import { useArrivals } from "./lib/use-arrivals";
+import { useArrivals, type Arrivals } from "./lib/use-arrivals";
 import { useDashboardPage } from "./dashboard-page-context";
 import { SupplementsCard } from "./my-day/supplements-card";
 import { format, type CardId, type FoodEntry } from "./lib/api";
@@ -235,7 +235,7 @@ type TimelineProps = {
   onRemoveMeal: (log: MealLogRef) => void;
   onSaveMeal: () => void;
   // Foods and meals logged since the day opened, which fade in where they land.
-  arrived: ReadonlySet<string>;
+  arrived: Arrivals;
 };
 
 function Timeline({ entries, mealLogs, arrived, now, logAgainWhen, summary, loading, status, busy, onLogAgain, onEdit, onDelete, onRemoveMeal, onSaveMeal }: TimelineProps) {
@@ -291,7 +291,7 @@ function Timeline({ entries, mealLogs, arrived, now, logAgainWhen, summary, load
 
               if (row.kind === "meal")
                 return (
-                  <li key={`meal-${row.log.id}`} ref={ref} data-form-enter={arrived.has(row.log.id) ? "" : undefined} {...stylex.props(styles.mealRow)}>
+                  <li key={`meal-${row.log.id}`} ref={ref} {...arrived.rowProps(row.log.id)} {...stylex.props(styles.mealRow)}>
                     <span {...stylex.props(styles.mealLogName)}>{row.log.name}</span>
                     <Button
                       variant="ghost"
@@ -310,7 +310,7 @@ function Timeline({ entries, mealLogs, arrived, now, logAgainWhen, summary, load
               const { entry } = row;
 
               return (
-                <li key={entry.id} ref={ref} data-form-enter={arrived.has(entry.id) ? "" : undefined} {...stylex.props(styles.entryRow)}>
+                <li key={entry.id} ref={ref} {...arrived.rowProps(entry.id)} {...stylex.props(styles.entryRow)}>
                   <span {...stylex.props(styles.entryDot)} />
                   <span {...stylex.props(styles.entryText)}>
                     <span {...stylex.props(styles.entryName)}>{entry.food.name}</span>
