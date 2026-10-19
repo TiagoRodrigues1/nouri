@@ -4,8 +4,10 @@ import type { RouteConfig } from "@hono/zod-openapi";
 import { bodyLimit } from "hono/body-limit";
 import { requestPolicy } from "./request-policy.js";
 import { compress } from "hono/compress";
+import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import { eraseAccount, exportAccount } from "./account/account.js";
+import { storageFull, storageFullMessage } from "./account/storage.js";
 import { disconnectAssistant, listAssistants } from "./assistants/assistants.js";
 import { assistantListSchema } from "./assistants/contract.js";
 import { customExerciseInputSchema, customExerciseSchema, exerciseLibrarySchema } from "./exercises/contract.js";
@@ -14,7 +16,7 @@ import { dashboardSchema } from "./dashboard/contract.js";
 import { getDashboard, saveDashboard } from "./dashboard/dashboard.js";
 import { daySchema } from "./days/contract.js";
 import { getDay } from "./days/days.js";
-import type { PackagedFoods } from "./food/packaged.js";
+import { rememberedLookups, type PackagedFoods } from "./food/packaged.js";
 import { foodRoutes } from "./food/routes.js";
 import { idempotencyKeySchema, mutationResponse, revisionHeader } from "./journal/http.js";
 import type { AppDatabase } from "./db/database.js";
@@ -24,7 +26,8 @@ import { fillDailyMeals, listMeals, logMeal, mutateMeal, undoMealLog } from "./m
 import { integrationRoutes } from "./wearables/routes.js";
 import { error, errorSchema } from "./http-error.js";
 import type { WearableRuntime } from "./wearables/provider.js";
-import { clerkFrontendOrigin, userFor, type Identity } from "./identity/identity.js";
+import { accountAccess } from "./identity/access.js";
+import { clerkFrontendOrigin, type Identity } from "./identity/identity.js";
 import { recordPaths } from "./journal/paths.js";
 import { mutateRecord } from "./journal/records.js";
 import { mcpRoutes } from "./mcp/routes.js";
@@ -58,8 +61,19 @@ function escapeHtml(value: string): string {
 }
 
 export function createApp(db: AppDatabase, identity: Identity, packagedFoods: PackagedFoods, wearables?: WearableRuntime, publicUrl?: string) {
-  const app = new OpenAPIHono<{ Variables: { userId: string; idempotencyKey: string } }>();
-  const limits = requestPolicy();
+  const app = new OpenAPIHono<{ Variables: { userId: string; idempotencyKey: string; clerkUserId: string | undefined } }>();
+  const access = accountAccess(db, identity);
+  const limits = requestPolicy({ identify: (request) => access.identify(request) });
+
+  // The storage ledger refuses new rows past an account's allowance, from whichever write reached it.
+  app.onError((failure, context) => {
+    if (storageFull(failure)) return error(413, storageFullMessage);
+
+    if (failure instanceof HTTPException) return failure.getResponse();
+    console.error(failure);
+
+    return context.text("Internal Server Error", 500);
+  });
   app.use("/v1/progress-photos", async (context, next) => {
     if (context.req.method === "POST") return limits.beforeUpload(context, next);
     await next();
@@ -133,7 +147,7 @@ export function createApp(db: AppDatabase, identity: Identity, packagedFoods: Pa
   });
 
   // Outside /v1, so Clerk OAuth access tokens are checked instead of session tokens and no Idempotency-Key is asked for.
-  app.route("/", mcpRoutes(db, identity, limits.forUser, publicUrl));
+  app.route("/", mcpRoutes(db, identity, access, limits.forUser, publicUrl));
 
   const keyParameter = idempotencyKeySchema;
   const mutationHeaders = z.object({ "Idempotency-Key": keyParameter });
@@ -141,30 +155,18 @@ export function createApp(db: AppDatabase, identity: Identity, packagedFoods: Pa
   const json = (schema: z.ZodType) => ({ content: { "application/json": { schema } } });
   const failure = (description: string) => ({ description, ...json(errorSchema) });
 
-  // A Clerk user's Nouri id never changes, so each is looked up once rather than on every request.
-  const userIds = new Map<string, string>();
-
+  // The request gate already verified the session; an unidentified request here has none.
   app.use("/v1/*", async (context, next) => {
-    const clerkUserId = await identity.authenticate(context.req.raw);
+    const clerkUserId = context.get("clerkUserId");
 
     if (!clerkUserId) return error(401, "Unauthorized");
     const refused = limits.forUser(clerkUserId, context.req.method, context.req.path);
 
     if (refused) return refused;
     context.header("Cache-Control", "private, no-store");
-    let userId = userIds.get(clerkUserId);
+    const userId = await access.userId(clerkUserId);
 
-    if (!userId) {
-      const found = await userFor(db, clerkUserId);
-
-      if (!found) return error(401, "Unauthorized");
-      userId = found;
-
-      // Bounds memory; clearing only costs the next request of each person one lookup.
-      if (userIds.size >= 10_000) userIds.clear();
-      userIds.set(clerkUserId, userId);
-    }
-
+    if (!userId) return error(401, "Unauthorized");
     context.set("userId", userId);
     await next();
   });
@@ -178,7 +180,7 @@ export function createApp(db: AppDatabase, identity: Identity, packagedFoods: Pa
 
     if (event.deletedUser) {
       await eraseAccount(db, wearables, event.deletedUser);
-      userIds.delete(event.deletedUser);
+      access.forget(event.deletedUser);
     }
 
     return context.body(null, 204);
@@ -206,7 +208,7 @@ export function createApp(db: AppDatabase, identity: Identity, packagedFoods: Pa
 
   app.route("/", integrationRoutes(db, wearables));
 
-  app.route("/", foodRoutes(db, packagedFoods));
+  app.route("/", foodRoutes(db, rememberedLookups(packagedFoods, limits.barcodeFetch)));
 
   app.get("/v1/saved-meals", async (context) => context.json(await listMeals(db, context.get("userId"))));
   app.openAPIRegistry.registerPath({ method: "get", path: "/v1/saved-meals", responses: { 200: { description: "Saved meals, most recently logged or saved first", ...json(savedMealListSchema) } } });

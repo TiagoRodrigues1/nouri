@@ -30,11 +30,13 @@ export function signingKeys(url: string, fetchKeys: typeof fetch = fetch, now = 
     }
   }
 
+  // Keys are refreshed in their last minute while still valid, and requests keep using them meanwhile. Only a cold
+  // start or a refresh that kept failing until expiry makes a request wait on Clerk, so a flood of forged tokens
+  // cannot hold the identification slots while every request waits on the network.
   return async (kid: string): Promise<string | undefined> => {
-    if (now() >= expiresAt) {
-      if (!pending && now() >= retryAt) pending = refresh().finally(() => { pending = undefined; });
-      await pending;
-    }
+    if (now() >= expiresAt - 60_000 && !pending && now() >= retryAt) pending = refresh().finally(() => { pending = undefined; });
+
+    if (now() >= expiresAt) await pending;
 
     return now() < expiresAt ? keys.get(kid) : undefined;
   };

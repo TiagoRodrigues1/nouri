@@ -10,6 +10,7 @@ import type { FoodItemInput } from "../food/contract.js";
 import { instantAt, isoWeekday, localDate, shiftDate } from "../time.js";
 import { everyDay, mealLogSchema, savedMealSchema } from "./contract.js";
 import type { MealDailyInput, MealInput, MealItemInput, MealLog, MealLogInput, MealLogRef, SavedMeal, SavedMealList, StoredMealItem } from "./contract.js";
+import { storageFull } from "../account/storage.js";
 
 export type MealCommand =
   | { kind: "create"; input: MealInput }
@@ -302,6 +303,7 @@ export async function fillDailyMeals(db: AppDatabase, userId: string): Promise<v
 
   if (due.length === 0) return;
 
+  // A full account still reads its journal; the fill rolls back and is tried again on a later read.
   await db.transaction(async (tx) => {
     const rows = await tx.select().from(savedMeals).where(and(active, inArray(savedMeals.id, due))).for("update");
 
@@ -318,5 +320,7 @@ export async function fillDailyMeals(db: AppDatabase, userId: string): Promise<v
 
       await tx.update(savedMeals).set({ dailyFilledThrough: fill.through }).where(eq(savedMeals.id, row.id));
     }
+  }).catch((failure: Error) => {
+    if (!storageFull(failure)) throw failure;
   });
 }

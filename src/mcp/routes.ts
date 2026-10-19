@@ -3,13 +3,15 @@ import { Hono } from "hono";
 import { admitAssistant } from "../assistants/assistants.js";
 import type { AppDatabase } from "../db/database.js";
 import { error } from "../http-error.js";
-import { clerkFrontendOrigin, userFor, type Identity } from "../identity/identity.js";
+import type { CallerVariables } from "../request-limits.js";
+import type { AccountAccess } from "../identity/access.js";
+import { clerkFrontendOrigin, type Identity } from "../identity/identity.js";
 import { nouriMcpServer } from "./tools.js";
 
 // Claude and ChatGPT find Clerk through the protected resource metadata (RFC 9728), register with it, and send
 // the OAuth access token it issues. publicUrl is the origin they reach, when a proxy hides it from the request.
-export function mcpRoutes(db: AppDatabase, identity: Identity, limitUser: (userId: string, method: string, path: string) => Response | null, publicUrl?: string) {
-  const app = new Hono();
+export function mcpRoutes(db: AppDatabase, identity: Identity, access: AccountAccess, limitUser: (userId: string, method: string, path: string) => Response | null, publicUrl?: string) {
+  const app = new Hono<CallerVariables>();
   const authorizationServer = clerkFrontendOrigin(identity.publishableKey);
   const originOf = (request: Request) => publicUrl ?? new URL(request.url).origin;
   const metadataPath = "/.well-known/oauth-protected-resource/mcp";
@@ -27,8 +29,9 @@ export function mcpRoutes(db: AppDatabase, identity: Identity, limitUser: (userI
   // Stateless: every message is a POST answered with JSON, so there is no event stream to open or session to end.
   app.on(["GET", "DELETE"], "/mcp", () => new Response(null, { status: 405, headers: { Allow: "POST" } }));
 
+  // A token Clerk confirmed in the last minute is identified without asking Clerk again; any other is checked.
   app.post("/mcp", async (context) => {
-    const agent = await identity.authenticateAgent(context.req.raw);
+    const agent = await access.agent(context.req.raw);
 
     if (agent) {
       const refused = limitUser(agent.clerkUserId, "POST", "/mcp");
@@ -36,12 +39,13 @@ export function mcpRoutes(db: AppDatabase, identity: Identity, limitUser: (userI
       if (refused) return refused;
     }
 
-    const userId = agent && await userFor(db, agent.clerkUserId);
+    const userId = agent && await access.userId(agent.clerkUserId);
     // A client the person disconnected from Nouri's page is refused like a bad token, so it asks them again.
     const token = context.req.header("Authorization")?.slice("Bearer ".length) ?? "";
     const admitted = agent && userId && await admitAssistant(db, identity, userId, agent, token);
 
     if (!userId || !admitted) {
+      access.forgetAgent(context.req.raw);
       const response = error(401, "Unauthorized");
 
       response.headers.set("WWW-Authenticate", `Bearer resource_metadata="${originOf(context.req.raw)}${metadataPath}"`);

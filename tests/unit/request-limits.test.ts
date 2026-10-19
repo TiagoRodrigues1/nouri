@@ -4,10 +4,21 @@ import { Hono } from "hono";
 import { budgetedBody, usageWindows } from "../../src/request-limits.js";
 import { requestPolicy as requestLimits } from "../../src/request-policy.js";
 import { boundedExport } from "../../src/account/export-limits.js";
+import { accountAccess } from "../../src/identity/access.js";
+import type { Identity } from "../../src/identity/identity.js";
+import { rememberedLookups, type PackagedLookup } from "../../src/food/packaged.js";
+import { drizzle } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
+import type { CallerVariables } from "../../src/request-limits.js";
+
+const anonymous = { identify: async () => null };
+
+// Signs in "person" only with the valid token; any other bearer is forged.
+const signedIn = { identify: async (request: Request) => request.headers.get("Authorization") === "Bearer valid" ? "person" : null };
 
 void test("MCP rate limits apply before auth and cannot be bypassed by spoofing forwarded IPs", async () => {
   const app = new Hono();
-  const limits = requestLimits();
+  const limits = requestLimits(anonymous);
   let authCalls = 0;
   app.use(limits.beforeRequest);
   app.use("/v1/progress-photos", limits.beforeUpload);
@@ -24,7 +35,7 @@ void test("MCP rate limits apply before auth and cannot be bypassed by spoofing 
 
 void test("body sizes are rejected before reaching JSON or webhook handlers", async () => {
   const app = new Hono();
-  const limits = requestLimits();
+  const limits = requestLimits(anonymous);
   let calls = 0;
   app.use(limits.beforeRequest);
   app.use("/v1/progress-photos", limits.beforeUpload);
@@ -41,11 +52,11 @@ void test("body sizes are rejected before reaching JSON or webhook handlers", as
 });
 
 void test("PUT writes, repeated uploads, and photo bandwidth have account allowances", () => {
-  const writes = requestLimits();
+  const writes = requestLimits(anonymous);
 
   for (let index = 0; index < 120; index++) assert.equal(writes.forUser("writer", "PUT", "/v1/dashboard"), null);
   assert.equal(writes.forUser("writer", "PUT", "/v1/dashboard")?.status, 429);
-  const photos = requestLimits();
+  const photos = requestLimits(anonymous);
 
   for (let index = 0; index < 20; index++) assert.equal(photos.forUser("uploader", "POST", "/v1/progress-photos"), null);
   assert.equal(photos.forUser("uploader", "POST", "/v1/progress-photos")?.status, 429);
@@ -59,9 +70,9 @@ void test("PUT writes, repeated uploads, and photo bandwidth have account allowa
   assert.equal(photos.photoDownload("another-viewer", 256 * 1024), null);
 });
 
-void test("request concurrency is bounded before slow authentication and capacity returns afterward", async () => {
+void test("anonymous concurrency is bounded and capacity returns afterward", async () => {
   const app = new Hono();
-  const limits = requestLimits();
+  const limits = requestLimits(anonymous);
   let finish: () => void = () => undefined;
   const wait = new Promise<void>((resolve) => { finish = resolve; });
   app.use(limits.beforeRequest);
@@ -69,7 +80,7 @@ void test("request concurrency is bounded before slow authentication and capacit
   app.get("/v1/test", async (context) => { await wait;
 
  return context.body(null, 401); });
-  const pending = Array.from({ length: 32 }, () => Promise.resolve(app.request("/v1/test")));
+  const pending = Array.from({ length: 24 }, () => Promise.resolve(app.request("/v1/test")));
   assert.equal((await app.request("/v1/test")).status, 429);
   finish();
   assert.ok((await Promise.all(pending)).every((response) => response.status === 401));
@@ -78,7 +89,7 @@ void test("request concurrency is bounded before slow authentication and capacit
 
 void test("only two large photo uploads can occupy handlers at once", async () => {
   const app = new Hono();
-  const limits = requestLimits();
+  const limits = requestLimits(anonymous);
   let finish: () => void = () => undefined;
   const wait = new Promise<void>((resolve) => { finish = resolve; });
   app.use(limits.beforeRequest);
@@ -107,7 +118,7 @@ void test("usage windows expire without allowing caller-controlled keys to clear
 });
 
 void test("export slots stay occupied until streamed responses end or are cancelled", async () => {
-  const limits = requestLimits();
+  const limits = requestLimits(anonymous);
   let cancelled = false;
   const source = () => new ReadableStream<Uint8Array>({ cancel() { cancelled = true; } });
   const stream = limits.exportStream("first", source);
@@ -164,7 +175,7 @@ void test("response byte allowances stop a download and cancel its underlying so
 });
 
 void test("background-import checks have their own cap and leave the write budget alone", () => {
-  const limits = requestLimits();
+  const limits = requestLimits(anonymous);
   const refresh = "/v1/integrations/google-health/refreshes";
 
   for (let index = 0; index < 30; index++) assert.equal(limits.forUser("reader", "POST", refresh), null);
@@ -177,7 +188,7 @@ void test("background-import checks have their own cap and leave the write budge
 
 void test("rejected account writes cannot exhaust another account's shared write allowance", () => {
   let time = 0;
-  const limits = requestLimits(() => time);
+  const limits = requestLimits(anonymous, () => time);
   let accepted = 0;
 
   for (let index = 0; index < 5000; index++) {
@@ -209,7 +220,7 @@ void test("failed multi-budget reservations leave every allowance unchanged", ()
 
 void test("rejected photo uploads leave the account write allowance available", () => {
   let time = 0;
-  const limits = requestLimits(() => time);
+  const limits = requestLimits(anonymous, () => time);
 
   for (let index = 0; index < 20; index++) assert.equal(limits.forUser("uploader", "POST", "/v1/progress-photos"), null);
 
@@ -218,4 +229,204 @@ void test("rejected photo uploads leave the account write allowance available", 
 
   for (let index = 0; index < 100; index++) assert.equal(limits.forUser("uploader", "PUT", "/v1/targets"), null);
   assert.equal(limits.forUser("uploader", "PUT", "/v1/targets")?.status, 429);
+});
+
+void test("forged sessions and anonymous floods cannot lock out a signed-in person", async () => {
+  const app = new Hono<CallerVariables>();
+  const limits = requestLimits(signedIn);
+  let finish: () => void = () => undefined;
+  const wait = new Promise<void>((resolve) => { finish = resolve; });
+  app.use(limits.beforeRequest);
+  app.get("/v1/me", (context) => context.text(context.get("clerkUserId") ?? "nobody"));
+
+  for (let index = 0; index < 600; index++) await app.request("/v1/me", { headers: { Authorization: `Bearer forged-${index}` } });
+  assert.equal((await app.request("/v1/me", { headers: { Authorization: "Bearer forged" } })).status, 429);
+  const valid = await app.request("/v1/me", { headers: { Authorization: "Bearer valid" } });
+  assert.equal(valid.status, 200);
+  assert.equal(await valid.text(), "person");
+
+  // Anonymous API requests hold at most 24 handlers, so signed-in requests still find one free.
+  const busy = new Hono<CallerVariables>();
+  busy.use(requestLimits(signedIn).beforeRequest);
+  busy.get("/v1/me", (context) => context.text("ok"));
+  busy.get("/v1/slow", async (context) => { await wait;
+
+ return context.text("ok"); });
+  const pending = Array.from({ length: 24 }, () => Promise.resolve(busy.request("/v1/slow")));
+  assert.equal((await busy.request("/v1/slow")).status, 429);
+  assert.equal((await busy.request("/v1/me", { headers: { Authorization: "Bearer valid" } })).status, 200);
+  finish();
+  assert.ok((await Promise.all(pending)).every((response) => response.status === 200));
+
+  // One signed-in person holds at most 8 uploads, so their slow requests leave room for everyone else. Reads are not
+  // capped this way, since a photo grid fetches every thumbnail at once.
+  let release: () => void = () => undefined;
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  const pair = { identify: async (request: Request) => request.headers.get("Authorization")?.slice(7) ?? null };
+  const shared = new Hono<CallerVariables>();
+  shared.use(requestLimits(pair).beforeRequest);
+  shared.post("/v1/slow", async (context) => { await held;
+
+ return context.text("ok"); });
+  shared.get("/v1/me", (context) => context.text("ok"));
+  const as = (caller: string, method = "GET") => ({ method, headers: { Authorization: `Bearer ${caller}` } });
+  const hogging = Array.from({ length: 8 }, () => Promise.resolve(shared.request("/v1/slow", as("hog", "POST"))));
+  assert.equal((await shared.request("/v1/slow", as("hog", "POST"))).status, 429);
+  assert.equal((await shared.request("/v1/me", as("hog"))).status, 200);
+  const otherUpload = shared.request("/v1/slow", as("other", "POST"));
+  release();
+  assert.equal((await otherUpload).status, 200);
+  assert.ok((await Promise.all(hogging)).every((response) => response.status === 200));
+  assert.equal((await shared.request("/v1/slow", as("hog", "POST"))).status, 200);
+
+  // The anonymous request budget runs out on its own.
+  const flooded = requestLimits(signedIn);
+  const quiet = new Hono<CallerVariables>();
+  quiet.use(flooded.beforeRequest);
+  quiet.get("*", (context) => context.text("ok"));
+
+  for (let index = 0; index < 3000; index++) await quiet.request("/favicon.svg");
+  assert.equal((await quiet.request("/favicon.svg")).status, 429);
+  assert.equal((await quiet.request("/v1/me", { headers: { Authorization: "Bearer valid" } })).status, 200);
+});
+
+void test("a verified MCP token is identified locally for a minute, then checked with Clerk again", async () => {
+  let time = 0;
+  let clerkChecks = 0;
+  const assistant = { clerkUserId: "person", clientId: "claude", revocable: true };
+
+  const identity: Identity = {
+    authenticate: async () => null,
+    authenticateAgent: async (request) => {
+      clerkChecks++;
+
+      return request.headers.get("Authorization") === "Bearer agent" ? assistant : null;
+    },
+    agentName: async () => null,
+    revokeAgent: async () => undefined,
+    readWebhook: async () => "forged",
+    publishableKey: "pk_test_unused",
+  };
+
+  // postgres.js connects on the first query, and identifying a caller makes none.
+  const access = accountAccess(drizzle(postgres("postgres://unused@127.0.0.1:1/unused")), identity, () => time);
+  const message = (token: string) => new Request("http://nouri.test/mcp", { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+
+  assert.equal(await access.identify(message("agent")), null);
+  assert.deepEqual(await access.agent(message("agent")), assistant);
+  assert.equal(await access.identify(message("agent")), "person");
+  assert.deepEqual(await access.agent(message("agent")), assistant);
+  assert.equal(await access.identify(message("other")), null);
+  assert.equal(await access.agent(message("other")), null);
+  time = 60_001;
+
+  assert.equal(await access.identify(message("agent")), null);
+  await access.agent(message("agent"));
+  access.forget("person");
+  assert.equal(await access.identify(message("agent")), null);
+
+  // A token Nouri refused, such as a disconnected assistant's, is checked with Clerk again.
+  await access.agent(message("agent"));
+  access.forgetAgent(message("agent"));
+  assert.equal(await access.identify(message("agent")), null);
+  assert.equal(clerkChecks, 4);
+});
+
+void test("barcode answers are remembered, failures are not, and fetches have an app-wide allowance", async () => {
+  let time = 0;
+  let fetches = 0;
+  let answer: PackagedLookup = { outcome: "unavailable" };
+  let allowed = 2;
+
+  const upstream = {
+    lookup: async () => {
+      fetches++;
+
+      return answer;
+    },
+  };
+
+  const foods = rememberedLookups(upstream, () => allowed-- > 0, () => time);
+
+  assert.equal((await foods.lookup("12345670")).outcome, "unavailable");
+  answer = { outcome: "not-found" };
+  assert.equal((await foods.lookup("12345670")).outcome, "not-found");
+  assert.equal((await foods.lookup("12345670")).outcome, "not-found");
+  assert.equal(fetches, 2);
+
+  // Past the allowance, an unremembered barcode reads as unavailable without asking.
+  assert.equal((await foods.lookup("96385074")).outcome, "unavailable");
+  assert.equal(fetches, 2);
+  time = 6 * 60 * 60_000 + 1;
+
+  allowed = 1;
+  await foods.lookup("12345670");
+  assert.equal(fetches, 3);
+});
+
+void test("one account past its share cannot drain the signed-in pool for everyone else", async () => {
+  const app = new Hono<CallerVariables>();
+  const limits = requestLimits({ identify: async (request) => request.headers.get("Authorization")?.slice(7) ?? null });
+  app.use(limits.beforeRequest);
+  app.get("/v1/me", (context) => context.text("ok"));
+
+  for (let index = 0; index < 3000; index++) await app.request("/v1/me", { headers: { Authorization: "Bearer greedy" } });
+  assert.equal((await app.request("/v1/me", { headers: { Authorization: "Bearer greedy" } })).status, 429);
+  assert.equal((await app.request("/v1/me", { headers: { Authorization: "Bearer someone-else" } })).status, 200);
+});
+
+void test("requests waiting on identification are bounded before they are counted anywhere else", { timeout: 5000 }, async () => {
+  let release: () => void = () => undefined;
+  const keysArrive = new Promise<void>((resolve) => { release = resolve; });
+  let checks = 0;
+  const app = new Hono<CallerVariables>();
+
+  const slowKeys = {
+    identify: async () => {
+      checks++;
+      await keysArrive;
+
+      return null;
+    },
+  };
+
+  app.use(requestLimits(slowKeys).beforeRequest);
+  app.get("/v1/me", (context) => context.body(null, 401));
+  const waiting = Array.from({ length: 32 }, () => Promise.resolve(app.request("/v1/me", { headers: { Authorization: "Bearer forged" } })));
+  assert.equal((await app.request("/v1/me", { headers: { Authorization: "Bearer forged" } })).status, 429);
+  assert.equal(checks, 32);
+  release();
+
+  // Released together, the waiting requests meet the 24-handler anonymous share, so some are refused there instead.
+  assert.ok((await Promise.all(waiting)).every((response) => [401, 429].includes(response.status)));
+  assert.equal((await app.request("/v1/me")).status, 401);
+});
+
+void test("simultaneous scans of one uncached barcode share a single Open Food Facts lookup", async () => {
+  let fetches = 0;
+  let allowed = 0;
+  let answer: () => void = () => undefined;
+  const arrives = new Promise<void>((resolve) => { answer = resolve; });
+
+  const upstream = {
+    lookup: async (): Promise<PackagedLookup> => {
+      fetches++;
+      await arrives;
+
+      return { outcome: "not-found" };
+    },
+  };
+
+  const allow = () => {
+    allowed++;
+
+    return true;
+  };
+
+  const foods = rememberedLookups(upstream, allow);
+  const scans = Array.from({ length: 5 }, () => foods.lookup("12345670"));
+  answer();
+  assert.ok((await Promise.all(scans)).every((result) => result.outcome === "not-found"));
+  assert.equal(fetches, 1);
+  assert.equal(allowed, 1);
 });

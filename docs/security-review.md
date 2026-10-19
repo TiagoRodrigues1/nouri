@@ -48,6 +48,19 @@ Verification includes forged JWT bursts and key rotation/outage behavior; spoofe
 
 Final checks passed: all 57 unit tests, the focused app/account/overview/MCP/photo-quota integration tests, type checking, lint, and the frontend production build. After the final upload-concurrency and MCP changes, the affected photo-quota and MCP integration tests were rerun successfully. The isolated browser run was cleaned up, including its temporary Clerk user and PostgreSQL container. Concurrent work in the other thread changed wearable files and rebuilt frontend assets; the browser run was restarted against the current build before completing photo/export checks.
 
+## Remaining usage findings addressed
+
+On 2026-10-18 the remaining rate, storage, concurrency, and billing findings for signed-in accounts and public traffic were addressed. Google Health sync remains with draft PR #44. The design is in `docs/usage-ceilings-design.md`.
+
+- **Anonymous traffic no longer locks out signed-in people.** The request gate verifies session tokens locally before admitting a request. Identified requests use their own 3,000-per-minute pool and per-account allowances. Only failed sessions count against the 600-per-minute check allowance. Anonymous API, MCP, webhook, and OAuth requests may hold 24 of the 32 handlers. The page and its files may use all of them.
+- **MCP tokens Clerk confirmed are remembered for a minute,** with at most 1,000 kept. Repeat messages skip Clerk's API and the user lookup, and only unknown tokens count against the 60 remote checks per minute. A revoked token keeps working for up to that minute.
+- **Stored records have ceilings that survive restarts.** A trigger ledger (`account_storage`, migration `0011`) counts the row bytes of every table people fill, whichever path wrote them. New rows are refused with 413 past 128 MiB per account or 2 GiB for the app. An edit that grows a row past a ceiling is refused too. Edits that do not grow a row, and deletions, are always allowed. Soft deletes keep their rows, so they free nothing. Daily-meal fills on a full account are skipped until there is room. Photos keep their own quota, and receipts and sign-in states expire.
+- **Barcode lookups are cached.** Products are kept for a day and misses for six hours, at most 5,000 barcodes. Each account may make 120 lookups an hour, and the app sends Open Food Facts at most 600 requests an hour.
+- **The Google Health callback checks its cookie before any database query,** so random `state` values no longer reach Neon.
+- **Requests that take longer than 120 seconds to arrive are dropped,** and their handlers freed.
+
+Database `statement_timeout`, `lock_timeout`, and `idle_in_transaction_session_timeout` are still unset for the runtime pool. Startup parameters may be refused by Neon's pooler, so set them on the runtime role, or in `DATABASE_URL` once the endpoint accepts them. Allowances other than storage still live in process memory and restart with the server.
+
 ## Findings
 
 ### High: rejected requests can cause Clerk API calls

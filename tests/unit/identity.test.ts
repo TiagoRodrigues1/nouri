@@ -87,3 +87,31 @@ void test("signing key refresh uses a cooldown after failure and handles rotatio
   assert.equal(await keyFor("old"), undefined);
   assert.equal(calls, 3);
 });
+
+void test("signing keys refresh in their last minute without making requests wait", async () => {
+  let time = 0;
+  let calls = 0;
+  let release: () => void = () => undefined;
+  let held = Promise.resolve();
+
+  const keyFor = signingKeys("https://keys.example", async () => {
+    calls++;
+    await held;
+
+    return Response.json({ keys: [{ ...publicKey.export({ format: "jwk" }), kid: calls === 1 ? "old" : "new" }] });
+  }, () => time);
+
+  assert.ok(await keyFor("old"));
+  held = new Promise<void>((resolve) => { release = resolve; });
+  time = 4 * 60_000 + 1;
+
+  // The refresh is still in flight, yet the current key answers at once.
+  assert.ok(await keyFor("old"));
+  assert.equal(calls, 2);
+  release();
+  await held;
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.ok(await keyFor("new"));
+  assert.equal(await keyFor("old"), undefined);
+  assert.equal(calls, 2);
+});
