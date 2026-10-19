@@ -9,7 +9,8 @@ import { Popover, PopoverAnchor, PopoverContent, PopoverDescription, PopoverHead
 import { TimePicker } from "../components/ui/time-picker";
 import { format, type ListedMeal } from "../lib/api";
 import { unitLabels } from "../lib/food-text";
-import { dailyDays, everyDay } from "../lib/saved-meals";
+import { everyDay } from "../lib/saved-meals";
+import { dailyDays } from "../lib/weekdays";
 import { totalNutrients } from "../../../src/food/contract";
 import { currentTime, localDate, recentDayLabel, timeZone } from "../lib/time";
 import { useMealDaily, useSavedMeals } from "../lib/use-saved-meals";

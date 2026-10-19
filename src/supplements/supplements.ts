@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { and, between, eq, isNull } from "drizzle-orm";
+import { z } from "zod";
 import { supplementIntakes, supplementStacks } from "../db/schema.js";
 import type { AppDatabase, Transaction } from "../db/database.js";
 import { getDated, getDatedHistory, type DatedKind } from "../effective-dated.js";
 import { recordEdit, type RecordKind } from "../journal/records.js";
 import { localDate, shiftDate } from "../time.js";
-import { intakeInputSchema, stackForDaySchema, supplementIntakeSchema, supplementStackSchema } from "./contract.js";
+import { dueOn, intakeInputSchema, stackForDaySchema, supplementIntakeSchema, supplementSchema, supplementStackSchema } from "./contract.js";
 import type { IntakeInput, StackForDay, Supplement, SupplementDay, SupplementIntake, SupplementStack } from "./contract.js";
 
 type IntakeRow = typeof supplementIntakes.$inferSelect;
@@ -24,12 +25,15 @@ function intake(row: IntakeRow): SupplementIntake {
   };
 }
 
+const storedSupplements = z.array(supplementSchema);
+
 export const stackKind: DatedKind<typeof supplementStacks, SupplementStack, StackForDay> = {
   table: supplementStacks,
   input: supplementStackSchema,
   schema: stackForDaySchema,
   empty: { effectiveFrom: null, supplements: [] },
-  toResult: (row) => ({ effectiveFrom: row.effectiveFrom, supplements: row.supplements }),
+  // Read through the schema, so lists saved before schedules read as once every day.
+  toResult: (row) => ({ effectiveFrom: row.effectiveFrom, supplements: storedSupplements.parse(row.supplements) }),
   values: (stack) => ({ supplements: stack.supplements }),
 };
 
@@ -125,13 +129,14 @@ export async function getSupplementDay(db: AppDatabase, userId: string, date: st
   const listed = new Set(stack.supplements.map((supplement) => supplement.id));
 
   return {
-    items: stack.supplements.map((supplement) => ({ supplement, intakes: intakes.filter((entry) => entry.supplementId === supplement.id) })),
+    items: stack.supplements.map((supplement) => ({ supplement, due: dueOn(supplement, date), intakes: intakes.filter((entry) => entry.supplementId === supplement.id) })),
     unlisted: intakes.filter((entry) => !listed.has(entry.supplementId)),
   };
 }
 
-// `taken` counts the day's stack supplements with at least one intake; `intakeCount` also includes unlisted ones.
-export type SupplementRangeDay = { intakeCount: number; taken: number; stackSize: number };
+// `due` counts the supplements due that day and `taken` those of them with every dose in; `intakeCount` counts every
+// intake, including off-day ones and ones since removed from the stack.
+export type SupplementRangeDay = { intakeCount: number; taken: number; due: number };
 
 // Days from `from` to `to` that have a stack in force or an intake, by local date.
 export async function getSupplementRange(db: AppDatabase, userId: string, from: string, to: string): Promise<Map<string, SupplementRangeDay>> {
@@ -153,7 +158,10 @@ export async function getSupplementRange(db: AppDatabase, userId: string, from: 
     const ids = intakes.get(date) ?? [];
 
     if (supplements.length === 0 && ids.length === 0) continue;
-    days.set(date, { intakeCount: ids.length, taken: supplements.filter((supplement) => ids.includes(supplement.id)).length, stackSize: supplements.length });
+    const due = supplements.filter((supplement) => dueOn(supplement, date) > 0);
+    const taken = due.filter((supplement) => ids.filter((id) => id === supplement.id).length >= dueOn(supplement, date));
+
+    days.set(date, { intakeCount: ids.length, taken: taken.length, due: due.length });
   }
 
   return days;

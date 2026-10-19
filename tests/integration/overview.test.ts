@@ -85,7 +85,7 @@ void test("overview combines sports, measurements, sleep, and photos", async () 
     assert.deepEqual(empty.photos, []);
 
     // Supplements: the day's checklist comes with the day, so ticking one shows up there.
-    const creatine = { id: randomUUID(), name: "Creatine", kind: "creatine", dose: { amount: 5, unit: "g" } };
+    const creatine = { id: randomUUID(), name: "Creatine", kind: "creatine", dose: { amount: 5, unit: "g" }, schedule: { weekdays: [1, 2, 3, 4, 5, 6, 7], timesPerDay: 1 } };
     assert.equal((await app.request("/v1/supplement-stack/2026-09-24", { method: "PUT", headers: { ...auth, "Content-Type": "application/json" }, body: JSON.stringify({ supplements: [creatine] }) })).status, 200);
     const taken = await app.request("/v1/supplement-intakes", { method: "POST", headers: { ...auth, "Content-Type": "application/json", "Idempotency-Key": randomUUID() }, body: JSON.stringify({ occurredAt: "2026-09-24T07:40:00Z", timeZone: zone, supplementId: creatine.id }) });
     assert.equal(taken.status, 201);

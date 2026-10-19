@@ -6,7 +6,7 @@ import type { MeasurementKind } from "../measurements/contract.js";
 import type { PhotoType } from "../photos/contract.js";
 import type { Profile } from "../profile/contract.js";
 import type { RoutineExercise } from "../routines/contract.js";
-import type { Dose, Supplement, SupplementKind } from "../supplements/contract.js";
+import type { Dose, StoredSupplement, SupplementKind } from "../supplements/contract.js";
 import type { SourceColumn, WearableProvider } from "../wearables/contract.js";
 import type { Activity, StrengthExercise } from "../workouts/contract.js";
 import { sql } from "drizzle-orm";
@@ -258,7 +258,7 @@ export const userProfiles = pgTable("user_profiles", {
 export const supplementStacks = pgTable("supplement_stacks", {
   userId: ownerColumn(),
   effectiveFrom: date("effective_from").notNull(),
-  supplements: jsonb("supplements").$type<Supplement[]>().notNull(),
+  supplements: jsonb("supplements").$type<StoredSupplement[]>().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [primaryKey({ columns: [table.userId, table.effectiveFrom] })]);
 

@@ -75,9 +75,9 @@ const metrics: Metric[] = [
     cell: ({ supplements }) => {
       if (supplements.intakeCount === 0) return <Blank />;
 
-      if (supplements.stackSize === 0) return <Amount value={format(supplements.intakeCount)} unit="taken" />;
+      if (supplements.due === 0) return <Amount value={format(supplements.intakeCount)} unit="taken" />;
 
-      return <Amount value={`${supplements.taken} of ${supplements.stackSize}`} unit="taken" />;
+      return <Amount value={`${supplements.taken} of ${supplements.due}`} unit="taken" />;
     },
     recorded: (counts) => counts.supplements,
   },
@@ -307,7 +307,7 @@ export function Review() {
       <p {...stylex.props(styles.summary)}>
         Records on <strong>{review.recordedDays.any} of {total} days</strong>. Complete food records on <strong>{review.nutrition.completeDays} of {total} days</strong>:
         food logged and every food has calories and protein. Only those days are compared with your targets.
-        {review.supplements.stackDays > 0 && <> Every supplement on your list taken on <strong>{review.supplements.fullDays} of {review.supplements.stackDays} days</strong>.</>}
+        {review.supplements.dueDays > 0 && <> Every supplement due taken on <strong>{review.supplements.fullDays} of {review.supplements.dueDays} days</strong>.</>}
       </p>
       <Suggestions review={review} />
       <Comparisons review={review} />

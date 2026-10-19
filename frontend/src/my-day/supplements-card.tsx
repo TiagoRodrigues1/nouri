@@ -27,7 +27,8 @@ export function SupplementsCard({ day, pending, arrived, onTake, onRemove, onMan
           <Pill size={17} /> Supplements
         </h2>
         <span {...stylex.props(styles.head)}>
-          {total > 0 && <span {...stylex.props(cardStyles.cardAside)}>{taken} of {total} taken</span>}
+          {total > 0 ? <span {...stylex.props(cardStyles.cardAside)}>{taken} of {total} taken</span>
+            : rows.length > 0 && <span {...stylex.props(cardStyles.cardAside)}>Nothing due</span>}
           <Button variant="ghost" size="icon" {...stylex.props(cardStyles.entryAction)} aria-label="Edit your supplements" title="Edit your supplements" onClick={onManage}>
             <Settings2 size={15} />
           </Button>
@@ -40,22 +41,26 @@ export function SupplementsCard({ day, pending, arrived, onTake, onRemove, onMan
         </div>
       ) : (
         <ul {...stylex.props(styles.list)} aria-label="Your supplements">
-          {rows.map(({ supplement, last, timesLabel, meta, markLabel, unmarkLabel }) => (
+          {rows.map(({ supplement, last, offDay, complete, dosesLeft, timesLabel, meta, markLabel, unmarkLabel }) => (
             <li key={supplement.id} {...stylex.props(styles.row)}>
               <span {...stylex.props(styles.label)}>
-                <span {...stylex.props(styles.name, last && styles.done)}>{supplement.name}</span>
+                <span {...stylex.props(styles.name, (complete || offDay) && styles.done)}>{supplement.name}</span>
                 <span {...stylex.props(styles.meta)}>{meta}</span>
               </span>
-              {/* One click takes it now; clicking the taken button removes the latest intake, so a slip is one click to undo. */}
-              {last ? (
-                <Button key={last.id} variant="secondary" size="sm" {...arrived.stateProps(last.id)} {...stylex.props(styles.taken)} aria-label={unmarkLabel} disabled={pending} onClick={() => onRemove(last)}>
-                  <Check size={15} /> {timesLabel}{takenAt(last)}
-                </Button>
-              ) : (
-                <Button key="untaken" variant="outline" size="icon-sm" aria-label={markLabel} title="Mark as taken" disabled={pending} onClick={() => onTake(supplement)}>
-                  <Check size={15} />
-                </Button>
-              )}
+              {/* One click takes it now; clicking the taken button removes the latest intake, so a slip is one click to
+                  undo. While doses remain due, a tick for the next one sits beside it. */}
+              <span {...stylex.props(styles.actions)}>
+                {last && (
+                  <Button key={last.id} variant="secondary" size="sm" {...arrived.stateProps(last.id)} {...stylex.props(styles.taken)} aria-label={unmarkLabel} disabled={pending} onClick={() => onRemove(last)}>
+                    <Check size={15} /> {timesLabel}{takenAt(last)}
+                  </Button>
+                )}
+                {(!last || dosesLeft > 0) && (
+                  <Button key="untaken" variant="outline" size="icon-sm" aria-label={markLabel} title="Mark as taken" disabled={pending} onClick={() => onTake(supplement)}>
+                    <Check size={15} />
+                  </Button>
+                )}
+              </span>
             </li>
           ))}
           {unlisted.map(({ intake, time, meta, removeLabel }) => (
@@ -110,5 +115,6 @@ const styles = stylex.create({
   name: { fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%" },
   done: { color: colors.mutedForeground },
   meta: { color: colors.mutedForeground, fontSize: 11, fontWeight: 400 },
+  actions: { display: "flex", alignItems: "center", gap: 6, flexShrink: 0 },
   taken: { color: colors.supplements, backgroundColor: colors.supplementsSoft, fontVariantNumeric: "tabular-nums" },
 });

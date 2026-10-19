@@ -135,6 +135,12 @@ void test("the MCP server changes the supplement stack, targets, and saved meals
     assert.equal(changed.json().supplements[0].dose.amount, 3);
     const before = await (await app.request(`/v1/supplement-stack/${date}`, { headers })).json();
     assert.equal(before.supplements.length, 2);
+
+    // A schedule change keeps the schedule fields it leaves out, and a new supplement defaults to once every day.
+    const scheduled = await call(client, "change_supplement_stack", { date: later, change: [{ id: creatine.id, schedule: { weekdays: [1, 3, 5] } }] });
+    assert.ok(!scheduled.isError, scheduled.text);
+    const twice = await call(client, "change_supplement_stack", { date: later, change: [{ id: creatine.id, schedule: { timesPerDay: 2 } }] });
+    assert.deepEqual(twice.json().supplements.map((supplement: { schedule: unknown }) => supplement.schedule), [{ weekdays: [1, 3, 5], timesPerDay: 2 }, { weekdays: [1, 2, 3, 4, 5, 6, 7], timesPerDay: 1 }]);
     assert.match((await call(client, "change_supplement_stack", { date, remove: ["8a5d6f0e-7b1c-4c2a-9a3e-2f4b5c6d7e89"] })).text, /No supplement .* on the stack/);
 
     const targets = await call(client, "change_targets", { date, kcal: 2400, proteinG: 150, weightKg: 70 });

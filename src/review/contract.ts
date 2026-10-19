@@ -26,8 +26,9 @@ export const reviewDaySchema = z.object({
     proteinG: z.number().nullable(),
   }),
   water: z.object({ entryCount: z.number().int(), totalMl: z.number().int().nullable() }),
-  // `taken` counts the supplements on that day's stack with an intake; `intakeCount` also counts ones since removed.
-  supplements: z.object({ intakeCount: z.number().int(), taken: z.number().int(), stackSize: z.number().int() }),
+  // `due` counts the supplements on that day's stack scheduled for it, and `taken` those of them with every dose in;
+  // `intakeCount` counts every intake, including off-day ones and ones since removed.
+  supplements: z.object({ intakeCount: z.number().int(), taken: z.number().int(), due: z.number().int() }),
   workouts: z.object({ entryCount: z.number().int(), totalMinutes: z.number().int().nullable() }),
   // Nights count toward the day they end on.
   sleep: z.object({ sessionCount: z.number().int(), totalMinutes: z.number().int().nullable() }),
@@ -69,8 +70,8 @@ export const reviewPeriodSchema = z.object({
   water: targetComparisonSchema,
   // Over nights recorded; a night is on target once it reaches its target.
   sleep: targetComparisonSchema,
-  // Days with a stack in force, and how many of them had every supplement on it taken.
-  supplements: z.object({ stackDays: z.number().int(), fullDays: z.number().int() }),
+  // Days with a supplement due, and how many of them had every due dose taken.
+  supplements: z.object({ dueDays: z.number().int(), fullDays: z.number().int() }),
   workouts: z.object({ count: z.number().int(), totalMinutes: z.number().int() }),
   // The mean of the weighed days; null when none were weighed.
   weightKg: z.number().nullable(),
