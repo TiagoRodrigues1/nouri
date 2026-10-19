@@ -1,5 +1,6 @@
 import * as stylex from "@stylexjs/stylex";
-import { Activity as ActivityIcon, Ruler, Scale } from "lucide-react";
+import { Activity as ActivityIcon, Pencil, Ruler, Scale } from "lucide-react";
+import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { measurementLabels } from "../overview-dialogs";
 import { format, type Overview as OverviewData, type Photo } from "../lib/api";
@@ -15,6 +16,7 @@ type MeasurementsProps = {
   weightGoalKg: number | null;
   photos: Photo[];
   busy: boolean;
+  onEdit: (entry: OverviewData["measurements"]["entries"][number]) => void;
   onDelete: (entry: OverviewData["measurements"]["entries"][number]) => void;
   onUpload: (file: File) => void;
   onDeletePhoto: (photo: Photo) => void;
@@ -38,7 +40,7 @@ function goalProgress(weight: number | undefined, goal: number): string {
   return gap < 0.05 ? `At your ${format(goal, 1)} kg goal` : `${format(gap, 1)} kg from your ${format(goal, 1)} kg goal`;
 }
 
-export function MeasurementsSection({ date, measurements, weightGoalKg, photos, busy, onDelete, onUpload, onDeletePhoto }: MeasurementsProps) {
+export function MeasurementsSection({ date, measurements, weightGoalKg, photos, busy, onEdit, onDelete, onUpload, onDeletePhoto }: MeasurementsProps) {
   const { latest, bmi, weightChange } = measurements;
   const asOf = (recorded: { localDate: string } | null) => (recorded && recorded.localDate !== date ? `Recorded ${dateLabel(recorded.localDate)}` : "Recorded this day");
 
@@ -91,6 +93,9 @@ export function MeasurementsSection({ date, measurements, weightGoalKg, photos, 
                     <small {...stylex.props(styles.listMeta)}>{clock.format(new Date(entry.occurredAt))}</small>
                   </span>
                   <span {...stylex.props(styles.rowValue)}>{format(entry.value, 1)} {unit}</span>
+                  <Button variant="ghost" size="icon" {...stylex.props(styles.delete)} aria-label={`Edit ${name.toLowerCase()} ${format(entry.value, 1)} ${unit}`} disabled={busy} onClick={() => onEdit(entry)}>
+                    <Pencil size={14} />
+                  </Button>
                   <DeleteButton label={`Delete ${name.toLowerCase()} ${format(entry.value, 1)} ${unit}`} disabled={busy} onClick={() => onDelete(entry)} />
                 </li>
               );

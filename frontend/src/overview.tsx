@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs";
 import { useTargetsQuery } from "./lib/use-targets";
 import { queryFallback, queryStatus } from "./query-status";
 import { MeasurementsSection } from "./overview/measurements";
+import { EditMeasurementDialog } from "./overview/edit-measurement-dialog";
 import { SleepSection } from "./overview/sleep";
 import { ActivitySection } from "./overview/activity";
 import { SectionSkeleton } from "./overview/shared";
@@ -62,6 +63,7 @@ async function thumbnailOf(file: File): Promise<Blob | null> {
 export function Overview() {
   const { date, journal } = useDashboardPage();
   const [tab, setTab] = useState<Tab>("all");
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const query = useQuery(overviewQueryOptions(date));
 
@@ -89,7 +91,7 @@ export function Overview() {
   // A failed refetch keeps the cached targets on screen, so the notice shows only while there are none.
   const targetsStatus = targets ? null : queryStatus(targetsQuery, "Loading your targets…", "Targets could not load: ");
   const remove = (path: RecordPath, label: string) => (entry: { id: string; revision: number }) => journal.remove.mutate({ path, label, ...entry });
-  const busy = journal.create.isPending || journal.remove.isPending;
+  const busy = journal.create.isPending || journal.update.isPending || journal.remove.isPending;
 
   const sections: Record<Category, ReactNode> = data ? {
     activity: (
@@ -109,6 +111,7 @@ export function Overview() {
         weightGoalKg={targets?.weightKg ?? null}
         photos={data.photos}
         busy={busy}
+        onEdit={(entry) => setEditingId(entry.id)}
         onDelete={remove(recordPaths.measurement, "Measurement")}
         onUpload={upload}
         onDeletePhoto={remove(recordPaths.photo, "Photo")}
@@ -147,6 +150,13 @@ export function Overview() {
           </>
         )}
       </Tabs>
+      <EditMeasurementDialog
+        date={date}
+        entryId={editingId}
+        pending={journal.update.isPending}
+        onSave={(entry, input) => journal.update.mutate({ path: recordPaths.measurement, label: "Measurement", id: entry.id, revision: entry.revision, input, onSaved: () => setEditingId(null) })}
+        onClose={() => setEditingId(null)}
+      />
     </>
   );
 }

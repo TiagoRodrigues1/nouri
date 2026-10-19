@@ -274,6 +274,10 @@ export async function createRecord(key: string, command: RecordCommand): Promise
   await write(command.path, recordSchema, { method: "POST", key, json: command.input });
 }
 
+export async function updateRecord(key: string, entry: { id: string; revision: number }, command: RecordCommand): Promise<void> {
+  await write(`${command.path}/${encodeURIComponent(entry.id)}`, recordSchema, { method: "PATCH", key, revision: entry.revision, json: command.input });
+}
+
 export async function createPhoto(key: string, form: FormData): Promise<void> {
   await write(recordPaths.photo, recordSchema, { method: "POST", key, form });
 }
