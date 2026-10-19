@@ -12,9 +12,10 @@ const activityFactor: Record<Profile["activity"], number> = {
 };
 
 // Grams of protein per kilogram of body weight: higher while cutting to keep muscle, and while building it.
-const proteinPerKg: Record<Profile["goal"], number> = { lose: 2, maintain: 1.6, gain: 1.8 };
+const proteinPerKg = { lose: 2, maintain: 1.6, gain: 1.8 };
 
-const energyChange: Record<Profile["goal"], number> = { lose: -0.2, maintain: 0, gain: 0.1 };
+// The usual estimate of the energy in a kilogram of body weight.
+const kcalPerKg = 7700;
 
 const fatShare = 0.3;
 
@@ -49,17 +50,19 @@ export function suggestTargets(profile: Profile, body: { weightKg: number; heigh
 
   // Mifflin–St Jeor.
   const resting = 10 * weightKg + 6.25 * heightCm - 5 * age + (profile.sex === "male" ? 5 : -161);
-  const maintenance = resting * activityFactor[profile.activity];
+  const maintenanceKcal = roundTo(resting * activityFactor[profile.activity], 10);
+  const dailyChange = roundTo((profile.weeklyChangeKg * kcalPerKg) / 7, 10);
 
   // A cut never goes below resting energy.
-  const kcal = clamp(roundTo(Math.max(resting, maintenance * (1 + energyChange[profile.goal])), 10), targetLimits.kcal);
-  const proteinG = clamp(Math.round(Math.min(weightKg * proteinPerKg[profile.goal], (kcal * maxProteinShare) / 4)), targetLimits.proteinG);
+  const kcal = clamp(Math.max(roundTo(resting, 10), maintenanceKcal + dailyChange), targetLimits.kcal);
+  const direction = profile.weeklyChangeKg < 0 ? "lose" : profile.weeklyChangeKg > 0 ? "gain" : "maintain";
+  const proteinG = clamp(Math.round(Math.min(weightKg * proteinPerKg[direction], (kcal * maxProteinShare) / 4)), targetLimits.proteinG);
   const fatG = clamp(Math.round((kcal * fatShare) / 9), targetLimits.fatG);
   const carbsG = clamp(Math.round((kcal - proteinG * 4 - fatG * 9) / 4), targetLimits.carbsG);
   const waterMl = clamp(roundTo(weightKg * waterPerKg, 50), targetLimits.waterMl);
 
   return {
-    basis: { age, weightKg, heightCm, maintenanceKcal: roundTo(maintenance, 10) },
+    basis: { age, weightKg, heightCm, maintenanceKcal, expectedWeeklyChangeKg: Math.round(((kcal - maintenanceKcal) * 7 * 100) / kcalPerKg) / 100 },
     targets: { kcal, proteinG, carbsG, fatG, waterMl },
   };
 }

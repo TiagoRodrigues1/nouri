@@ -108,8 +108,21 @@ B is the base. It keeps formulas on the server, as `targets-design.md` requires,
 
 - Should the MCP server expose the profile view, so an assistant can explain the suggested targets?
 - Should the suggestion also cover steps and exercise minutes from the activity level?
-- Should "lose" and "gain" take a rate (for example 0.5 kg a week) instead of a fixed percentage?
+- ~~Should "lose" and "gain" take a rate (for example 0.5 kg a week) instead of a fixed percentage?~~ Answered below.
 
 ## Next implementation step
 
 Add `user_profiles` and `src/profile/contract.ts`. Then implement `suggestTargets` against unit tests, and the view against an integration test.
+
+## Weekly rate (follow-up)
+
+The goal direction became a signed rate, `weeklyChangeKg`, from -1 to 0.5 in steps of 0.25. Zero is maintain. A rate replaces the direction rather than sitting beside it. Two fields would allow "maintain at 0.5 kg a week", and every caller would have to know the rate is ignored then. The sign still picks protein per kilogram. Gains stop at half a kilogram because past that most of the extra is fat.
+
+```http
+PUT /v1/profile/2026-10-17
+{ "sex": "female", "birthYear": 1992, "activity": "moderate", "weeklyChangeKg": -0.5 }
+→ 200 { …, "suggestion": { "basis": { …, "maintenanceKcal": 2170, "expectedWeeklyChangeKg": -0.5 },
+                           "targets": { "kcal": 1620, … } } }
+```
+
+Energy moves by `weeklyChangeKg × 7,700 / 7` kcal a day, rounded to 10, from the rounded maintenance. A cut still never goes below resting energy, so `basis.expectedWeeklyChangeKg` reports the rate the suggested energy actually gives. It can be slower than the one asked for, and the dialog says so. The column stores grams (`weekly_change_g`), like the goal weight. Migration 0012 maps saved goals to roughly the change they had: lose to -0.5 kg (a fifth off maintenance) and gain to +0.25 kg (a tenth on).

@@ -6,12 +6,12 @@ import { Input } from "./components/ui/input";
 import { Label } from "./components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
 import { styles as formStyles } from "./form-styles";
-import { activityLevels, ageLimits, goalDirections, sexes } from "../../src/profile/contract";
+import { activityLevels, ageLimits, sexes, weeklyChangeLimits } from "../../src/profile/contract";
 import { defaultTargets, targetLimits, targetsSchema } from "../../src/targets/contract";
 import { useSaveTargets, useTargetsQuery } from "./lib/use-targets";
 import { useProfileQuery, useSaveProfile } from "./lib/use-profile";
 import { format } from "./lib/api";
-import type { Profile, ProfileView, SuggestedTargets, Targets } from "./lib/api";
+import type { Profile, ProfileView, SuggestedTargets, Suggestion, Targets } from "./lib/api";
 import { selectValue } from "./lib/select-value";
 import { localDate } from "./lib/time";
 import { queryStatus } from "./query-status";
@@ -174,13 +174,32 @@ const activityLabels: Record<Profile["activity"], string> = {
   "very-active": "Very active: hard daily training or physical work",
 };
 
-const goalLabels: Record<Profile["goal"], string> = { lose: "Lose weight", maintain: "Maintain weight", gain: "Gain weight" };
+// Every rate the API accepts, fastest loss first.
+const weeklyChanges = Array.from(
+  { length: (weeklyChangeLimits.max - weeklyChangeLimits.min) / weeklyChangeLimits.step + 1 },
+  (_, index) => weeklyChangeLimits.min + index * weeklyChangeLimits.step,
+);
+
+function weeklyChangeLabel(kg: number): string {
+  if (kg === 0) return "Maintain weight";
+
+  return `${kg < 0 ? "Lose" : "Gain"} ${format(Math.abs(kg), 2)} kg a week`;
+}
+
+// What the suggested energy does to weight, saying so when a cut is slower than asked.
+function expectedChange({ expectedWeeklyChangeKg }: Suggestion["basis"], asked: number): string {
+  if (expectedWeeklyChangeKg === 0) return "keeps your weight steady";
+
+  const change = `${expectedWeeklyChangeKg < 0 ? "loses" : "gains"} about ${format(Math.abs(expectedWeeklyChangeKg), 2)} kg a week`;
+
+  return expectedWeeklyChangeKg > asked ? `${change}, since a cut stays above resting energy` : change;
+}
 
 // The profile form keeps age as text while typing and stores a birth year, which does not go stale.
 type ProfileDraft = Omit<Profile, "birthYear"> & { age: string };
 
 function profileDraftFrom(profile: Profile | null, date: string): ProfileDraft {
-  if (!profile) return { sex: "female", age: "", activity: "moderate", goal: "maintain" };
+  if (!profile) return { sex: "female", age: "", activity: "moderate", weeklyChangeKg: 0 };
 
   const { birthYear, ...rest } = profile;
 
@@ -215,7 +234,7 @@ function ProfileSuggestion({ date, onSuggest }: ProfileSuggestionProps) {
 function ProfileFields({ date, view, onSuggest }: { date: string; view: ProfileView; onSuggest: ProfileSuggestionProps["onSuggest"] }) {
   const [draft, setDraft] = useState(() => profileDraftFrom(view.profile, date));
   const [invalid, setInvalid] = useState("");
-  const [suggested, setSuggested] = useState<ProfileView["suggestion"]>(null);
+  const [suggested, setSuggested] = useState<{ suggestion: Suggestion; asked: number } | null>(null);
   const save = useSaveProfile(date);
   const age = Number(draft.age);
 
@@ -232,7 +251,7 @@ function ProfileFields({ date, view, onSuggest }: { date: string; view: ProfileV
 
     save.mutate({ ...rest, birthYear: Number(date.slice(0, 4)) - age }, {
       onSuccess: ({ suggestion }) => {
-        setSuggested(suggestion);
+        setSuggested(suggestion && { suggestion, asked: rest.weeklyChangeKg });
 
         if (suggestion) onSuggest(suggestion.targets);
       },
@@ -284,12 +303,12 @@ function ProfileFields({ date, view, onSuggest }: { date: string; view: ProfileV
         </div>
         <div>
           <Label htmlFor="profile-goal" {...stylex.props(formStyles.formLabel)}>Goal</Label>
-          <Select value={draft.goal} onValueChange={(next) => setDraft({ ...draft, goal: selectValue(goalDirections, next, "maintain") })}>
+          <Select value={String(draft.weeklyChangeKg)} onValueChange={(next) => setDraft({ ...draft, weeklyChangeKg: Number(next) })}>
             <SelectTrigger id="profile-goal" {...stylex.props(formStyles.selectTrigger)}>
-              <SelectValue />
+              <SelectValue>{weeklyChangeLabel(draft.weeklyChangeKg)}</SelectValue>
             </SelectTrigger>
             <SelectContent>
-              {goalDirections.map((goal) => <SelectItem key={goal} value={goal}>{goalLabels[goal]}</SelectItem>)}
+              {weeklyChanges.map((kg) => <SelectItem key={kg} value={String(kg)}>{weeklyChangeLabel(kg)}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
@@ -299,8 +318,8 @@ function ProfileFields({ date, view, onSuggest }: { date: string; view: ProfileV
       )}
       {suggested ? (
         <p {...stylex.props(formStyles.dialogDescription)} role="status">
-          Filled in energy, macros, and water for {format(suggested.basis.weightKg, 1)} kg, {format(suggested.basis.heightCm)} cm, age {suggested.basis.age}.
-          Maintenance is about {format(suggested.basis.maintenanceKcal)} kcal. Check them, then save.
+          Filled in energy, macros, and water for {format(suggested.suggestion.basis.weightKg, 1)} kg, {format(suggested.suggestion.basis.heightCm)} cm, age {suggested.suggestion.basis.age}.
+          Maintenance is about {format(suggested.suggestion.basis.maintenanceKcal)} kcal, and {format(suggested.suggestion.targets.kcal)} kcal {expectedChange(suggested.suggestion.basis, suggested.asked)}. Check them, then save.
         </p>
       ) : missing && (
         <p {...stylex.props(formStyles.dialogDescription)} role="status">{missing}</p>

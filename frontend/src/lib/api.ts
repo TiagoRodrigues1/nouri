@@ -56,7 +56,7 @@ export type { SleepSession } from "../../../src/sleep/contract";
 
 export type { Supplement, SupplementDay, SupplementIntake, SupplementKind } from "../../../src/supplements/contract";
 
-export type { Profile, ProfileView, SuggestedTargets } from "../../../src/profile/contract";
+export type { Profile, ProfileView, SuggestedTargets, Suggestion } from "../../../src/profile/contract";
 
 export type { Targets } from "../../../src/targets/contract";
 
