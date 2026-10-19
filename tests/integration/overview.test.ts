@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 
-const { app, otherApp, client, token, setup, cleanup } = createHarness();
+let { app, otherApp, client, token, setup, cleanup } = createHarness();
 
 const auth = { Authorization: `Bearer ${token}` };
 
@@ -217,6 +217,53 @@ void test("overview combines sports, measurements, sleep, and photos", async () 
     const spec = await (await app.request("/openapi.json")).json();
 
     for (const path of ["/v1/overview/{date}", "/v1/measurements", "/v1/workouts", "/v1/sleep-sessions", "/v1/progress-photos", "/v1/progress-photos/{id}", "/v1/progress-photos/{id}/image", "/v1/progress-photos/{id}/thumbnail"]) assert.ok(spec.paths[path], path);
+  } finally {
+    await cleanup();
+  }
+});
+
+void test("a logged measurement is edited in place at the revision last read", async () => {
+  ({ app, otherApp, client, token, setup, cleanup } = createHarness());
+  await setup();
+
+  try {
+    const edit = (id: string, revision: number, body: Body, key = randomUUID(), target = app) => target.request(`/v1/measurements/${id}`, {
+      method: "PATCH", headers: { ...auth, "Content-Type": "application/json", "Idempotency-Key": key, "If-Match": `"${revision}"` }, body: JSON.stringify(body),
+    });
+
+    const logged = await (await post("/v1/measurements", { occurredAt: "2026-09-24T07:30:00Z", timeZone: zone, kind: "weight", value: 81.25 })).json();
+    const corrected = { occurredAt: "2026-09-24T08:00:00Z", timeZone: zone, kind: "weight", value: 80.9 };
+
+    const key = randomUUID();
+    const response = await edit(logged.id, logged.revision, corrected, key);
+    assert.equal(response.status, 200);
+    const updated = await response.json();
+    assert.deepEqual({ id: updated.id, revision: updated.revision, value: updated.value, occurredAt: updated.occurredAt }, { id: logged.id, revision: 2, value: 80.9, occurredAt: "2026-09-24T08:00:00.000Z" });
+
+    // A retry replays the saved answer; the old revision is now stale for any other edit.
+    assert.deepEqual(await (await edit(logged.id, logged.revision, corrected, key)).json(), updated);
+    assert.equal((await edit(logged.id, logged.revision, { ...corrected, value: 80 })).status, 409);
+    assert.equal((await edit(logged.id, updated.revision, { ...corrected, value: 900 })).status, 400);
+    assert.equal((await app.request(`/v1/measurements/${logged.id}`, { method: "PATCH", headers: { ...auth, "Content-Type": "application/json", "Idempotency-Key": randomUUID() }, body: JSON.stringify(corrected) })).status, 400);
+    assert.equal((await edit(logged.id, updated.revision, corrected, randomUUID(), otherApp)).status, 404);
+    assert.equal((await edit(randomUUID(), 1, corrected)).status, 404);
+
+    let day = await overview("2026-09-24");
+    assert.deepEqual(day.measurements.entries.map((entry: { value: number }) => entry.value), [80.9]);
+    assert.equal(day.measurements.latest.weight.value, 80.9);
+
+    // A new time on another day moves the entry there.
+    const moved = await (await edit(logged.id, updated.revision, { ...corrected, occurredAt: "2026-09-23T08:00:00Z" })).json();
+    assert.equal(moved.localDate, "2026-09-23");
+    day = await overview("2026-09-24");
+    assert.deepEqual(day.measurements.entries, []);
+    assert.deepEqual(day.measurements.latest.weight, { value: 80.9, localDate: "2026-09-23" });
+
+    assert.equal((await remove(`/v1/measurements/${logged.id}`, moved.revision)).status, 204);
+    assert.equal((await edit(logged.id, moved.revision + 1, corrected)).status, 404);
+
+    const spec = await (await app.request("/openapi.json")).json();
+    assert.ok(spec.paths["/v1/measurements/{id}"].patch);
   } finally {
     await cleanup();
   }

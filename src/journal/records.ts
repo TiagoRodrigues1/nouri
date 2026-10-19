@@ -7,10 +7,11 @@ import { requestHash, withReceipt } from "./receipt.js";
 
 export type RecordCommand<Input> =
   | { kind: "create"; input: Input }
+  | { kind: "edit"; id: string; revision: number; input: Input }
   | { kind: "delete"; id: string; revision: number };
 
 export type RecordMutationResult<Entry> =
-  | { outcome: "created"; entry: Entry }
+  | { outcome: "created" | "updated"; entry: Entry }
   | { outcome: "deleted" | "missing" | "stale" | "key-reuse" }
   | { outcome: "unknown-reference" | "quota-exceeded"; message: string };
 
@@ -109,7 +110,7 @@ export async function editRecord<Input, Entry>(db: AppDatabase, userId: string, 
 function hash<Input, Entry>(kind: RecordKind<Input, Entry>, command: RecordCommand<Input>): string {
   const request = command.kind === "create"
     ? { kind: `${kind.name}-create`, input: kind.fingerprint ? kind.fingerprint(command.input) : command.input }
-    : { ...command, kind: `${kind.name}-delete` };
+    : { ...command, kind: `${kind.name}-${command.kind}` };
 
   return requestHash(request);
 }
@@ -137,14 +138,31 @@ export async function mutateRecord<Input, Entry>(db: AppDatabase, userId: string
 
     if (outcome === null) throw new Error("Incomplete receipt cannot be replayed");
 
-    if (outcome === "created") return { outcome, entry: kind.schema.parse(body) };
-
-    if (outcome === "updated") throw new Error("Journal records are never updated");
+    if (outcome === "created" || outcome === "updated") return { outcome, entry: kind.schema.parse(body) };
 
     return { outcome };
   }, async (tx): Promise<RecordMutationResult<Entry>> => {
     if (command.kind === "delete") return softDelete(tx, kind.table, userId, command.id, command.revision, { erase: kind.erase, deletable: kind.deletable });
 
+    if (command.kind === "edit") return replace(tx, userId, kind, command);
+
     return kind.create(tx, userId, command.input);
   });
+}
+
+// Rewrites an entry whole at the revision the caller last read. Imported rows are out of scope, so they read as missing.
+async function replace<Input, Entry>(tx: Transaction, userId: string, kind: RecordKind<Input, Entry>, { id, revision, input }: { id: string; revision: number; input: Input }): Promise<RecordMutationResult<Entry>> {
+  const { edit } = kind;
+
+  if (!edit) throw new Error(`${kind.label} cannot be edited`);
+
+  const current = await edit.lock(tx, userId, id, and(kind.deletable, sql`revision = ${revision}`));
+
+  if (!current) {
+    const stored = await tx.execute(sql`SELECT id FROM ${kind.table} WHERE user_id = ${userId} AND id = ${id} AND deleted_at IS NULL${kind.deletable ? sql` AND ${kind.deletable}` : sql``}`);
+
+    return { outcome: stored.length > 0 ? "stale" : "missing" };
+  }
+
+  return edit.update(tx, userId, id, input);
 }

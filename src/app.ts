@@ -306,6 +306,22 @@ export function createApp(db: AppDatabase, identity: Identity, packagedFoods: Pa
     app.openAPIRegistry.registerPath({ method: "post", path, request: { headers: mutationHeaders, body: json(schema) }, responses });
   }
 
+  // Replaces an entry whole, at the revision the caller last read, keeping its id.
+  function jsonRecordEditing<Input, Entry>(path: string, kind: RecordKind<Input, Entry>, schema: z.ZodType<Input>) {
+    const { label } = kind;
+    app.patch(`${path}/:id`, async (context) => {
+      const key = context.get("idempotencyKey");
+      const id = z.uuid().safeParse(context.req.param("id"));
+      const revision = revisionHeader(context.req.header("If-Match"));
+      const input = schema.safeParse(await context.req.json().catch(() => null));
+
+      if (!id.success || revision === null || !input.success) return error(400, `Invalid ${label.toLowerCase()} edit`);
+
+      return mutationResponse(await mutateRecord(db, context.get("userId"), key, kind, { kind: "edit", id: id.data, revision, input: input.data }), `${label} not found`);
+    });
+    app.openAPIRegistry.registerPath({ method: "patch", path: `${path}/{id}`, request: { params: z.object({ id: z.uuid() }), headers: editHeaders, body: json(schema) }, responses: { 200: { description: `Updated ${label.toLowerCase()}`, ...json(kind.schema) }, 400: failure("Invalid request"), 404: failure(`${label} not found`), 409: failure("Revision or idempotency conflict") } });
+  }
+
   jsonRecordCreation(recordPaths.water, waterRecords, waterInputSchema);
   jsonRecordCreation(recordPaths.measurement, measurementRecords, measurementInputSchema);
   jsonRecordCreation(recordPaths.workout, workoutRecords, workoutInputSchema);
@@ -317,6 +333,7 @@ export function createApp(db: AppDatabase, identity: Identity, packagedFoods: Pa
   recordDeletion(recordPaths.sleep, sleepRecords);
   recordDeletion(recordPaths.photo, photoRecords);
   recordDeletion(recordPaths.supplementIntake, intakeRecords);
+  jsonRecordEditing(recordPaths.measurement, measurementRecords, measurementInputSchema);
 
   app.get(`${recordPaths.workout}/summary/:date`, async (context) => {
     const date = z.iso.date().safeParse(context.req.param("date"));
