@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   defaultDuration, expandSets, parseRepTarget, parseReps, parseSet, parseWeight, previousLabel, previousSets, reduce, repTargetText, repsPlaceholder,
-  sessionDate, sessionStats, setPlaceholder, startSession, toWorkoutInput, type Session, type SessionAction,
+  routineUpdate, sessionDate, sessionSchema, sessionStats, setPlaceholder, startSession, toWorkoutInput, type Session, type SessionAction,
 } from "../../frontend/src/lib/workout-session.js";
 import type { Routine } from "../../src/routines/contract.js";
 import { workoutInputSchema, type ExerciseHistory } from "../../src/workouts/contract.js";
@@ -132,7 +132,7 @@ void test("sets and exercises are added, removed, replaced, and moved within the
 
 void test("a frozen session ignores every edit until it thaws, and keeps its first key", () => {
   const done = apply(started(), tick("id-3", { weightKg: 60, reps: 5 }));
-  const finish = { key: "key-1", input: toWorkoutInput(done, 45) };
+  const finish = { key: "key-1", input: toWorkoutInput(done, 45), routine: null };
   const frozen = reduce(done, { type: "freeze", finish });
 
   assert.deepEqual(frozen.finish, finish);
@@ -148,7 +148,7 @@ void test("a frozen session ignores every edit until it thaws, and keeps its fir
     { type: "replace-exercise", exerciseId: bench, name: "Curl" },
     { type: "remove-exercise", exerciseId: bench },
     { type: "move-exercise", exerciseId: bench, offset: 1 },
-    { type: "freeze", finish: { key: "key-2", input: finish.input } },
+    { type: "freeze", finish: { key: "key-2", input: finish.input, routine: null } },
   ];
 
   for (const action of edits) assert.equal(reduce(frozen, action), frozen, `${action.type} is ignored while frozen`);
@@ -303,4 +303,56 @@ void test("set values parse from typed text", () => {
   assert.equal(parseWeight("abc"), undefined, "text that is not a weight is invalid");
   assert.equal(parseReps("8"), 8);
   assert.equal(parseReps("0"), null);
+});
+
+void test("a routine is offered no update when the session kept its exercises and sets", () => {
+  const done = apply(started(), tick("id-3", { weightKg: 60, reps: 7 }), edit("id-4", "reps", "6"), { type: "reopen-set", exerciseId: bench, setId: "id-3" });
+
+  assert.equal(routineUpdate(done, push), null, "weights, reps, and ticks are not part of the routine");
+  assert.deepEqual(
+    routineUpdate(started(), { ...push, revision: 4, exercises: [push.exercises[0]!] }),
+    { name: "Push day", exercises: push.exercises },
+    "compared with the routine as it is now, edited since the session started",
+  );
+});
+
+void test("a routine update takes the session's exercises and sets in screen order", () => {
+  const session = apply(
+    started(),
+    { type: "remove-set", exerciseId: bench, setId: "id-3" },
+    { type: "add-set", exerciseId: bench, setId: "s-1" },
+    { type: "move-exercise", exerciseId: "id-6", offset: -1 },
+    { type: "add-exercise", exerciseId: "curl", setId: "c-1", name: "Curl" },
+    { type: "add-set", exerciseId: "curl", setId: "c-2" },
+    { type: "add-set", exerciseId: "curl", setId: "c-3" },
+    edit("c-1", "reps", "12", "curl"),
+    tick("c-2", { weightKg: 14, reps: 10 }, "curl"),
+    { type: "add-exercise", exerciseId: "fly", setId: "f-1", name: "Cable fly" },
+  );
+
+  assert.deepEqual(routineUpdate(session, push), {
+    name: "Push day",
+    exercises: [
+      { name: "Dip", sets: [{ reps: { min: 10, max: 10 } }] },
+      { name: "Bench press", sets: [{ reps: { min: 8, max: 12 } }, { reps: { min: 8, max: 12 } }, { reps: { min: 8, max: 12 } }] },
+      { name: "Curl", sets: [{ reps: { min: 12, max: 12 } }, { reps: { min: 10, max: 10 } }] },
+    ],
+  }, "a new set aims for the reps typed or done; one with none, and an exercise left empty, are dropped");
+
+  const replaced = apply(started(), { type: "replace-exercise", exerciseId: "id-6", name: "Push-up" });
+
+  assert.deepEqual(routineUpdate(replaced, { ...push, name: "Push (renamed)" })?.exercises[1], { name: "Push-up", sets: [{ reps: { min: 10, max: 10 } }] });
+  assert.equal(routineUpdate(replaced, { ...push, name: "Push (renamed)" })?.name, "Push (renamed)", "the routine keeps its current name");
+});
+
+void test("a routine is never updated to nothing", () => {
+  const emptied = apply(started(), { type: "remove-exercise", exerciseId: bench }, { type: "remove-exercise", exerciseId: "id-6" }, { type: "add-exercise", exerciseId: "x", setId: "x-1", name: "Curl" });
+
+  assert.equal(routineUpdate(emptied, push), null);
+});
+
+void test("a draft frozen before routine updates still reads", () => {
+  const session = { ...started(), finish: { key: "key-1", input: toWorkoutInput(started(), 45) } };
+
+  assert.equal(sessionSchema.parse(session).finish?.routine, null);
 });

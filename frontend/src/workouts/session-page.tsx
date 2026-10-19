@@ -12,9 +12,10 @@ import { Label } from "../components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
 import { format } from "../lib/api";
 import { exerciseHistoryQueryOptions } from "../lib/exercise-history";
+import { useRoutines } from "../lib/routines";
 import { useNow, useWorkoutSession, type WorkoutSessionHandle } from "../lib/use-workout-session";
 import {
-  defaultDuration, parseReps, parseWeight, previousLabel, previousSets, repsPlaceholder, sessionDate, sessionStats, setPlaceholder, weightText,
+  defaultDuration, parseReps, parseWeight, previousLabel, previousSets, repsPlaceholder, routineUpdate, sessionDate, sessionStats, setPlaceholder, weightText,
   type Session, type SessionExercise, type SetValues,
 } from "../lib/workout-session";
 import { maxRoutineExercises, maxRoutineSets } from "../../../src/routines/contract";
@@ -249,7 +250,12 @@ function FinishDialog({ open, onOpenChange, session, doneSets, workout }: Finish
 function FinishBody({ onClose, session, doneSets, workout }: { onClose: () => void; session: Session; doneSets: number; workout: WorkoutSessionHandle }) {
   const navigate = useNavigate();
   const [minutes, setMinutes] = useState(() => String(defaultDuration(session, Date.now())));
+  const [updating, setUpdating] = useState(false);
+  const routines = useRoutines();
   const { finish } = workout;
+  // Offered only when the routine is still there and the session changed its exercises or sets.
+  const routine = routines.data?.find((entry) => entry.id === session.routine?.id) ?? null;
+  const updatable = routine !== null && routineUpdate(session, routine) !== null;
 
   async function saved(date: Promise<string | null>) {
     const logged = await date;
@@ -288,13 +294,22 @@ function FinishBody({ onClose, session, doneSets, workout }: { onClose: () => vo
       {...stylex.props(formStyles.formStack, styles.finishForm)}
       onSubmit={(event) => {
         event.preventDefault();
-        void saved(finish.save(Number(minutes)));
+        void saved(finish.save(Number(minutes), updatable && updating ? routine : null));
       }}
     >
       <div {...stylex.props(styles.durationField)}>
         <Label htmlFor="finish-duration" {...stylex.props(formStyles.formLabel)}>Duration (min)</Label>
         <Input id="finish-duration" type="number" inputMode="numeric" min={1} max={1440} step={1} value={minutes} onChange={(event) => setMinutes(event.target.value)} required />
       </div>
+      {updatable && (
+        <div>
+          <div {...stylex.props(formStyles.shareRow)}>
+            <Checkbox id="finish-update-routine" checked={updating} onCheckedChange={(checked) => setUpdating(checked === true)} />
+            <Label htmlFor="finish-update-routine">Update {routine.name}</Label>
+          </div>
+          <p {...stylex.props(formStyles.fieldHint)}>Its exercises and sets become the ones in this workout. Rep targets stay; new sets aim for the reps you did.</p>
+        </div>
+      )}
       <div {...stylex.props(formStyles.dialogActions)}>
         <Button type="submit">Save workout</Button>
       </div>

@@ -14,6 +14,8 @@ While the workout is open, every other page shows a bar with `Push day`, the ela
 
 Choose `Finish`. The dialog holds only `Duration (min)`, prefilled from the clock, and `Save workout`; unticked sets are left out. `Save workout` toasts `Push day saved.` and opens Overview on the start day. `GET /v1/overview/<day>` has one `strength` workout whose `strengthExercises` hold the ticked sets in order, consecutive equal sets merged into one row (`sets: 2`). Its exercises appear in Progress.
 
+Finish shows `Update Push day` only when the session changed the routine's exercises or sets; ticking sets alone does not. Start the routine, add a set to one exercise, remove another exercise's only set, tick one set, and choose `Finish`. Tick `Update Push day` and `Save workout`: the page toasts `Push day updated.` as well, and `GET /v1/routines` shows the routine at the next revision with the session's exercises and sets. The new set copies the last target, and the emptied exercise is gone.
+
 Start the routine again. PREVIOUS now reads each set from the last session (`60kg × 5`); choosing it copies the values. The weight placeholder is last time's weight, and ticking an empty row fills it from the placeholders. `Discard workout` asks `Discard this workout?` once a set is ticked, and discarding removes the resume bar.
 
 Open the routine with `Edit Push day`, change it, and save; the revision moves on, and a workout in progress keeps the plan it started with. `Delete routine` removes the card and toasts that workouts logged from it stay.
