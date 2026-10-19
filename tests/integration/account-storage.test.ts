@@ -58,8 +58,12 @@ void test("the storage ledger counts every write path and refuses new records pa
     await assert.rejects(client`UPDATE water_entries SET time_zone = 'America/Argentina/ComodRivadavia' WHERE id = ${entry.id}`, (failure: Error & { code?: string }) => failure.code === "53Q01");
     await client`UPDATE water_entries SET volume_ml = 300 WHERE id = ${entry.id}`;
 
-    // Assistant connections are kept, so a full account cannot add another one either.
+    // Assistant connections are kept, so a full account cannot add another one either, but can still disconnect one.
+    await client`UPDATE account_storage SET bytes = 0 WHERE user_id = ${userId}`;
+    await client`INSERT INTO assistant_connections (user_id, client_id, name) VALUES (${userId}, 'claude', 'Claude')`;
+    await client`UPDATE account_storage SET bytes = ${maxAccountRecordBytes} WHERE user_id = ${userId}`;
     await assert.rejects(client`INSERT INTO assistant_connections (user_id, client_id, name) VALUES (${userId}, 'new-client', 'Claude')`, (failure: Error & { code?: string }) => failure.code === "53Q01");
+    await client`UPDATE assistant_connections SET disconnected_at = now() WHERE user_id = ${userId} AND client_id = 'claude'`;
 
     // A refused write leaves no half-made receipt, so the same key works once there is room.
     const [pending] = await client`SELECT count(*) AS count FROM mutation_receipts WHERE outcome IS NULL`;

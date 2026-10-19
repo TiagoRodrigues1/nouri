@@ -121,8 +121,22 @@ const missingLifetimeMs = 6 * 60 * 60_000;
 
 // Open Food Facts answers each barcode once a day, or once in six hours when it has no product, however often it is
 // scanned. Failures are not kept, so the next scan asks again. Fetches past the app's allowance read as unavailable.
+// Scans of one barcode that arrive while it is being looked up share that lookup instead of asking again.
 export function rememberedLookups(foods: PackagedFoods, allowFetch: () => boolean, now = Date.now): PackagedFoods {
   const remembered = new Map<string, { answer: PackagedLookup; expiresAt: number }>();
+  const inFlight = new Map<string, Promise<PackagedLookup>>();
+
+  async function fetchAndRemember(barcode: string): Promise<PackagedLookup> {
+    const answer = await foods.lookup(barcode);
+
+    if (answer.outcome === "unavailable") return answer;
+
+    // Bounds memory; the oldest barcode goes first, since a Map keeps insertion order.
+    if (remembered.size >= 5000) remembered.delete(remembered.keys().next().value ?? "");
+    remembered.set(barcode, { answer, expiresAt: now() + (answer.outcome === "found" ? foundLifetimeMs : missingLifetimeMs) });
+
+    return answer;
+  }
 
   return {
     async lookup(barcode) {
@@ -130,17 +144,15 @@ export function rememberedLookups(foods: PackagedFoods, allowFetch: () => boolea
 
       if (kept && kept.expiresAt > now()) return kept.answer;
       remembered.delete(barcode);
+      const pending = inFlight.get(barcode);
+
+      if (pending) return pending;
 
       if (!allowFetch()) return { outcome: "unavailable" };
-      const answer = await foods.lookup(barcode);
+      const lookup = fetchAndRemember(barcode).finally(() => inFlight.delete(barcode));
+      inFlight.set(barcode, lookup);
 
-      if (answer.outcome === "unavailable") return answer;
-
-      // Bounds memory; the oldest barcode goes first, since a Map keeps insertion order.
-      if (remembered.size >= 5000) remembered.delete(remembered.keys().next().value ?? "");
-      remembered.set(barcode, { answer, expiresAt: now() + (answer.outcome === "found" ? foundLifetimeMs : missingLifetimeMs) });
-
-      return answer;
+      return lookup;
     },
   };
 }

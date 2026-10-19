@@ -401,3 +401,32 @@ void test("requests waiting on identification are bounded before they are counte
   assert.ok((await Promise.all(waiting)).every((response) => [401, 429].includes(response.status)));
   assert.equal((await app.request("/v1/me")).status, 401);
 });
+
+void test("simultaneous scans of one uncached barcode share a single Open Food Facts lookup", async () => {
+  let fetches = 0;
+  let allowed = 0;
+  let answer: () => void = () => undefined;
+  const arrives = new Promise<void>((resolve) => { answer = resolve; });
+
+  const upstream = {
+    lookup: async (): Promise<PackagedLookup> => {
+      fetches++;
+      await arrives;
+
+      return { outcome: "not-found" };
+    },
+  };
+
+  const allow = () => {
+    allowed++;
+
+    return true;
+  };
+
+  const foods = rememberedLookups(upstream, allow);
+  const scans = Array.from({ length: 5 }, () => foods.lookup("12345670"));
+  answer();
+  assert.ok((await Promise.all(scans)).every((result) => result.outcome === "not-found"));
+  assert.equal(fetches, 1);
+  assert.equal(allowed, 1);
+});

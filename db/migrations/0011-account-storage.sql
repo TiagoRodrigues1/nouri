@@ -40,7 +40,11 @@ BEGIN
     ON CONFLICT (user_id) DO UPDATE SET bytes = account_storage.bytes + EXCLUDED.bytes
     RETURNING bytes INTO stored;
 
-    IF (TG_OP = 'INSERT' OR (pg_column_size(NEW) > pg_column_size(OLD) AND NOT (to_jsonb(OLD) ->> 'deleted_at' IS NULL AND to_jsonb(NEW) ->> 'deleted_at' IS NOT NULL)))
+    -- Setting a removal marker (deleted_at, or an assistant's disconnected_at) grows a row by a timestamp, and is
+    -- allowed on a full account like any other way of removing something.
+    IF (TG_OP = 'INSERT' OR (pg_column_size(NEW) > pg_column_size(OLD) AND NOT EXISTS (
+        SELECT 1 FROM unnest(ARRAY['deleted_at', 'disconnected_at']) AS marker
+        WHERE to_jsonb(OLD) ->> marker IS NULL AND to_jsonb(NEW) ->> marker IS NOT NULL)))
       AND (stored > 134217728 OR (SELECT sum(bytes) FROM account_storage) + (SELECT bytes FROM unowned_storage) > 2147483648) THEN
       RAISE EXCEPTION 'Storage allowance reached' USING ERRCODE = '53Q01';
     END IF;
