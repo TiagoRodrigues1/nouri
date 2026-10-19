@@ -262,7 +262,7 @@ export async function createRoutine(key: string, input: RoutineInput): Promise<R
   return write("/v1/routines", routineSchema, { method: "POST", key, json: input });
 }
 
-export async function updateRoutine(key: string, routine: Routine, input: RoutineInput): Promise<Routine> {
+export async function updateRoutine(key: string, routine: Pick<Routine, "id" | "revision">, input: RoutineInput): Promise<Routine> {
   return write(`/v1/routines/${encodeURIComponent(routine.id)}`, routineSchema, { method: "PATCH", key, revision: routine.revision, json: input });
 }
 

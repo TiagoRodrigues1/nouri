@@ -4,10 +4,10 @@ import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { z } from "zod";
 import { recordPaths } from "../../../src/journal/paths";
-import { ApiError, createRecord, type Routine } from "./api";
+import { ApiError, createRecord, updateRoutine, type Routine } from "./api";
 import { queryRefresh } from "./query-refresh";
 import { timeZone } from "./time";
-import { reduce, sessionDate, sessionSchema, startSession, toWorkoutInput, type Session, type SessionAction } from "./workout-session";
+import { reduce, routineUpdate, sessionDate, sessionSchema, startSession, toWorkoutInput, type FrozenRoutineUpdate, type Session, type SessionAction } from "./workout-session";
 
 // Later versions join this union with a transform that upgrades the older ones.
 const storedSchema = z.object({ version: z.literal(1), session: sessionSchema });
@@ -86,9 +86,25 @@ function apply(storageKey: string, action: SessionAction) {
 
 type FinishOutcome = "saved" | "rejected" | "unknown";
 
-// Sends the frozen request until the server answers. Only a stored workout clears the draft. A 400 or 413 means
-// nothing was stored, so the draft opens for editing again; any other failure may have stored it, so the same key
-// and body go again.
+// Replaces the routine once the workout is stored. Its own key makes a resend after a reload harmless. A failure
+// here never holds the workout back, so it is tried once and the toast says what happened.
+async function sendRoutineUpdate(update: FrozenRoutineUpdate, client: QueryClient) {
+  try {
+    const routine = await updateRoutine(update.key, update, update.input);
+
+    toast.success(`${routine.name} updated.`);
+  } catch (error) {
+    const changed = error instanceof ApiError && (error.status === 404 || error.status === 409);
+
+    toast.error(changed ? `${update.input.name} changed since you started, so it was left as it was.` : `${update.input.name} may not have been updated.`);
+  }
+
+  await Promise.all(queryRefresh.routines.map((name) => client.invalidateQueries({ queryKey: [name] })));
+}
+
+// Sends the frozen request until the server answers. Only a stored workout clears the draft, after the routine
+// update rides along. A 400 or 413 means nothing was stored, so the draft opens for editing again; any other
+// failure may have stored it, so the same key and body go again.
 function send(storageKey: string, session: Session, client: QueryClient): Promise<FinishOutcome> {
   const finish = session.finish;
 
@@ -99,6 +115,7 @@ function send(storageKey: string, session: Session, client: QueryClient): Promis
 
   const request = createRecord(finish.key, { path: recordPaths.workout, input: finish.input }).then(
     async (): Promise<FinishOutcome> => {
+      if (finish.routine) await sendRoutineUpdate(finish.routine, client);
       clear(storageKey, session.id);
       toast.success(`${session.title} saved.`);
       await Promise.all(queryRefresh.workout.map((name) => client.invalidateQueries({ queryKey: [name] })));
@@ -144,8 +161,9 @@ export type WorkoutSessionHandle = {
   start: (routine: Routine | null) => StartResult;
   discard: () => void;
   finish: {
-    // Freezes the request into the draft, then sends it. Resolves with the workout's date once it is stored.
-    save: (durationMinutes: number) => Promise<string | null>;
+    // Freezes the request into the draft, then sends it. Resolves with the workout's date once it is stored. Given
+    // the routine the session started from, it also replaces that routine with the session's exercises and sets.
+    save: (durationMinutes: number, updating: Routine | null) => Promise<string | null>;
     retry: () => Promise<string | null>;
     isPending: boolean;
   };
@@ -187,11 +205,14 @@ export function useWorkoutSession(): WorkoutSessionHandle {
     return (await send(storageKey, current.session, client)) === "saved" ? sessionDate(current.session) : null;
   }, [storageKey, client]);
 
-  const save = useCallback(async (durationMinutes: number) => {
+  const save = useCallback(async (durationMinutes: number, updating: Routine | null) => {
     const current = read(storageKey);
 
     if (current.kind !== "session") return null;
-    apply(storageKey, { type: "freeze", finish: { key: crypto.randomUUID(), input: toWorkoutInput(current.session, durationMinutes) } });
+    const routineInput = updating && routineUpdate(current.session, updating);
+    const routine = updating && routineInput && { key: crypto.randomUUID(), id: updating.id, revision: updating.revision, input: routineInput };
+
+    apply(storageKey, { type: "freeze", finish: { key: crypto.randomUUID(), input: toWorkoutInput(current.session, durationMinutes), routine } });
 
     return retry();
   }, [storageKey, retry]);

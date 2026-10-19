@@ -95,6 +95,8 @@ type Session = {
 
 **Finish freezes, then sends.** `finish.save` builds `toWorkoutInput`, checks it with the shared `workoutInputSchema`, and writes `{ key, input }` into the draft before it sends anything. While a draft is frozen, the reducer ignores every edit. A 201 clears the draft, refreshes `queryRefresh.workout`, and navigates to Overview. A network error, 5xx, 401, or 409 leaves the outcome unknown, so the dialog offers only Retry, which resends the same key and body, or Discard. A 400 or 413 means nothing was stored, so the draft unfreezes. On mount, a frozen draft resends itself once. The receipt replays `created` for the same key, so every step can run twice and still log one workout.
 
+**Finish can update the routine.** When the session changed the routine's exercises or sets, the Finish dialog offers **Update Push day**, unticked. `routineUpdate(session, routine)` derives the new routine from the session, compared with the routine as the `routines` query has it now: exercises in screen order, every set still on screen, done or not. Weights, reps, and ticks are not part of a routine, so a session that only logged sets offers nothing. A set keeps its rep target. A set added during the session aims for the reps done or typed, and one with neither is dropped, as is an exercise left with no sets. The routine keeps its current name. The update is frozen with the workout as `{ key, id, revision, input }`, so it survives a reload. It is sent once the workout is stored and before the draft clears, under its own key and `If-Match` revision. A failed update never holds the workout back. A 404 or 409 says the routine changed since, and anything else says it may not have been updated. Drafts frozen before this read with `routine: null`.
+
 **A finished session is ordinary rows.** Done sets are run-length encoded per exercise, in screen order. Consecutive done sets with equal reps and weight become one `{ name, sets: n, reps, weightKg }` row, so 62×7, 62×7, 60×8 gives two rows. `getExerciseHistory` already folds several rows into one session, so Progress, Overview, Review, and MCP need no change. `expandSets` inverts the encoding exactly.
 
 **PREVIOUS is derived.** For set *i* it is `expandSets(lastSession(history, name, sessionDate).sets)[i]`, read from the cached `exercise-history` query. Old manual logs such as "3 × 8 · 60 kg" expand to three sets, so PREVIOUS works for history from before routines.
@@ -112,6 +114,8 @@ Two candidates were sketched.
 
 B is the base. It hides the same gym concerns (reloads, a killed tab, a lost Finish response, two tabs) behind a smaller surface, and it adds no session state that the server must expire or clean up. A's only gain is cross-device resume, which nobody asked for. From A it takes the warning that per-set writes would trip the hourly write limit, which confirms that Finish should be the only write.
 
+Updating the routine from Finish had two candidates. One sent `useSaveRoutine` from the dialog after Save, which loses the choice if the tab dies mid-save and splits Finish across two flows. The chosen one freezes the update into the Finish request, so `finish.save(minutes, routine)` stays the one call and the existing retry protocol carries it.
+
 ## Tradeoffs accepted
 
 - We accept that a session lives in one browser profile. It cannot move from the phone to the laptop, and clearing site data loses an unfinished one. In exchange, the server holds no session state and nothing is written per set.
@@ -120,6 +124,7 @@ B is the base. It hides the same gym concerns (reloads, a killed tab, a lost Fin
 - We accept that the workout does not record its routine or name. Overview shows "Strength training · 52 min" as today, and no workout column changes.
 - We accept that PREVIOUS matches sets by position. A warm-up set added in front shifts the comparison by one.
 - We accept that a done set needs at least one rep, as the workout schema does.
+- We accept that a routine update after an unclear failure is not retried, in exchange for the workout clearing as soon as it is stored. The toast says so, and the routine can be edited by hand.
 - Routines have no notes, rest timers, or warm-up set types. Nobody asked for them, and none would survive into the workout record.
 
 ## Alternatives considered
@@ -132,7 +137,6 @@ B is the base. It hides the same gym concerns (reloads, a killed tab, a lost Fin
 ## Open questions and risks
 
 - Should manual workouts gain a title, so Overview says "Push day"? It needs a `title` on the workout input and relaxing `workouts_source_identity`.
-- Should Finish offer to update the routine with the sets done, as Hevy does?
 - Should the Overview tile group one exercise's rows into one line, now that sessions produce more of them?
 
 ## Next implementation step

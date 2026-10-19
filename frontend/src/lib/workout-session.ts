@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { repTargetSchema, type RepTarget, type Routine } from "../../../src/routines/contract.js";
+import { repTargetSchema, routineInputSchema, type RepTarget, type Routine, type RoutineInput } from "../../../src/routines/contract.js";
 import { localDate } from "../../../src/time.js";
 import { appendExercise, appendSet, changeById, changeSet, moveById } from "./exercise-list.js";
 import { exerciseKey, workoutInputSchema, type ExerciseHistory, type ExerciseSession, type WorkoutInput } from "../../../src/workouts/contract.js";
@@ -20,8 +20,12 @@ const sessionSetSchema = z.object({
 
 const sessionExerciseSchema = z.object({ id: z.string(), name: z.string(), sets: z.array(sessionSetSchema) });
 
-// The exact request Finish sends, and its key, kept until the server answers.
-const frozenFinishSchema = z.object({ key: z.string(), input: workoutInputSchema });
+// The routine replaced after the workout is stored, at the revision Finish saw, under its own key.
+const frozenRoutineUpdateSchema = z.object({ key: z.string(), id: z.string(), revision: z.number().int().positive(), input: routineInputSchema });
+
+// The exact requests Finish sends, and their keys, kept until the server answers. Drafts frozen before routine
+// updates existed have none.
+const frozenFinishSchema = z.object({ key: z.string(), input: workoutInputSchema, routine: frozenRoutineUpdateSchema.nullable().default(null) });
 
 export const sessionSchema = z.object({
   id: z.string(),
@@ -39,6 +43,8 @@ export const sessionSchema = z.object({
 export type SessionSet = z.infer<typeof sessionSetSchema>;
 
 export type SessionExercise = z.infer<typeof sessionExerciseSchema>;
+
+export type FrozenRoutineUpdate = z.infer<typeof frozenRoutineUpdateSchema>;
 
 export type FrozenFinish = z.infer<typeof frozenFinishSchema>;
 
@@ -250,6 +256,35 @@ export function toWorkoutInput(session: Session, durationMinutes: number): Worko
     energyKcal: null,
     strengthExercises: rows.length > 0 ? rows : null,
   };
+}
+
+// A set's rep target in the routine: the one it came with, or else the reps done or typed.
+function routineTarget(set: SessionSet): RepTarget | null {
+  if (set.target) return set.target;
+  const reps = parseReps(set.reps);
+
+  return reps === null ? null : { min: reps, max: reps };
+}
+
+// The routine as this session left it: its exercises in screen order, and their sets, done or not. A set added
+// during the session with no reps to aim for is left out, and so is an exercise left with no sets. Null when the
+// routine would not change, or when nothing would be left of it.
+export function routineUpdate(session: Session, routine: Routine): RoutineInput | null {
+  const exercises = session.exercises.flatMap((exercise) => {
+    const sets = exercise.sets.flatMap((set) => {
+      const reps = routineTarget(set);
+
+      return reps ? [{ reps }] : [];
+    });
+
+    return sets.length > 0 ? [{ name: exercise.name, sets }] : [];
+  });
+
+  const input = routineInputSchema.safeParse({ name: routine.name, exercises });
+
+  if (!input.success || JSON.stringify(input.data.exercises) === JSON.stringify(routine.exercises)) return null;
+
+  return input.data;
 }
 
 // Rows back to one entry per set, in order: the inverse of the merge in toWorkoutInput.
