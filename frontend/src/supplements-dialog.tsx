@@ -6,9 +6,10 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "./compone
 import { Input } from "./components/ui/input";
 import { Label } from "./components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
+import { ToggleGroup, ToggleGroupItem } from "./components/ui/toggle-group";
 import { styles as formStyles } from "./form-styles";
 import { colors } from "./theme.stylex";
-import { doseUnits, maxStackSize, supplementKinds, supplementStackSchema } from "../../src/supplements/contract";
+import { doseUnits, maxStackSize, maxTimesPerDay, supplementKinds, supplementStackSchema } from "../../src/supplements/contract";
 import type { Supplement } from "./lib/api";
 import { localDate } from "./lib/time";
 import { kindLabels } from "./lib/supplements";
@@ -16,6 +17,9 @@ import { useSaveSupplementStack, useSupplementStack } from "./lib/use-supplement
 import { queryStatus } from "./query-status";
 import { useExitingRows } from "./lib/use-exiting-rows";
 import { selectValue } from "./lib/select-value";
+import { weekdayNames } from "./lib/weekdays";
+
+const timesPerDay = Array.from({ length: maxTimesPerDay }, (_, index) => index + 1);
 
 // The amount stays text while typing, so a half-typed "0." is not rewritten under the cursor.
 type Draft = Array<Omit<Supplement, "dose"> & { amount: string; unit: Supplement["dose"]["unit"] }>;
@@ -38,7 +42,7 @@ export function SupplementsDialog({ open, onOpenChange }: SupplementsDialogProps
       <DialogContent>
         <DialogTitle {...stylex.props(formStyles.dialogTitle)}>Your supplements</DialogTitle>
         <DialogDescription {...stylex.props(formStyles.dialogDescription)}>
-          What you take each day. Changes apply from today; earlier days keep the list they had.
+          What you take, on which days, and how often. Changes apply from today; earlier days keep the list they had.
         </DialogDescription>
         {status && (
           <p {...stylex.props(query.isError ? formStyles.connectionError : formStyles.dialogDescription)} role={query.isError ? "alert" : undefined}>{status}</p>
@@ -64,7 +68,7 @@ function SupplementsForm({ date, supplements, onSaved }: { date: string; supplem
   function addSupplement() {
     const id = crypto.randomUUID();
     add(id);
-    setDraft([...draft, { id, name: "", kind: "vitamin", amount: "", unit: "mg" }]);
+    setDraft([...draft, { id, name: "", kind: "vitamin", amount: "", unit: "mg", schedule: { weekdays: weekdayNames.map((_, index) => index + 1), timesPerDay: 1 } }]);
   }
 
   function removeSupplement(id: string) {
@@ -132,6 +136,32 @@ function SupplementsForm({ date, supplements, onSaved }: { date: string; supplem
               <Button type="button" variant="ghost" size="icon" {...stylex.props(styles.remove)} aria-label={`Remove ${row.name.trim() || "this supplement"}`} disabled={busy} onClick={() => removeSupplement(row.id)}>
                 <Trash2 size={15} />
               </Button>
+              <div {...stylex.props(styles.schedule)}>
+                {/* At least one day stays on: unpressing the last is ignored. */}
+                <ToggleGroup
+                  type="multiple"
+                  variant="outline"
+                  size="sm"
+                  spacing={0}
+                  aria-label={`Days to take ${row.name.trim() || "this supplement"}`}
+                  value={row.schedule.weekdays.map(String)}
+                  onValueChange={(next) => { if (next.length > 0) change(row.id, { schedule: { ...row.schedule, weekdays: next.map(Number).toSorted((a, b) => a - b) } }); }}
+                >
+                  {weekdayNames.map((day, index) => (
+                    <ToggleGroupItem key={day} value={String(index + 1)} aria-label={day} {...stylex.props(styles.weekday, row.schedule.weekdays.includes(index + 1) && styles.weekdayOn)}>
+                      {day.charAt(0)}
+                    </ToggleGroupItem>
+                  ))}
+                </ToggleGroup>
+                <Select value={String(row.schedule.timesPerDay)} onValueChange={(next) => change(row.id, { schedule: { ...row.schedule, timesPerDay: Number(next) } })}>
+                  <SelectTrigger aria-label="Times a day" {...stylex.props(formStyles.selectTrigger, styles.times)}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {timesPerDay.map((times) => <SelectItem key={times} value={String(times)}>{times === 1 ? "Once a day" : `${times}× a day`}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
             </li>
           ))}
         </ul>
@@ -163,6 +193,10 @@ const styles = stylex.create({
     borderBottomColor: colors.muted,
   },
   name: { gridColumn: { default: "auto", "@media (max-width: 560px)": "1 / -1" } },
+  schedule: { gridColumn: "1 / -1", display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 },
+  weekday: { width: 32 },
+  weekdayOn: { backgroundColor: colors.supplements, color: "white", borderColor: colors.supplements },
+  times: { width: "auto", minWidth: 120 },
   remove: { width: 36, height: 36, color: colors.mutedForeground },
   actions: { justifyContent: "space-between" },
 });

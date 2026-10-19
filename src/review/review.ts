@@ -58,7 +58,7 @@ function summarize(days: ReviewDay[]): ReviewPeriod {
   if (!first || !last) throw new Error("A review period needs at least one day");
 
   const counted = (kind: (day: ReviewDay) => boolean) => days.filter(kind).length;
-  const stackDays = days.filter(({ supplements }) => supplements.stackSize > 0);
+  const dueDays = days.filter(({ supplements }) => supplements.due > 0);
 
   return {
     from: first.date,
@@ -76,8 +76,8 @@ function summarize(days: ReviewDay[]): ReviewPeriod {
     water: compare(days.flatMap(({ water, targets }) => water.totalMl === null ? [] : [{ value: water.totalMl, target: targets.waterMl }]), reached),
     sleep: compare(days.flatMap(({ sleep, targets }) => sleep.totalMinutes === null ? [] : [{ value: sleep.totalMinutes, target: targets.sleepMinutes }]), reached),
     supplements: {
-      stackDays: stackDays.length,
-      fullDays: stackDays.filter(({ supplements }) => supplements.taken === supplements.stackSize).length,
+      dueDays: dueDays.length,
+      fullDays: dueDays.filter(({ supplements }) => supplements.taken === supplements.due).length,
     },
     workouts: {
       count: days.reduce((sum, day) => sum + day.workouts.entryCount, 0),
@@ -119,7 +119,7 @@ export async function getReview(db: AppDatabase, userId: string, to: string, len
       date,
       food: food.get(date) ?? { entryCount: 0, kcal: null, proteinG: null },
       water: { entryCount: drink?.entryCount ?? 0, totalMl: drink?.totalMl ?? null },
-      supplements: supplements.get(date) ?? { intakeCount: 0, taken: 0, stackSize: 0 },
+      supplements: supplements.get(date) ?? { intakeCount: 0, taken: 0, due: 0 },
       workouts: { entryCount: workout?.entryCount ?? 0, totalMinutes: workout?.totalMinutes ?? null },
       sleep: { sessionCount: night?.sessionCount ?? 0, totalMinutes: night?.totalMinutes ?? null },
       weightKg: weights.get(date) ?? null,

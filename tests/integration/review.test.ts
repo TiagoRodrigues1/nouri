@@ -58,7 +58,7 @@ void test("review lists seven days and leaves unrecorded ones null", async () =>
       date: "2026-09-24",
       food: { entryCount: 0, kcal: null, proteinG: null },
       water: { entryCount: 0, totalMl: null },
-      supplements: { intakeCount: 0, taken: 0, stackSize: 0 },
+      supplements: { intakeCount: 0, taken: 0, due: 0 },
       workouts: { entryCount: 0, totalMinutes: null },
       sleep: { sessionCount: 0, totalMinutes: null },
       weightKg: null,
@@ -236,14 +236,14 @@ void test("review adds water and supplements to the timeline, splits weeks, and 
     assert.deepEqual(d24.water, { entryCount: 2, totalMl: 800 });
     assert.deepEqual(d28.water, { entryCount: 2, totalMl: 2100 });
     assert.deepEqual(d29.water, { entryCount: 0, totalMl: null });
-    assert.deepEqual(d24.supplements, { intakeCount: 2, taken: 2, stackSize: 2 });
-    assert.deepEqual(d25.supplements, { intakeCount: 1, taken: 1, stackSize: 2 });
-    assert.deepEqual(d29.supplements, { intakeCount: 0, taken: 0, stackSize: 2 });
+    assert.deepEqual(d24.supplements, { intakeCount: 2, taken: 2, due: 2 });
+    assert.deepEqual(d25.supplements, { intakeCount: 1, taken: 1, due: 2 });
+    assert.deepEqual(d29.supplements, { intakeCount: 0, taken: 0, due: 2 });
     assert.equal(week.recordedDays.water, 5);
     assert.equal(week.recordedDays.supplements, 3);
     assert.equal(week.recordedDays.any, 6);
     assert.deepEqual(week.water, { average: 1200, averageTarget: 2000, daysOnTarget: 1 });
-    assert.deepEqual(week.supplements, { stackDays: 7, fullDays: 2 });
+    assert.deepEqual(week.supplements, { dueDays: 7, fullDays: 2 });
 
     // A week is one whole week, and its summary matches the range.
     assert.equal(week.weeks.length, 1);
@@ -261,11 +261,11 @@ void test("review adds water and supplements to the timeline, splits weeks, and 
     assert.deepEqual(month.weeks[2].water, { average: 2500, averageTarget: 2000, daysOnTarget: 7 });
     assert.deepEqual(month.weeks[3].water, week.water);
     // The stack took effect on the 20th, so the third week has four stack days and none full.
-    assert.deepEqual(month.weeks[2].supplements, { stackDays: 4, fullDays: 0 });
+    assert.deepEqual(month.weeks[2].supplements, { dueDays: 4, fullDays: 0 });
     assert.deepEqual(month.suggestions, week.suggestions);
 
     const other = await review("2026-09-30", otherApp);
-    assert.deepEqual(other.supplements, { stackDays: 0, fullDays: 0 });
+    assert.deepEqual(other.supplements, { dueDays: 0, fullDays: 0 });
     assert.equal(other.recordedDays.water, 0);
   } finally {
     await cleanup();

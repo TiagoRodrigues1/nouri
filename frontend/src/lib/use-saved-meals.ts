@@ -4,7 +4,7 @@ import { createSavedMeal, deleteSavedMeal, getSavedMeals, logSavedMeal, undoMeal
 import { useIdempotentDelete, useIdempotentWrite } from "./use-idempotent";
 import { queryRefresh } from "./query-refresh";
 import type { MealDailyInput, MealInput, MealLogInput, MealLogRef } from "../../../src/meals/contract";
-import { dailyDays } from "./saved-meals";
+import { dailyDays } from "./weekdays";
 
 type PendingLog = { meal: SavedMeal; input: MealLogInput };
 

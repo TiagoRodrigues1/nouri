@@ -17,7 +17,7 @@ const steady: ReviewPeriod = {
   },
   water: { average: 2200, averageTarget: 2000, daysOnTarget: 6 },
   sleep: { average: 470, averageTarget: 480, daysOnTarget: 3 },
-  supplements: { stackDays: 7, fullDays: 6 },
+  supplements: { dueDays: 7, fullDays: 6 },
   workouts: { count: 3, totalMinutes: 150 },
   weightKg: 80,
 };
@@ -69,6 +69,6 @@ void test("sleep needs enough nights and a real shortfall", () => {
 void test("water and supplements need enough days and fall short on most of them", () => {
   assert.deepEqual(kinds({ ...steady, water: { average: 1200, averageTarget: 2000, daysOnTarget: 3 } }), ["water"]);
   assert.deepEqual(kinds({ ...steady, recordedDays: { ...steady.recordedDays, water: 3 }, water: { average: 1200, averageTarget: 2000, daysOnTarget: 0 } }), []);
-  assert.deepEqual(kinds({ ...steady, supplements: { stackDays: 7, fullDays: 3 } }), ["supplements"]);
-  assert.deepEqual(kinds({ ...steady, supplements: { stackDays: 3, fullDays: 0 } }), []);
+  assert.deepEqual(kinds({ ...steady, supplements: { dueDays: 7, fullDays: 3 } }), ["supplements"]);
+  assert.deepEqual(kinds({ ...steady, supplements: { dueDays: 3, fullDays: 0 } }), []);
 });

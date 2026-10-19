@@ -25,7 +25,7 @@ import { getMeasurementSummary, measurementRecords } from "../measurements/measu
 import { sleepInputSchema, stagesSchema } from "../sleep/contract.js";
 import type { SleepDay, SleepSession } from "../sleep/contract.js";
 import { getSleepDay, sleepRecords } from "../sleep/sleep.js";
-import { maxStackSize, supplementSchema, supplementStackSchema } from "../supplements/contract.js";
+import { maxStackSize, scheduleChangeSchema, supplementSchema, supplementStackSchema } from "../supplements/contract.js";
 import type { StackForDay, SupplementIntake } from "../supplements/contract.js";
 import { targetsSchema } from "../targets/contract.js";
 import type { TargetsForDay } from "../targets/contract.js";
@@ -486,11 +486,11 @@ export function nouriMcpServer(db: AppDatabase, userId: string): McpServer {
 
   server.registerTool("change_supplement_stack", {
     title: "Change the supplement stack",
-    description: "Add, change, or remove supplements on the person's stack, the list they tick off each day. The change takes effect on the date and lasts until the next change already saved after it. Ids come from the supplements in get_day for that date.",
+    description: "Add, change, or remove supplements on the person's stack, the list they tick off each day. A supplement's schedule sets the ISO weekdays it is due on (1 Monday to 7 Sunday) and how many times a day; it defaults to once every day. The change takes effect on the date and lasts until the next change already saved after it. Ids come from the supplements in get_day for that date.",
     inputSchema: {
       date: when.date.describe("Local date the change takes effect, YYYY-MM-DD. Defaults to today."),
       add: z.array(supplementSchema.omit({ id: true })).min(1).max(maxStackSize).optional(),
-      change: z.array(supplementSchema.partial().required({ id: true })).min(1).max(maxStackSize).optional().describe("Fields left out keep their value."),
+      change: z.array(supplementSchema.omit({ schedule: true }).partial().required({ id: true }).extend({ schedule: scheduleChangeSchema.optional() })).min(1).max(maxStackSize).optional().describe("Fields left out keep their value, schedule fields included."),
       remove: z.array(z.uuid()).min(1).max(maxStackSize).optional(),
     },
   }, async ({ date, add, change, remove }) => {
@@ -506,7 +506,11 @@ export function nouriMcpServer(db: AppDatabase, userId: string): McpServer {
     // Supplements keep their place and id, so intakes logged against them still count.
     const stack = supplementStackSchema.safeParse({
       supplements: [
-        ...supplements.filter((supplement) => !removed.has(supplement.id)).map((supplement) => ({ ...supplement, ...changes.get(supplement.id) })),
+        ...supplements.filter((supplement) => !removed.has(supplement.id)).map((supplement) => {
+          const changed = changes.get(supplement.id);
+
+          return { ...supplement, ...changed, schedule: { ...supplement.schedule, ...changed?.schedule } };
+        }),
         ...(add ?? []).map((supplement) => ({ id: randomUUID(), ...supplement })),
       ],
     });
@@ -637,7 +641,7 @@ export function nouriMcpServer(db: AppDatabase, userId: string): McpServer {
 
   server.registerTool("get_day", {
     title: "Get a day",
-    description: "Everything logged for a local day: foods and nutrient totals, water, the supplement stack with what was taken, workouts, the night's sleep (sleep belongs to the day it ended), measurements with the latest of each kind, and targets. A null total means nothing or something without that value was logged, not zero.",
+    description: "Everything logged for a local day: foods and nutrient totals, water, the supplement stack with what was taken and how many doses of each are due that day (0 on its off days), workouts, the night's sleep (sleep belongs to the day it ended), measurements with the latest of each kind, and targets. A null total means nothing or something without that value was logged, not zero.",
     inputSchema: { date: when.date },
     annotations: { readOnlyHint: true },
   }, async ({ date }) => {

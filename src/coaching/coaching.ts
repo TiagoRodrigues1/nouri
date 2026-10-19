@@ -78,14 +78,14 @@ function sleep({ recordedDays, sleep }: ReviewPeriod): Suggestion[] {
 }
 
 function supplements({ supplements }: ReviewPeriod): Suggestion[] {
-  const { stackDays, fullDays } = supplements;
+  const { dueDays, fullDays } = supplements;
 
-  if (stackDays < minEvidenceDays || fullDays * 2 >= stackDays) return [];
+  if (dueDays < minEvidenceDays || fullDays * 2 >= dueDays) return [];
 
   return [{
     kind: "supplements",
     title: "Take your supplements at the same time each day",
-    because: `Every supplement on your list was taken on ${days(fullDays, stackDays)}.`,
+    because: `Every supplement due was taken on ${days(fullDays, dueDays)}.`,
   }];
 }
 

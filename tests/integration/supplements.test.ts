@@ -6,9 +6,11 @@ import type { Supplement } from "../../src/supplements/contract.js";
 // Each test gets its own schema, because cleanup closes the harness's connections.
 let { app, otherApp, headers, setup, cleanup } = createHarness();
 
-const vitaminD: Supplement = { id: "5d1c6f2e-8a43-4f7b-9c0d-2b1e7a9f3c11", name: "Vitamin D3", kind: "vitamin", dose: { amount: 2000, unit: "IU" } };
+const daily = { weekdays: [1, 2, 3, 4, 5, 6, 7], timesPerDay: 1 };
 
-const creatine: Supplement = { id: "a07e3b9d-1c52-4e8a-b6f4-9d2c0e1a7b22", name: "Creatine monohydrate", kind: "creatine", dose: { amount: 5, unit: "g" } };
+const vitaminD: Supplement = { id: "5d1c6f2e-8a43-4f7b-9c0d-2b1e7a9f3c11", name: "Vitamin D3", kind: "vitamin", dose: { amount: 2000, unit: "IU" }, schedule: daily };
+
+const creatine: Supplement = { id: "a07e3b9d-1c52-4e8a-b6f4-9d2c0e1a7b22", name: "Creatine monohydrate", kind: "creatine", dose: { amount: 5, unit: "g" }, schedule: daily };
 
 function put(date: string, supplements: unknown[]) {
   return app.request(`/v1/supplement-stack/${date}`, { method: "PUT", headers, body: JSON.stringify({ supplements }) });
@@ -119,7 +121,49 @@ void test("supplement intakes snapshot the stack and fill the day's checklist", 
     assert.deepEqual((await day(app, "2026-09-25")).unlisted, []);
 
     // Later days carry the stack forward with nothing taken yet.
-    assert.deepEqual(await day(app, "2026-09-26"), { items: [{ supplement: vitaminD, intakes: [] }], unlisted: [] });
+    assert.deepEqual(await day(app, "2026-09-26"), { items: [{ supplement: vitaminD, due: 1, intakes: [] }], unlisted: [] });
+  } finally {
+    await cleanup();
+  }
+});
+
+void test("schedules decide which supplements are due each day and how many times", async () => {
+  ({ app, otherApp, headers, setup, cleanup } = createHarness());
+  await setup();
+
+  try {
+    // Sent without a schedule, a supplement is due once every day, as before schedules.
+    const { schedule: _, ...unscheduled } = vitaminD;
+    assert.deepEqual((await (await put("2026-10-01", [unscheduled])).json()).supplements, [vitaminD]);
+
+    const magnesium = { ...creatine, name: "Magnesium", kind: "mineral", schedule: { weekdays: [1, 2, 3, 4, 5, 6, 7], timesPerDay: 2 } };
+    const b12 = { ...vitaminD, id: "c3f1a2b4-5d6e-4f70-8a91-b2c3d4e5f607", name: "Vitamin B12", schedule: { weekdays: [1, 4], timesPerDay: 1 } };
+
+    assert.equal((await put("2026-10-19", [magnesium, b12])).status, 200);
+    assert.equal((await put("2026-10-20", [{ ...b12, schedule: { weekdays: [1, 1] } }])).status, 400);
+    assert.equal((await put("2026-10-20", [{ ...b12, schedule: { weekdays: [] } }])).status, 400);
+    assert.equal((await put("2026-10-20", [{ ...b12, schedule: { weekdays: [8] } }])).status, 400);
+    assert.equal((await put("2026-10-20", [{ ...b12, schedule: { timesPerDay: 5 } }])).status, 400);
+    assert.equal((await put("2026-10-20", [{ ...b12, schedule: { timesPerDay: 1, every: 3 } }])).status, 400);
+
+    const due = async (date: string) => (await day(app, date)).items.map((item: { supplement: Supplement; due: number; intakes: unknown[] }) => [item.supplement.name, item.due, item.intakes.length]);
+
+    // Monday the 19th has both due; Tuesday the 20th has B12 off, and taking it anyway is still logged.
+    assert.deepEqual(await due("2026-10-19"), [["Magnesium", 2, 0], ["Vitamin B12", 1, 0]]);
+    assert.equal((await take(magnesium.id, "2026-10-19T07:00:00Z", "mg-1")).status, 201);
+    assert.equal((await take(b12.id, "2026-10-19T07:00:00Z", "b12-1")).status, 201);
+    assert.equal((await take(b12.id, "2026-10-20T07:00:00Z", "b12-off-day")).status, 201);
+    assert.deepEqual(await due("2026-10-20"), [["Magnesium", 2, 0], ["Vitamin B12", 0, 1]]);
+
+    // The review counts a supplement as taken only once every dose is in, and leaves out days with nothing due.
+    const review = async () => (await (await app.request("/v1/review/2026-10-21", { headers })).json());
+    let days = (await review()).days.slice(-3).map((entry: { supplements: unknown }) => entry.supplements);
+    assert.deepEqual(days, [{ intakeCount: 2, taken: 1, due: 2 }, { intakeCount: 1, taken: 0, due: 1 }, { intakeCount: 0, taken: 0, due: 1 }]);
+
+    assert.equal((await take(magnesium.id, "2026-10-19T19:00:00Z", "mg-2")).status, 201);
+    days = (await review()).days.slice(-3).map((entry: { supplements: unknown }) => entry.supplements);
+    assert.deepEqual(days[0], { intakeCount: 3, taken: 2, due: 2 });
+    assert.deepEqual((await review()).supplements, { dueDays: 7, fullDays: 1 });
   } finally {
     await cleanup();
   }
