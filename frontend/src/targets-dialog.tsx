@@ -192,7 +192,7 @@ function expectedChange({ expectedWeeklyChangeKg }: Suggestion["basis"], asked: 
 
   const change = `${expectedWeeklyChangeKg < 0 ? "loses" : "gains"} about ${format(Math.abs(expectedWeeklyChangeKg), 2)} kg a week`;
 
-  return expectedWeeklyChangeKg > asked ? `${change}, since a cut stays above resting energy` : change;
+  return asked < 0 && expectedWeeklyChangeKg > asked ? `${change}, since a cut stays above resting energy` : change;
 }
 
 // The profile form keeps age as text while typing and stores a birth year, which does not go stale.
