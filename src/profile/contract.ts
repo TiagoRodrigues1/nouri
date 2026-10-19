@@ -7,7 +7,9 @@ export const sexes = ["female", "male"] as const;
 
 export const activityLevels = ["sedentary", "light", "moderate", "active", "very-active"] as const;
 
-export const goalDirections = ["lose", "maintain", "gain"] as const;
+// The weight change a goal aims for, in kilograms a week: negative to lose, zero to maintain. Gains stop at half a
+// kilogram, past which most of the extra is fat.
+export const weeklyChangeLimits = { min: -1, max: 0.5, step: 0.25 } as const;
 
 // The formula is for adults, so the form asks for an age in this range and stores the birth year.
 export const ageLimits = { min: 18, max: 100 } as const;
@@ -17,7 +19,7 @@ export const profileSchema = z.object({
   // Stored instead of an age, which would go stale.
   birthYear: z.number().int().min(1900).max(2100),
   activity: z.enum(activityLevels),
-  goal: z.enum(goalDirections),
+  weeklyChangeKg: z.number().min(weeklyChangeLimits.min).max(weeklyChangeLimits.max).multipleOf(weeklyChangeLimits.step),
 }).strict();
 
 // Body size and goal set these; the rest of the targets are preferences a suggestion leaves alone.
@@ -30,6 +32,8 @@ export const suggestionSchema = z.object({
     weightKg: z.number().min(measurementLimits.weight.min).max(measurementLimits.weight.max),
     heightCm: z.number().min(measurementLimits.height.min).max(measurementLimits.height.max),
     maintenanceKcal: z.number().int(),
+    // The change the suggested energy gives, which is slower than asked when a cut would go below resting energy.
+    expectedWeeklyChangeKg: z.number(),
   }),
   targets: suggestedTargetsSchema,
 });

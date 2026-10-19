@@ -251,7 +251,7 @@ export const userProfiles = pgTable("user_profiles", {
   sex: text("sex").$type<Profile["sex"]>().notNull(),
   birthYear: integer("birth_year").notNull(),
   activity: text("activity").$type<Profile["activity"]>().notNull(),
-  goal: text("goal").$type<Profile["goal"]>().notNull(),
+  weeklyChangeG: integer("weekly_change_g").notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
